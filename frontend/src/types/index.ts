@@ -52,6 +52,114 @@ export interface Family {
   members?: Parent[]
 }
 
+export interface Account {
+  id: string
+  name: string
+  type: 'fop' | 'cash' | 'bank'
+  currency: string
+  is_active: boolean
+  note: string | null
+  created_at: string
+}
+
+export interface Tariff {
+  id: string
+  activity_id: string
+  base_fee: string
+  valid_from: string
+  valid_to: string | null
+  created_at: string
+}
+
+export interface Activity {
+  id: string
+  name: string
+  account_id: string | null
+  account_name: string | null
+  tariff_type: 'monthly' | 'per_lesson'
+  is_rigid: boolean
+  is_active: boolean
+  note: string | null
+  created_at: string
+  current_tariff?: Tariff | null
+  linked_activities?: { id: string; name: string }[]
+}
+
+export interface RefundConfig {
+  id: string
+  activity_id: string
+  refund_on_excused: boolean
+  refund_amount: string | null
+  refund_pct: string | null
+  note: string | null
+  updated_at: string
+}
+
+export interface Enrollment {
+  id: string
+  child_id: string
+  activity_id: string
+  activity_name: string
+  account_id: string
+  account_name: string
+  tariff_type: 'monthly' | 'per_lesson'
+  is_rigid: boolean
+  status: 'active' | 'frozen' | 'archived'
+  start_date: string
+  end_date: string | null
+  frozen_from: string | null
+  frozen_to: string | null
+  base_fee: string | null
+  note: string | null
+  created_at: string
+}
+
+export type AttendanceStatus = 'present' | 'absent_excused' | 'absent_unexcused' | 'special'
+
+export interface AttendanceLog {
+  id: string
+  enrollment_id: string
+  child_id: string
+  activity_id: string
+  date: string
+  status: AttendanceStatus
+  custom_amount: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface JournalRow {
+  enrollment_id: string
+  child_id: string
+  child_name: string
+  status: 'active' | 'frozen' | 'archived'
+  frozen_from: string | null
+  frozen_to: string | null
+  logs: Record<string, AttendanceLog>
+}
+
+export interface JournalData {
+  activity: {
+    id: string
+    name: string
+    tariff_type: 'monthly' | 'per_lesson'
+    is_rigid: boolean
+    account_name: string | null
+    refund_config: import('./index').RefundConfig | null
+  }
+  dates: string[]
+  rows: JournalRow[]
+}
+
+export interface PriceResolution {
+  price: number
+  rule: 'child_price' | 'child_discount' | 'global_discount' | 'base_fee'
+  base_fee?: number
+  detail: unknown
+}
+
 export interface PaginatedResponse<T> {
   data: T[]
   total: number

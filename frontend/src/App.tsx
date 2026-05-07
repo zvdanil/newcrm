@@ -10,6 +10,12 @@ import { FamiliesListPage } from './pages/Families/FamiliesListPage'
 import { FamilyCardPage } from './pages/Families/FamilyCardPage'
 import { FamilyCreatePage } from './pages/Families/FamilyCreatePage'
 import { GroupsPage } from './pages/Groups/GroupsPage'
+import { AccountsPage } from './pages/Accounts/AccountsPage'
+import { ActivitiesListPage } from './pages/Activities/ActivitiesListPage'
+import { ActivityCreatePage } from './pages/Activities/ActivityCreatePage'
+import { ActivityCardPage } from './pages/Activities/ActivityCardPage'
+import { JournalsListPage } from './pages/Journals/JournalsListPage'
+import { JournalPage } from './pages/Journals/JournalPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,10 +55,18 @@ export function App() {
               {/* Групи */}
               <Route path="groups" element={<GroupsPage />} />
 
-              {/* Заглушки наступних етапів */}
-              <Route path="journals"  element={<Placeholder title="Журнали" />} />
+              {/* Рахунки */}
+              <Route path="accounts" element={<AccountsPage />} />
+
+              {/* Активності */}
+              <Route path="activities"      element={<ActivitiesListPage />} />
+              <Route path="activities/new"  element={<ActivityCreatePage />} />
+              <Route path="activities/:id"  element={<ActivityCardPage />} />
+
+              {/* Журнали */}
+              <Route path="journals"             element={<JournalsListPage />} />
+              <Route path="journals/:activityId" element={<JournalPage />} />
               <Route path="staff"     element={<Placeholder title="Персонал" />} />
-              <Route path="accounts"  element={<Placeholder title="Рахунки" />} />
               <Route path="reports"   element={<Placeholder title="Звіти" />} />
             </Route>
           </Route>

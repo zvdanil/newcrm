@@ -7,6 +7,10 @@ import { childrenRoutes } from './routes/children.js'
 import { familiesRoutes } from './routes/families.js'
 import { groupsRoutes } from './routes/groups.js'
 import { parentsRoutes } from './routes/parents.js'
+import { accountsRoutes } from './routes/accounts.js'
+import { activitiesRoutes } from './routes/activities.js'
+import { enrollmentsRoutes } from './routes/enrollments.js'
+import { journalsRoutes } from './routes/journals.js'
 
 const app = Fastify({
   logger: {
@@ -31,11 +35,15 @@ await app.register(jwt, {
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
 // Routes
-await app.register(authRoutes,    { prefix: '/api/auth' })
-await app.register(childrenRoutes, { prefix: '/api/children' })
-await app.register(familiesRoutes, { prefix: '/api/families' })
-await app.register(groupsRoutes,   { prefix: '/api/groups' })
-await app.register(parentsRoutes,  { prefix: '/api/parents' })
+await app.register(authRoutes,       { prefix: '/api/auth' })
+await app.register(childrenRoutes,   { prefix: '/api/children' })
+await app.register(familiesRoutes,   { prefix: '/api/families' })
+await app.register(groupsRoutes,     { prefix: '/api/groups' })
+await app.register(parentsRoutes,    { prefix: '/api/parents' })
+await app.register(accountsRoutes,   { prefix: '/api/accounts' })
+await app.register(activitiesRoutes, { prefix: '/api/activities' })
+await app.register(enrollmentsRoutes, { prefix: '/api' })
+await app.register(journalsRoutes,    { prefix: '/api/journals' })
 
 // Start
 const port = Number(process.env.PORT ?? 3000)

@@ -1,0 +1,189 @@
+import type { FastifyInstance } from 'fastify'
+import { db } from '../db/index.js'
+import { authenticate, requireRole } from '../plugins/authenticate.js'
+
+export async function enrollmentsRoutes(app: FastifyInstance) {
+  // GET /api/children/:childId/enrollments
+  app.get<{ Params: { childId: string } }>(
+    '/children/:childId/enrollments',
+    { preHandler: authenticate },
+    async (req) => {
+      return db
+        .selectFrom('enrollments as e')
+        .innerJoin('activities as a', 'a.id', 'e.activity_id')
+        .innerJoin('accounts as ac', 'ac.id', 'e.account_id')
+        .leftJoin('tariffs as t', (join) =>
+          join.onRef('t.activity_id', '=', 'e.activity_id').on('t.valid_to', 'is', null)
+        )
+        .select([
+          'e.id', 'e.child_id', 'e.status', 'e.start_date', 'e.end_date',
+          'e.frozen_from', 'e.frozen_to', 'e.note', 'e.created_at',
+          'a.id as activity_id', 'a.name as activity_name',
+          'a.tariff_type', 'a.is_rigid',
+          'ac.id as account_id', 'ac.name as account_name',
+          't.base_fee',
+        ])
+        .where('e.child_id', '=', req.params.childId)
+        .orderBy('e.status', 'asc')
+        .orderBy('a.name', 'asc')
+        .execute()
+    }
+  )
+
+  // POST /api/enrollments
+  app.post<{
+    Body: {
+      child_id: string
+      activity_id: string
+      account_id: string
+      start_date: string
+      end_date?: string
+      note?: string
+    }
+  }>(
+    '/enrollments',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const { child_id, activity_id, account_id, start_date, end_date, note } = req.body
+      if (!child_id || !activity_id || !account_id || !start_date) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'child_id, activity_id, account_id, start_date є обовʼязковими' })
+      }
+
+      const enrollment = await db.insertInto('enrollments')
+        .values({ child_id, activity_id, account_id, start_date, end_date: end_date || null, note: note || null })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+      return reply.status(201).send(enrollment)
+    }
+  )
+
+  // PUT /api/enrollments/:id
+  app.put<{ Params: { id: string }; Body: { account_id?: string; start_date?: string; end_date?: string | null; note?: string | null } }>(
+    '/enrollments/:id',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const updated = await db.updateTable('enrollments')
+        .set(req.body)
+        .where('id', '=', req.params.id)
+        .returningAll()
+        .executeTakeFirst()
+      if (!updated) return reply.status(404).send({ error: 'NotFound' })
+      return updated
+    }
+  )
+
+  // POST /api/enrollments/:id/freeze
+  app.post<{ Params: { id: string }; Body: { frozen_from: string; frozen_to: string } }>(
+    '/enrollments/:id/freeze',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const { frozen_from, frozen_to } = req.body
+      if (!frozen_from || !frozen_to) return reply.status(400).send({ error: 'BadRequest', message: 'frozen_from та frozen_to є обовʼязковими' })
+      if (frozen_to <= frozen_from) return reply.status(400).send({ error: 'BadRequest', message: 'frozen_to має бути після frozen_from' })
+
+      const updated = await db.updateTable('enrollments')
+        .set({ status: 'frozen', frozen_from, frozen_to })
+        .where('id', '=', req.params.id)
+        .where('status', '=', 'active')
+        .returningAll()
+        .executeTakeFirst()
+      if (!updated) return reply.status(409).send({ error: 'Conflict', message: 'Підписка не активна або не знайдена' })
+      return updated
+    }
+  )
+
+  // POST /api/enrollments/:id/unfreeze
+  app.post<{ Params: { id: string } }>(
+    '/enrollments/:id/unfreeze',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const updated = await db.updateTable('enrollments')
+        .set({ status: 'active', frozen_from: null, frozen_to: null })
+        .where('id', '=', req.params.id)
+        .where('status', '=', 'frozen')
+        .returningAll()
+        .executeTakeFirst()
+      if (!updated) return reply.status(409).send({ error: 'Conflict', message: 'Підписка не заморожена або не знайдена' })
+      return updated
+    }
+  )
+
+  // POST /api/enrollments/:id/archive
+  app.post<{ Params: { id: string } }>(
+    '/enrollments/:id/archive',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const updated = await db.updateTable('enrollments')
+        .set({ status: 'archived', end_date: new Date().toISOString().slice(0, 10) })
+        .where('id', '=', req.params.id)
+        .where('status', '!=', 'archived')
+        .returningAll()
+        .executeTakeFirst()
+      if (!updated) return reply.status(409).send({ error: 'Conflict', message: 'Підписка вже в архіві або не знайдена' })
+      return updated
+    }
+  )
+
+  // GET /api/price-resolve?child_id=&activity_id=&date=
+  app.get<{ Querystring: { child_id: string; activity_id: string; date?: string } }>(
+    '/price-resolve',
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { child_id, activity_id, date } = req.query
+      if (!child_id || !activity_id) return reply.status(400).send({ error: 'BadRequest', message: 'child_id та activity_id є обовʼязковими' })
+
+      const asOfDate = new Date(date ?? new Date().toISOString().slice(0, 10))
+
+      // Рівень 2: індивідуальна ціна дитини на цю активність
+      const childPrice = await db
+        .selectFrom('child_prices')
+        .selectAll()
+        .where('child_id', '=', child_id)
+        .where('activity_id', '=', activity_id)
+        .where('valid_from', '<=', asOfDate)
+        .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', asOfDate)]))
+        .orderBy('valid_from', 'desc')
+        .executeTakeFirst()
+
+      if (childPrice?.price != null) {
+        return { price: Number(childPrice.price), rule: 'child_price', detail: childPrice }
+      }
+
+      // Базовий тариф активності
+      const tariff = await db
+        .selectFrom('tariffs')
+        .selectAll()
+        .where('activity_id', '=', activity_id)
+        .where('valid_from', '<=', asOfDate)
+        .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', asOfDate)]))
+        .orderBy('valid_from', 'desc')
+        .executeTakeFirst()
+
+      const baseFee = tariff ? Number(tariff.base_fee) : 0
+
+      // Рівень 3: знижка на цю активність
+      if (childPrice?.discount_pct != null) {
+        const price = baseFee * (1 - Number(childPrice.discount_pct) / 100)
+        return { price: Math.round(price * 100) / 100, rule: 'child_discount', detail: childPrice, base_fee: baseFee }
+      }
+
+      // Рівень 4: глобальна знижка дитини
+      const globalDiscount = await db
+        .selectFrom('child_global_discounts')
+        .selectAll()
+        .where('child_id', '=', child_id)
+        .where('valid_from', '<=', asOfDate)
+        .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', asOfDate)]))
+        .orderBy('valid_from', 'desc')
+        .executeTakeFirst()
+
+      if (globalDiscount) {
+        const price = baseFee * (1 - Number(globalDiscount.discount_pct) / 100)
+        return { price: Math.round(price * 100) / 100, rule: 'global_discount', detail: globalDiscount, base_fee: baseFee }
+      }
+
+      // Рівень 5: базова ціна
+      return { price: baseFee, rule: 'base_fee', detail: tariff ?? null }
+    }
+  )
+}
