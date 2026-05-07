@@ -5,8 +5,320 @@ import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 
+import type { Activity } from '../../types'
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('uk-UA')
+}
+
+// ─── Linked Activities Block ─────────────────────────────────────────────────
+
+function LinkedActivitiesBlock({
+  activityId,
+  parentActivity,
+  canEdit,
+}: {
+  activityId: string
+  parentActivity: Activity
+  canEdit: boolean
+}) {
+  const qc = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+  const [selectedId, setSelectedId] = useState('')
+
+  // Все активности для выбора (исключаем саму себя и уже привязанные)
+  const { data: allActivities = [] } = useQuery({
+    queryKey: ['activities'],
+    queryFn: () => activitiesApi.list(),
+    enabled: showAdd,
+  })
+
+  const linked = parentActivity.linked_activities ?? []
+  const linkedIds = new Set(linked.map((la) => la.id))
+
+  const available = allActivities.filter(
+    (a) => a.id !== activityId && !linkedIds.has(a.id) && a.is_active
+  )
+
+  const linkMutation = useMutation({
+    mutationFn: () => activitiesApi.link(activityId, selectedId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activity', activityId] })
+      setShowAdd(false)
+      setSelectedId('')
+    },
+  })
+
+  const unlinkMutation = useMutation({
+    mutationFn: (childId: string) => activitiesApi.unlink(activityId, childId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['activity', activityId] }),
+  })
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-medium text-gray-900">Повʼязані активності</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Відмітка в цьому журналі каскадно ставиться у повʼязаних
+          </p>
+        </div>
+        {canEdit && !showAdd && (
+          <button
+            onClick={() => setShowAdd(true)}
+            className="text-sm text-iris-600 hover:text-iris-700 font-medium"
+          >
+            + Додати
+          </button>
+        )}
+      </div>
+
+      {linked.length === 0 && !showAdd && (
+        <p className="text-sm text-gray-400">Немає повʼязаних активностей</p>
+      )}
+
+      {linked.length > 0 && (
+        <ul className="divide-y divide-gray-100 mb-3">
+          {linked.map((la) => (
+            <li key={la.id} className="py-2.5 flex items-center justify-between">
+              <div>
+                <span className="text-sm text-gray-900">{la.name}</span>
+                <span className="ml-2 text-xs text-gray-400">
+                  {la.tariff_type === 'monthly' ? 'місячний' : la.tariff_type === 'per_lesson' ? 'за заняття' : 'смарт'}
+                </span>
+              </div>
+              {canEdit && (
+                <button
+                  onClick={() => unlinkMutation.mutate(la.id)}
+                  disabled={unlinkMutation.isPending}
+                  className="text-xs text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                >
+                  Відʼєднати
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showAdd && (
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="flex-1 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          >
+            <option value="">— оберіть активність —</option>
+            {available.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.tariff_type === 'monthly' ? 'місячний' : a.tariff_type === 'per_lesson' ? 'за заняття' : 'смарт'})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => { if (selectedId) linkMutation.mutate() }}
+            disabled={!selectedId || linkMutation.isPending}
+            className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md transition-colors"
+          >
+            {linkMutation.isPending ? '...' : 'Додати'}
+          </button>
+          <button
+            onClick={() => { setShowAdd(false); setSelectedId('') }}
+            className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-900"
+          >
+            Скасувати
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Smart Tariff Config Block ───────────────────────────────────────────────
+
+function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; canEdit: boolean }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({
+    base_lessons: 20,
+    l1_enabled: false,
+    l1_threshold_absences: '',
+    l1_threshold_fee: '',
+    l2_enabled: false,
+    l2_max_refunds: '',
+    l2_refund_per_absence: '',
+  })
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: config } = useQuery({
+    queryKey: ['activity-smart-tariff', activityId],
+    queryFn: () => activitiesApi.getSmartTariff(activityId),
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: () => activitiesApi.setSmartTariff(activityId, {
+      base_lessons: form.base_lessons,
+      l1_threshold_absences: form.l1_enabled && form.l1_threshold_absences ? Number(form.l1_threshold_absences) : null,
+      l1_threshold_fee: form.l1_enabled && form.l1_threshold_fee ? Number(form.l1_threshold_fee) : null,
+      l2_max_refunds: form.l2_enabled && form.l2_max_refunds ? Number(form.l2_max_refunds) : null,
+      l2_refund_per_absence: form.l2_enabled && form.l2_refund_per_absence ? Number(form.l2_refund_per_absence) : null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activity-smart-tariff', activityId] })
+      setEditing(false)
+      setError(null)
+    },
+    onError: () => setError('Помилка при збереженні'),
+  })
+
+  const startEdit = () => {
+    setForm({
+      base_lessons: config?.base_lessons ?? 20,
+      l1_enabled: config?.l1_threshold_absences != null,
+      l1_threshold_absences: config?.l1_threshold_absences?.toString() ?? '',
+      l1_threshold_fee: config?.l1_threshold_fee ?? '',
+      l2_enabled: config?.l2_max_refunds != null,
+      l2_max_refunds: config?.l2_max_refunds?.toString() ?? '',
+      l2_refund_per_absence: config?.l2_refund_per_absence ?? '',
+    })
+    setEditing(true)
+    setError(null)
+  }
+
+  const handleSave = () => {
+    if (form.l1_enabled && (!form.l1_threshold_absences || !form.l1_threshold_fee)) {
+      setError('Для логіки 1 вкажіть поріг пропусків і суму'); return
+    }
+    if (form.l2_enabled && (!form.l2_max_refunds || !form.l2_refund_per_absence)) {
+      setError('Для логіки 2 вкажіть ліміт і суму за пропуск'); return
+    }
+    saveMutation.mutate()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-iris-200 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="font-medium text-gray-900">Конфігурація смарт-тарифу</h2>
+          <p className="text-xs text-gray-400 mt-0.5">ACCRUAL=B на 1-е число · REFUND=пільга в реальному часі</p>
+        </div>
+        {canEdit && !editing && (
+          <button onClick={startEdit} className="text-sm text-iris-600 hover:text-iris-700 font-medium">
+            {config ? 'Змінити' : 'Налаштувати'}
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        <div className="space-y-3 text-sm">
+          {config && (
+            <div className="flex items-center gap-2 text-gray-600">
+              <span>Базових занять:</span>
+              <span className="font-medium text-gray-900">{config.base_lessons}</span>
+            </div>
+          )}
+          {config?.l1_threshold_absences != null && (
+            <div className="bg-iris-50 rounded-lg px-3 py-2">
+              <span className="font-medium text-iris-700">Логіка 1 · </span>
+              <span className="text-gray-700">
+                При ≥{config.l1_threshold_absences} пропусків → {Number(config.l1_threshold_fee).toFixed(2)} грн замість повного тарифу
+              </span>
+            </div>
+          )}
+          {config?.l2_max_refunds != null && (
+            <div className="bg-iris-50 rounded-lg px-3 py-2">
+              <span className="font-medium text-iris-700">Логіка 2 · </span>
+              <span className="text-gray-700">
+                Перші {config.l2_max_refunds} пропусків → {Number(config.l2_refund_per_absence).toFixed(2)} грн кожен
+              </span>
+            </div>
+          )}
+          {config?.l1_threshold_absences != null && config.l2_max_refunds != null && (
+            <p className="text-xs text-gray-400">При комбінації застосовується правило з більшою пільгою</p>
+          )}
+          {(!config || (config.l1_threshold_absences == null && config.l2_max_refunds == null)) && (
+            <p className="text-sm text-gray-400">Логіки не налаштовано — ACCRUAL=B без автоматичних пільг</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-700">Базових занять на місяць:</label>
+            <input type="number" min="1" max="31" value={form.base_lessons}
+              onChange={(e) => setForm({ ...form, base_lessons: Number(e.target.value) })}
+              className="w-20 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          </div>
+
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.l1_enabled}
+                onChange={(e) => setForm({ ...form, l1_enabled: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-gray-700">Логіка 1: знижена абонплата при порозі пропусків</span>
+            </label>
+            {form.l1_enabled && (
+              <div className="ml-6 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Поріг пропусків (≥)</label>
+                  <input type="number" min="1" value={form.l1_threshold_absences}
+                    onChange={(e) => setForm({ ...form, l1_threshold_absences: e.target.value })}
+                    placeholder="напр. 5"
+                    className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Сума до нарахування (грн)</label>
+                  <input type="number" min="0" step="0.01" value={form.l1_threshold_fee}
+                    onChange={(e) => setForm({ ...form, l1_threshold_fee: e.target.value })}
+                    placeholder="напр. 1500"
+                    className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.l2_enabled}
+                onChange={(e) => setForm({ ...form, l2_enabled: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-gray-700">Логіка 2: повернення за перші N пропусків</span>
+            </label>
+            {form.l2_enabled && (
+              <div className="ml-6 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Макс. пропусків з поверненням</label>
+                  <input type="number" min="1" value={form.l2_max_refunds}
+                    onChange={(e) => setForm({ ...form, l2_max_refunds: e.target.value })}
+                    placeholder="напр. 4"
+                    className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Повернення за пропуск (грн)</label>
+                  <input type="number" min="0" step="0.01" value={form.l2_refund_per_absence}
+                    onChange={(e) => setForm({ ...form, l2_refund_per_absence: e.target.value })}
+                    placeholder="напр. 100"
+                    className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+          <div className="flex gap-3">
+            <button onClick={handleSave} disabled={saveMutation.isPending}
+              className="px-4 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+              {saveMutation.isPending ? 'Збереження...' : 'Зберегти'}
+            </button>
+            <button onClick={() => { setEditing(false); setError(null) }}
+              className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm font-medium">
+              Скасувати
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function ActivityCardPage() {
@@ -15,7 +327,7 @@ export function ActivityCardPage() {
   const canEdit = useCanAccess('owner', 'admin')
 
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson', is_rigid: false, note: '' })
+  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, note: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: new Date().toISOString().slice(0, 10) })
@@ -97,7 +409,7 @@ export function ActivityCardPage() {
   if (!activity)  return <div className="py-12 text-center text-sm text-gray-400">Активність не знайдена</div>
 
   const startEdit = () => {
-    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type, is_rigid: activity.is_rigid, note: activity.note ?? '' })
+    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type as 'monthly' | 'per_lesson' | 'smart', is_rigid: activity.is_rigid, note: activity.note ?? '' })
     setEditing(true)
     setSaveError(null)
   }
@@ -151,7 +463,9 @@ export function ActivityCardPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gray-900">{activity.name}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{activity.tariff_type === 'monthly' ? 'Місячний тариф' : 'Оплата за заняття'}</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {activity.tariff_type === 'monthly' ? 'Місячний тариф' : activity.tariff_type === 'per_lesson' ? 'Оплата за заняття' : 'Смарт-тариф'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${activity.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -181,10 +495,11 @@ export function ActivityCardPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Тип тарифу</label>
-                <select value={editForm.tariff_type} onChange={(e) => setEditForm({ ...editForm, tariff_type: e.target.value as 'monthly' | 'per_lesson' })}
+                <select value={editForm.tariff_type} onChange={(e) => setEditForm({ ...editForm, tariff_type: e.target.value as 'monthly' | 'per_lesson' | 'smart' })}
                   className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500">
                   <option value="monthly">Місячний</option>
                   <option value="per_lesson">За заняття</option>
+                  <option value="smart">Смарт-тариф</option>
                 </select>
               </div>
               <div>
@@ -324,6 +639,11 @@ export function ActivityCardPage() {
         )}
       </div>
 
+      {/* Smart tariff config — visible only for smart tariff type */}
+      {activity.tariff_type === 'smart' && id && (
+        <SmartTariffConfigBlock activityId={id} canEdit={canEdit} />
+      )}
+
       {/* Tariff history */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -384,20 +704,7 @@ export function ActivityCardPage() {
       </div>
 
       {/* Linked activities */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-medium text-gray-900 mb-3">
-          Повʼязані активності ({activity.linked_activities?.length ?? 0})
-        </h2>
-        {!activity.linked_activities?.length ? (
-          <p className="text-sm text-gray-400">Немає повʼязаних активностей</p>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {activity.linked_activities.map((la) => (
-              <li key={la.id} className="py-2 text-sm text-gray-900">{la.name}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {id && <LinkedActivitiesBlock activityId={id} parentActivity={activity} canEdit={canEdit} />}
     </div>
   )
 }

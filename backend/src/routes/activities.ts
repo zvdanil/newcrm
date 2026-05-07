@@ -50,7 +50,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
       const linked = await db
         .selectFrom('linked_activities as la')
         .innerJoin('activities as a2', 'a2.id', 'la.child_activity_id')
-        .select(['a2.id', 'a2.name'])
+        .select(['a2.id', 'a2.name', 'a2.tariff_type'])
         .where('la.parent_activity_id', '=', req.params.id)
         .execute()
 
@@ -177,6 +177,75 @@ export async function activitiesRoutes(app: FastifyInstance) {
             refund_amount: refund_amount ?? null,
             refund_pct: refund_pct ?? null,
             note: note ?? null,
+            updated_at: new Date().toISOString() as unknown as Date,
+          })
+        )
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      return config
+    }
+  )
+
+  // GET /api/activities/:id/smart-tariff
+  app.get<{ Params: { id: string } }>(
+    '/:id/smart-tariff',
+    { preHandler: authenticate },
+    async (req) => {
+      const config = await db
+        .selectFrom('smart_tariff_configs')
+        .selectAll()
+        .where('activity_id', '=', req.params.id)
+        .executeTakeFirst()
+      return config ?? null
+    }
+  )
+
+  // PUT /api/activities/:id/smart-tariff — upsert smart config
+  app.put<{
+    Params: { id: string }
+    Body: {
+      base_lessons?: number
+      l1_threshold_absences?: number | null
+      l1_threshold_fee?: number | null
+      l2_max_refunds?: number | null
+      l2_refund_per_absence?: number | null
+    }
+  }>(
+    '/:id/smart-tariff',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { base_lessons = 20, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence } = req.body
+
+      const l1hasThreshold = l1_threshold_absences != null
+      const l1hasFee       = l1_threshold_fee != null
+      if (l1hasThreshold !== l1hasFee) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'l1_threshold_absences і l1_threshold_fee мають бути вказані разом або не вказані взагалі' })
+      }
+
+      const l2hasMax = l2_max_refunds != null
+      const l2hasPer = l2_refund_per_absence != null
+      if (l2hasMax !== l2hasPer) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'l2_max_refunds і l2_refund_per_absence мають бути вказані разом або не вказані взагалі' })
+      }
+
+      const config = await db
+        .insertInto('smart_tariff_configs')
+        .values({
+          activity_id: req.params.id,
+          base_lessons,
+          l1_threshold_absences: l1_threshold_absences ?? null,
+          l1_threshold_fee: l1_threshold_fee ?? null,
+          l2_max_refunds: l2_max_refunds ?? null,
+          l2_refund_per_absence: l2_refund_per_absence ?? null,
+        })
+        .onConflict((oc) =>
+          oc.column('activity_id').doUpdateSet({
+            base_lessons,
+            l1_threshold_absences: l1_threshold_absences ?? null,
+            l1_threshold_fee: l1_threshold_fee ?? null,
+            l2_max_refunds: l2_max_refunds ?? null,
+            l2_refund_per_absence: l2_refund_per_absence ?? null,
             updated_at: new Date().toISOString() as unknown as Date,
           })
         )

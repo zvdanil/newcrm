@@ -71,11 +71,21 @@ export interface ActivitiesTable {
   id:          Generated<string>
   name:        string
   account_id:  string | null
-  tariff_type: Generated<'monthly' | 'per_lesson'>
+  tariff_type: Generated<'monthly' | 'per_lesson' | 'smart'>
   is_rigid:    Generated<boolean>
   is_active:   Generated<boolean>
   note:        string | null
   created_at:  Generated<Date>
+}
+
+export interface SmartTariffConfigsTable {
+  activity_id:           string
+  base_lessons:          Generated<number>
+  l1_threshold_absences: number | null
+  l1_threshold_fee:      ColumnType<string | null, number | string | null, number | string | null>
+  l2_max_refunds:        number | null
+  l2_refund_per_absence: ColumnType<string | null, number | string | null, number | string | null>
+  updated_at:            Generated<Date>
 }
 
 export interface TariffsTable {
@@ -151,6 +161,56 @@ export interface RefundConfigsTable {
   updated_at:        Generated<Date>
 }
 
+export type TransactionType = 'ACCRUAL' | 'PAYMENT' | 'REFUND' | 'REVERSAL' | 'ADJUSTMENT'
+
+export interface TransactionsTable {
+  id:               Generated<string>
+  type:             TransactionType
+  child_id:         string
+  account_id:       string
+  activity_id:      string | null
+  enrollment_id:    string | null
+  amount:           ColumnType<string, number | string, number | string>
+  transaction_date: ColumnType<Date, string, string>
+  billing_month:    ColumnType<Date | null, string | null, string | null>
+  note:             string | null
+  metadata_json:    ColumnType<unknown | null, object | null, object | null>
+  is_deleted:       Generated<boolean>
+  deleted_at:       ColumnType<Date | null, string | null, string | null>
+  deleted_by:       string | null
+  created_by:       string | null
+  created_at:       Generated<Date>
+}
+
+export interface ChildBalancesTable {
+  child_id:   string
+  account_id: string
+  balance:    ColumnType<string, number | string, number | string>
+  updated_at: Generated<Date>
+}
+
+export interface InitialBalancesTable {
+  id:         Generated<string>
+  child_id:   string
+  account_id: string
+  amount:     ColumnType<string, number | string, number | string>
+  note:       string | null
+  created_by: string | null
+  created_at: Generated<Date>
+}
+
+export interface BillingRunLogTable {
+  id:             Generated<string>
+  billing_month:  ColumnType<Date, string, string>
+  started_at:     Generated<Date>
+  finished_at:    ColumnType<Date | null, string | null, string | null>
+  created_count:  Generated<number>
+  adjusted_count: Generated<number>
+  skipped_count:  Generated<number>
+  triggered_by:   string | null
+  error:          string | null
+}
+
 export interface Database {
   users:                 UsersTable
   groups:                GroupsTable
@@ -167,4 +227,9 @@ export interface Database {
   child_global_discounts: ChildGlobalDiscountsTable
   refund_configs:        RefundConfigsTable
   attendance_logs:       AttendanceLogsTable
+  transactions:          TransactionsTable
+  child_balances:        ChildBalancesTable
+  initial_balances:      InitialBalancesTable
+  billing_run_log:       BillingRunLogTable
+  smart_tariff_configs:  SmartTariffConfigsTable
 }

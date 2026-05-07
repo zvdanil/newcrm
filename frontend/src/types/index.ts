@@ -71,18 +71,28 @@ export interface Tariff {
   created_at: string
 }
 
+export interface SmartTariffConfig {
+  activity_id: string
+  base_lessons: number
+  l1_threshold_absences: number | null
+  l1_threshold_fee: string | null
+  l2_max_refunds: number | null
+  l2_refund_per_absence: string | null
+  updated_at: string
+}
+
 export interface Activity {
   id: string
   name: string
   account_id: string | null
   account_name: string | null
-  tariff_type: 'monthly' | 'per_lesson'
+  tariff_type: 'monthly' | 'per_lesson' | 'smart'
   is_rigid: boolean
   is_active: boolean
   note: string | null
   created_at: string
   current_tariff?: Tariff | null
-  linked_activities?: { id: string; name: string }[]
+  linked_activities?: { id: string; name: string; tariff_type: 'monthly' | 'per_lesson' | 'smart' }[]
 }
 
 export interface RefundConfig {
@@ -102,7 +112,7 @@ export interface Enrollment {
   activity_name: string
   account_id: string
   account_name: string
-  tariff_type: 'monthly' | 'per_lesson'
+  tariff_type: 'monthly' | 'per_lesson' | 'smart'
   is_rigid: boolean
   status: 'active' | 'frozen' | 'archived'
   start_date: string
@@ -144,7 +154,7 @@ export interface JournalData {
   activity: {
     id: string
     name: string
-    tariff_type: 'monthly' | 'per_lesson'
+    tariff_type: 'monthly' | 'per_lesson' | 'smart'
     is_rigid: boolean
     account_name: string | null
     refund_config: import('./index').RefundConfig | null

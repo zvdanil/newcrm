@@ -139,31 +139,92 @@
 ## ЭТАП 4 — Биллинговое ядро *(MVP-рубеж)*
 **Статус:** `[ ] В работе` / `[ ] Завершён`
 
-### База данных
-- [ ] Таблица `transactions` (id, type: ACCRUAL/PAYMENT/REFUND/REVERSAL/ADJUSTMENT, child_id, account_id, activity_id, amount, transaction_date, is_deleted, deleted_at, deleted_by, metadata_json, note)
-- [ ] Таблица `child_balances` (child_id, account_id, balance) — PRIMARY KEY (child_id, account_id)
-- [ ] Таблица `initial_balances` (child_id, account_id, amount, note) — начальные остатки, не входят в оборот
-- [ ] Индексы: transactions (child_id, account_id, transaction_date, type)
+> Реализуется пошагово: каждый подэтап — отдельная миграция или файл маршрутов.
+> Не переходить к следующему подэтапу без проверки текущего через API и UI.
 
-### Бэкенд (Billing Engine)
-- [ ] Сервис `billing.service`: вычисление цены по иерархии (5 уровней)
-- [ ] Триггер от `attendance_logs` → генерация ACCRUAL или REFUND
-- [ ] Логика REFUND: статус absent_excused + refund_config активности → REFUND_IMMEDIATE
-- [ ] Жёсткий абонемент: absent_excused → возврата НЕТ (только для основной активности)
-- [ ] Billing Run: POST /api/billing/run?month=YYYY-MM → ACCRUAL = Base_Fee для всех активных enrollments
-- [ ] Pro-rata при Quick Enrollment: (Base_Fee / рабочих дней) × оставшиеся дни
-- [ ] Soft Delete: PUT /api/transactions/:id/delete → is_deleted=true + авто-REVERSAL
-- [ ] Пересчёт `child_balances` после каждой транзакции (триггер или сервис)
-- [ ] GET /api/children/:id/balance (массив балансов по счетам)
-- [ ] GET /api/children/:id/ledger (история транзакций с пагинацией)
-- [ ] POST /api/children/:id/initial-balance (ввод начального остатка)
+---
 
-### Фронтенд
-- [ ] В карточке ребёнка: блок "Балансы" (раздельно по каждому счёту)
-- [ ] Цветовая индикация: долг (красный) / аванс (зелёный) / ноль (серый)
-- [ ] Ledger: таблица всех операций с фильтром по месяцу и типу
-- [ ] Форма ввода начального остатка (долг / аванс по счёту)
-- [ ] Owner: кнопка мягкого удаления транзакции с полем примечания
+### 4.1 — База данных (фундамент)
+- [ ] Таблица `transactions` (id, type, child_id, account_id, activity_id, enrollment_id, amount NUMERIC(15,2), transaction_date, billing_month, is_deleted, deleted_at, deleted_by, metadata_json, note)
+  - type: ACCRUAL | PAYMENT | REFUND | REVERSAL | ADJUSTMENT
+  - `billing_month` DATE — первый день месяца, к которому относится ACCRUAL (для идемпотентности)
+  - `is_deleted`, `deleted_at`, `deleted_by` — Soft Delete
+- [ ] Таблица `child_balances` (child_id, account_id, balance NUMERIC(15,2)) — PRIMARY KEY (child_id, account_id)
+- [ ] Таблица `initial_balances` (id, child_id, account_id, amount, note, created_at) — начальные остатки, не входят в оборот PnL
+- [ ] Индексы: transactions (child_id, account_id, transaction_date, type, billing_month)
+- [ ] Таблица `billing_run_log` (id, month DATE, started_at, finished_at, created_count, adjusted_count, error TEXT) — лог запусков
+
+---
+
+### 4.2 — Баланс и Ledger
+- [ ] Сервис `balanceService.recalculate(child_id, account_id)` — пересчёт `child_balances` из транзакций
+- [ ] GET /api/children/:id/balance — массив балансов по счетам
+- [ ] GET /api/children/:id/ledger?month=&type= — история транзакций с пагинацией (LIMIT 500)
+- [ ] POST /api/children/:id/initial-balance — ввод начального остатка (owner/admin)
+- [ ] Фронтенд: блок "Баланси" в карточке ребёнка (раздельно по счетам, цвет: долг/аванс/ноль)
+- [ ] Фронтенд: таблица Ledger с фильтром по месяцу и типу транзакции
+
+---
+
+### 4.3 — Billing Run (ежемесячное начисление)
+- [ ] Сервис `billingRunService.run(month: string)`:
+  - Для каждой активной подписки на 1-е число месяца — вычислить цену по иерархии 5 уровней
+  - Если ACCRUAL за этот месяц (billing_month) отсутствует → создать ACCRUAL
+  - Если ACCRUAL уже есть и сумма совпадает → пропустить (идемпотентность)
+  - Если ACCRUAL уже есть и сумма изменилась (тариф пересмотрен) → создать ADJUSTMENT на дельту
+  - После каждой транзакции → обновить `child_balances`
+  - Записать результат в `billing_run_log`
+- [ ] Cron-задача: `node-cron`, расписание `0 6 1 * *` (1-е число, 06:00)
+- [ ] POST /api/billing/run?month=YYYY-MM — принудительный запуск (Owner only)
+- [ ] GET /api/billing/run-log — последние N запусков (Owner/Admin)
+- [ ] Фронтенд: страница/раздел "Billing" (Owner) — последний запуск + кнопка принудительного
+
+---
+
+### 4.4 — Attendance → REFUND (триггер от журнала)
+- [ ] При POST/PUT attendance со статусом `absent_excused`:
+  - Получить `refund_config` активности
+  - Если `refund_on_excused = false` → ничего не делать
+  - Если enrollment имеет `is_rigid = true` (основная активность) → ничего не делать
+  - Иначе → вычислить сумму возврата (фикс. или % от текущего тарифа) → создать REFUND
+  - Обновить `child_balances`
+- [ ] При изменении статуса с `absent_excused` на другой → найти и сторнировать REFUND (создать REVERSAL)
+- [ ] Связанные активности: каждая применяет СВОИ правила возврата независимо
+
+---
+
+### 4.5 — Soft Delete транзакций (Owner)
+- [ ] PUT /api/transactions/:id/delete (body: { note }) — только Owner
+  - Установить `is_deleted = true`, `deleted_at`, `deleted_by`
+  - Создать REVERSAL на ту же сумму с противоположным знаком
+  - Обновить `child_balances`
+- [ ] Фронтенд: кнопка удаления в Ledger (только Owner), поле примечания
+
+---
+
+### 4.5б — Смарт-тариф *(реализован)*
+- [x] Миграция `007_smart_tariff.sql`: расширен CHECK на `tariff_type` (добавлен 'smart'), создана таблица `smart_tariff_configs`
+- [x] Типы Kysely: `SmartTariffConfigsTable`, `ActivitiesTable.tariff_type` обновлён
+- [x] Сервис `smartTariffService.recalcSmartBenefit(enrollmentId, billingMonth)` — идемпотентный пересчёт REFUND='smart_benefit' в реальном времени
+- [x] Сервис `smartTariffService.runSmartAccruals(month)` — ACCRUAL=B для всех активных smart-подписок (1-е числа)
+- [x] Cron: `runSmartAccruals` добавлен в расписание рядом с `runBilling`
+- [x] API `GET /api/activities/:id/smart-tariff` — получить конфиг
+- [x] API `PUT /api/activities/:id/smart-tariff` — upsert конфиг (owner/admin)
+- [x] journals.ts: attendance POST/PUT/DELETE → `recalcSmartBenefit` для smart-активностей
+- [x] Фронтенд: тип `SmartTariffConfig` в types/index.ts
+- [x] Фронтенд: `activitiesApi.getSmartTariff / setSmartTariff`
+- [x] Фронтенд: `ActivityCardPage` — опция 'smart' в селекторе типа тарифа
+- [x] Фронтенд: `SmartTariffConfigBlock` — форма с Логикой 1 (порог пропусков) и Логикой 2 (лимит возврата), правило: max(L1, L2)
+
+---
+
+### 4.6 — Pro-rata при Quick Enrollment
+- [ ] При создании enrollment НЕ с 1-го числа месяца → немедленно создать ACCRUAL с про-ратой:
+  - `pro_rata = (base_fee / рабочих_дней_в_месяце) × дней_до_конца_месяца`
+  - Рабочие дни = календарные (уточнить позже если нужны только будни)
+  - `billing_month` = первый день текущего месяца
+  - Обновить `child_balances`
+- [ ] С 1-го числа следующего месяца — стандартный Billing Run
 
 ---
 

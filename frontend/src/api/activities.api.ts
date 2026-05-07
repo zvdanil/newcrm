@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { Activity, Tariff, RefundConfig } from '../types'
+import type { Activity, Tariff, RefundConfig, SmartTariffConfig } from '../types'
 
 export const activitiesApi = {
   list: async (includeArchived = false) => {
@@ -12,7 +12,7 @@ export const activitiesApi = {
     return data
   },
 
-  create: async (payload: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson'; is_rigid?: boolean; note?: string; base_fee?: number }) => {
+  create: async (payload: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson' | 'smart'; is_rigid?: boolean; note?: string; base_fee?: number }) => {
     const { data } = await apiClient.post<Activity>('/activities', payload)
     return data
   },
@@ -48,5 +48,21 @@ export const activitiesApi = {
 
   unlink: async (parentId: string, childId: string) => {
     await apiClient.delete(`/activities/${parentId}/link/${childId}`)
+  },
+
+  getSmartTariff: async (id: string): Promise<SmartTariffConfig | null> => {
+    const { data } = await apiClient.get<SmartTariffConfig | null>(`/activities/${id}/smart-tariff`)
+    return data
+  },
+
+  setSmartTariff: async (id: string, payload: {
+    base_lessons?: number
+    l1_threshold_absences?: number | null
+    l1_threshold_fee?: number | null
+    l2_max_refunds?: number | null
+    l2_refund_per_absence?: number | null
+  }): Promise<SmartTariffConfig> => {
+    const { data } = await apiClient.put<SmartTariffConfig>(`/activities/${id}/smart-tariff`, payload)
+    return data
   },
 }
