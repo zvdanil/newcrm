@@ -140,6 +140,6 @@ INSERT INTO groups (name, sort_order) VALUES
 
 INSERT INTO users (email, password_hash, role) VALUES (
   'owner@iris.local',
-  '$2b$12$LmzaTAxABPVP1LrYg2KN8e1ZUZEEFrhCY/Z9FsrcCFFelR7MyPhTm',
+  '$2b$12$90Gj4glBpCdZyhtRz2X5kO5xD9A9pJmIAYxrOD5kpoXbR38fE5.ly',  -- iris2024
   'owner'
 );

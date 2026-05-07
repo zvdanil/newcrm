@@ -137,7 +137,7 @@
 ---
 
 ## ЭТАП 4 — Биллинговое ядро *(MVP-рубеж)*
-**Статус:** `[ ] В работе` / `[ ] Завершён`
+**Статус:** `[x] В работе` *(4.1–4.4 + индивидуальные тарифы + смарт-тариф реализованы)*
 
 > Реализуется пошагово: каждый подэтап — отдельная миграция или файл маршрутов.
 > Не переходить к следующему подэтапу без проверки текущего через API и UI.
@@ -145,51 +145,65 @@
 ---
 
 ### 4.1 — База данных (фундамент)
-- [ ] Таблица `transactions` (id, type, child_id, account_id, activity_id, enrollment_id, amount NUMERIC(15,2), transaction_date, billing_month, is_deleted, deleted_at, deleted_by, metadata_json, note)
+- [x] Таблица `transactions` (id, type, child_id, account_id, activity_id, enrollment_id, amount NUMERIC(15,2), transaction_date, billing_month, is_deleted, deleted_at, deleted_by, metadata_json, note)
   - type: ACCRUAL | PAYMENT | REFUND | REVERSAL | ADJUSTMENT
   - `billing_month` DATE — первый день месяца, к которому относится ACCRUAL (для идемпотентности)
   - `is_deleted`, `deleted_at`, `deleted_by` — Soft Delete
-- [ ] Таблица `child_balances` (child_id, account_id, balance NUMERIC(15,2)) — PRIMARY KEY (child_id, account_id)
-- [ ] Таблица `initial_balances` (id, child_id, account_id, amount, note, created_at) — начальные остатки, не входят в оборот PnL
-- [ ] Индексы: transactions (child_id, account_id, transaction_date, type, billing_month)
-- [ ] Таблица `billing_run_log` (id, month DATE, started_at, finished_at, created_count, adjusted_count, error TEXT) — лог запусков
+- [x] Таблица `child_balances` (child_id, account_id, balance NUMERIC(15,2)) — PRIMARY KEY (child_id, account_id)
+- [x] Таблица `initial_balances` (id, child_id, account_id, amount, note, created_at) — начальные остатки, не входят в оборот PnL
+- [x] Индексы: transactions (child_id, account_id, transaction_date, type, billing_month)
+- [x] Таблица `billing_run_log` (id, month DATE, started_at, finished_at, created_count, adjusted_count, error TEXT) — лог запусков
+- [x] Таблица `child_prices` (id, child_id, activity_id, price, discount_pct, valid_from, valid_to) — SCD Type 2
+- [x] Таблица `child_global_discounts` (id, child_id, discount_pct, valid_from, valid_to) — SCD Type 2
+- [x] Таблица `smart_tariff_configs` (activity_id PK, base_lessons, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence) — конфиг смарт-тарифа
 
 ---
 
 ### 4.2 — Баланс и Ledger
-- [ ] Сервис `balanceService.recalculate(child_id, account_id)` — пересчёт `child_balances` из транзакций
-- [ ] GET /api/children/:id/balance — массив балансов по счетам
-- [ ] GET /api/children/:id/ledger?month=&type= — история транзакций с пагинацией (LIMIT 500)
-- [ ] POST /api/children/:id/initial-balance — ввод начального остатка (owner/admin)
-- [ ] Фронтенд: блок "Баланси" в карточке ребёнка (раздельно по счетам, цвет: долг/аванс/ноль)
-- [ ] Фронтенд: таблица Ledger с фильтром по месяцу и типу транзакции
+- [x] Сервис `balanceService.recalcBalance(child_id, account_id)` — пересчёт `child_balances` из транзакций
+- [x] `balanceService.createTransaction(...)` — создание транзакции + пересчёт баланса
+- [x] GET /api/children/:id/balance — массив балансов по счетам
+- [x] GET /api/children/:id/ledger?from=&to=&account_id= — история транзакций с пагинацией
+- [x] POST /api/children/:id/initial-balance — ввод начального остатка (owner/admin)
+- [x] POST /api/children/:id/payment — ручное внесение оплаты
+- [x] Фронтенд: блок "Баланси" в карточке ребёнка (раздельно по счетам, цвет: долг/аванс/ноль)
+- [x] Фронтенд: таблица Ledger с детализацией по месяцам (итоги по активностям, не строки)
 
 ---
 
 ### 4.3 — Billing Run (ежемесячное начисление)
-- [ ] Сервис `billingRunService.run(month: string)`:
-  - Для каждой активной подписки на 1-е число месяца — вычислить цену по иерархии 5 уровней
-  - Если ACCRUAL за этот месяц (billing_month) отсутствует → создать ACCRUAL
-  - Если ACCRUAL уже есть и сумма совпадает → пропустить (идемпотентность)
-  - Если ACCRUAL уже есть и сумма изменилась (тариф пересмотрен) → создать ADJUSTMENT на дельту
-  - После каждой транзакции → обновить `child_balances`
-  - Записать результат в `billing_run_log`
-- [ ] Cron-задача: `node-cron`, расписание `0 6 1 * *` (1-е число, 06:00)
-- [ ] POST /api/billing/run?month=YYYY-MM — принудительный запуск (Owner only)
-- [ ] GET /api/billing/run-log — последние N запусков (Owner/Admin)
-- [ ] Фронтенд: страница/раздел "Billing" (Owner) — последний запуск + кнопка принудительного
+- [x] Сервис `billingRunService.runBilling(month)`:
+  - Иерархия цен 5 уровней: child_prices → child_discount → global_discount → base_fee
+  - Идемпотентность: ACCRUAL за billing_month уже есть → пропустить или ADJUSTMENT при изменении
+  - Записывает результат в `billing_run_log`
+- [x] Cron-задача: `node-cron`, расписание `0 6 1 * *` (1-е число, 06:00)
+- [x] POST /api/billing/run — принудительный запуск (Owner only)
+- [x] GET /api/billing/run-log — последние N запусков (Owner/Admin)
+- [x] Фронтенд: страница "Billing" (Owner) — лог запусков + кнопка принудительного запуска
 
 ---
 
-### 4.4 — Attendance → REFUND (триггер от журнала)
-- [ ] При POST/PUT attendance со статусом `absent_excused`:
-  - Получить `refund_config` активности
-  - Если `refund_on_excused = false` → ничего не делать
-  - Если enrollment имеет `is_rigid = true` (основная активность) → ничего не делать
-  - Иначе → вычислить сумму возврата (фикс. или % от текущего тарифа) → создать REFUND
-  - Обновить `child_balances`
-- [ ] При изменении статуса с `absent_excused` на другой → найти и сторнировать REFUND (создать REVERSAL)
-- [ ] Связанные активности: каждая применяет СВОИ правила возврата независимо
+### 4.4 — Attendance → финансовые триггеры
+- [x] per_lesson: POST attendance (present/special) → `triggerPerLessonAccrual` (с учётом custom_amount и child_prices)
+- [x] per_lesson: изменение/удаление отметки → `reversePerLessonAccrual` (soft-delete ACCRUAL)
+- [x] monthly: POST attendance (absent_excused) → `triggerRefund` по refund_config; жёсткий абонемент блокирует возврат
+- [x] monthly: изменение статуса → `reverseRefund`
+- [x] smart: любое изменение отметки → `recalcSmartBenefit(enrollmentId, billingMonth)`
+- [x] Каскад: отметка в parent_activity → автоматически в linked_activities → каждая применяет СВОИ правила
+
+---
+
+### 4.4б — Индивидуальные тарифы и скидки для детей
+- [x] GET /api/children/:id/prices — список индивидуальных цен/скидок по активностям
+- [x] POST /api/children/:id/prices — установить цену/скидку на активность (SCD Type 2)
+- [x] DELETE /api/children/:id/prices/:priceId?valid_to= — сбросить с даты (поддерживает планирование)
+- [x] GET /api/children/:id/global-discount — глобальная скидка ребёнка
+- [x] POST /api/children/:id/global-discount — установить глобальную скидку
+- [x] DELETE /api/children/:id/global-discount — удалить глобальную скидку
+- [x] Фронтенд: индивидуальный тариф отображается прямо в строке подписки (зачёркнутый base_fee + индивидуальная цена в iris)
+- [x] Фронтенд: инлайн-форма тарифа внутри строки enrollment (режимы: цена / скидка %)
+- [x] Фронтенд: сброс тарифа с выбором даты (valid_to = planning)
+- [x] Фронтенд: глобальная скидка — компактная кнопка в шапке блока подписок
 
 ---
 

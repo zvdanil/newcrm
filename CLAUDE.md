@@ -137,16 +137,35 @@ ORDER BY transaction_date ASC, amount DESC
 - Баланс ФОП 1 физически **не увеличивается**
 - Создаётся запись в `inter_account_imbalances(from_account, to_account, amount)` — информационный "Межсчётный дисбаланс" видный Owner и Admin
 
+### 5.7 Смарт-тариф (`tariff_type = 'smart'`)
+Третий тип тарифа. Конфигурируется в карточке активности. Работает по двум независимым логикам:
+
+**Логика 1 (threshold_fee):** если уважительных пропусков ≥ `l1_threshold_absences` → клиент платит `l1_threshold_fee` вместо базы. `benefit_L1 = B - l1_threshold_fee`.
+
+**Логика 2 (capped_refund):** первые `l2_max_refunds` уважительных пропусков получают возврат `l2_refund_per_absence` каждый. `benefit_L2 = min(absences, l2_max_refunds) × l2_refund_per_absence`.
+
+**Правило комбинации:** `benefit = max(benefit_L1, benefit_L2)`. Ноль пропусков → ноль пользы.
+
+**Механизм:**
+1. `ACCRUAL = B` создаётся 1-го числа через `runSmartAccruals` (cron, отдельно от Billing Run).
+2. После каждого изменения отметки в журнале → `recalcSmartBenefit(enrollmentId, billingMonth)`.
+3. Создаётся/обновляется единственный `REFUND` с `metadata_json->>'source' = 'smart_benefit'` для данного enrollment+billing_month.
+4. При пересчёте: старый REFUND soft-deleted, создаётся новый с актуальной суммой.
+
+**Таблица конфигурации:** `smart_tariff_configs` (activity_id PRIMARY KEY, base_lessons, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence).
+
 ---
 
 ## 6. ИЕРАРХИЯ ЦЕНООБРАЗОВАНИЯ
 
 Применяется в строгом порядке (1 = высший приоритет):
 1. Спец-тариф (ручной ввод в ячейке журнала)
-2. Индивидуальная цена ребёнка на конкретную активность
-3. Скидка на активность
-4. Глобальная скидка ребёнка
-5. Базовая цена активности
+2. Индивидуальная цена ребёнка на конкретную активность (`child_prices`)
+3. Скидка на активность для ребёнка (`child_prices.discount_pct`)
+4. Глобальная скидка ребёнка (`child_global_discounts`)
+5. Базовая цена активности (`tariffs.base_fee`)
+
+**Индивидуальные тарифы** хранятся по SCD Type 2 (valid_from / valid_to). Сброс тарифа = установка valid_to (поддерживает планирование будущим числом). Управление встроено в строку подписки в карточке ребёнка (не отдельный блок).
 
 ---
 

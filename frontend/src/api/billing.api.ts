@@ -21,6 +21,7 @@ export interface LedgerEntry {
   activity_id: string | null
   activity_name: string | null
   enrollment_id: string | null
+  metadata_json: Record<string, unknown> | null
 }
 
 export interface LedgerResponse {
@@ -67,8 +68,30 @@ export const billingApi = {
     return data
   },
 
-  registerPayment: async (childId: string, payload: { account_id: string; amount: number; transaction_date?: string; note?: string }) => {
+  registerPayment: async (childId: string, payload: {
+    account_id: string
+    payment_account_id?: string
+    amount: number
+    transaction_date?: string
+    note?: string
+  }) => {
     const { data } = await apiClient.post(`/children/${childId}/payment`, payload)
+    return data
+  },
+
+  getImbalances: async (childId: string): Promise<Array<{
+    id: string
+    transaction_id: string | null
+    from_account_id: string
+    from_account_name: string
+    to_account_id: string
+    to_account_name: string
+    amount: string
+    note: string | null
+    created_at: string
+    resolved_at: string | null
+  }>> => {
+    const { data } = await apiClient.get(`/children/${childId}/imbalances`)
     return data
   },
 
@@ -110,6 +133,11 @@ export const billingApi = {
 
   deleteGlobalDiscount: async (childId: string) => {
     const { data } = await apiClient.delete(`/children/${childId}/global-discount`)
+    return data
+  },
+
+  cancelTransaction: async (txId: string): Promise<{ ok: boolean }> => {
+    const { data } = await apiClient.post<{ ok: boolean }>(`/transactions/${txId}/cancel`, {})
     return data
   },
 

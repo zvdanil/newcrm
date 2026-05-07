@@ -377,15 +377,17 @@ export async function childrenRoutes(app: FastifyInstance) {
   )
 
   // POST /api/children/:id/payment — зарегистрировать оплату
+  // account_id        — счёт услуги (где числится долг ребёнка, закрывается PAYMENT)
+  // payment_account_id — счёт зачисления (куда физически пришли деньги; если ≠ account_id → кросс-счётная оплата)
   app.post<{
     Params: { id: string }
-    Body: { account_id: string; amount: number; transaction_date?: string; note?: string }
+    Body: { account_id: string; payment_account_id?: string; amount: number; transaction_date?: string; note?: string }
   }>(
     '/:id/payment',
     { preHandler: requireRole('owner', 'admin') },
     async (request, reply) => {
       const { id } = request.params
-      const { account_id, amount, transaction_date, note } = request.body
+      const { account_id, payment_account_id, amount, transaction_date, note } = request.body
 
       if (!amount || amount <= 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
@@ -394,17 +396,58 @@ export async function childrenRoutes(app: FastifyInstance) {
       const child = await db.selectFrom('children').select('id').where('id', '=', id).executeTakeFirst()
       if (!child) return reply.status(404).send({ error: 'NotFound' })
 
+      const dateStr = transaction_date ?? new Date().toISOString().slice(0, 10)
+      const payAccountId = payment_account_id ?? account_id
+      const isCrossAccount = payAccountId !== account_id
+
+      // PAYMENT closes debt on the service account
       const txId = await createTransaction({
         type: 'PAYMENT',
         child_id: id,
         account_id,
         amount,
-        transaction_date: transaction_date ?? new Date().toISOString().slice(0, 10),
+        transaction_date: dateStr,
         note: note ?? null,
         created_by: request.user.sub,
+        metadata_json: isCrossAccount ? { payment_account_id: payAccountId } : null,
       })
 
-      return reply.status(201).send({ id: txId })
+      // Cross-account: money physically landed on a different account → record imbalance
+      if (isCrossAccount) {
+        await db.insertInto('inter_account_imbalances').values({
+          from_account_id: payAccountId,   // where money arrived
+          to_account_id:   account_id,     // which account should receive from payAccount
+          amount,
+          transaction_id:  txId,
+          note: note ?? null,
+        }).execute()
+      }
+
+      return reply.status(201).send({ id: txId, cross_account: isCrossAccount })
+    }
+  )
+
+  // GET /api/children/:id/imbalances — межсчётные дисбалансы по данному ребёнку (Owner/Admin)
+  app.get<{ Params: { id: string } }>(
+    '/:id/imbalances',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request) => {
+      return db
+        .selectFrom('inter_account_imbalances as i')
+        .innerJoin('accounts as fa', 'fa.id', 'i.from_account_id')
+        .innerJoin('accounts as ta', 'ta.id', 'i.to_account_id')
+        .select([
+          'i.id', 'i.amount', 'i.note', 'i.created_at', 'i.resolved_at',
+          'i.transaction_id',
+          'fa.id as from_account_id', 'fa.name as from_account_name',
+          'ta.id as to_account_id', 'ta.name as to_account_name',
+        ])
+        .where('i.transaction_id', 'in',
+          db.selectFrom('transactions').select('id').where('child_id', '=', request.params.id)
+        )
+        .where('i.resolved_at', 'is', null)
+        .orderBy('i.created_at', 'desc')
+        .execute()
     }
   )
 

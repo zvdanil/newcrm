@@ -687,9 +687,17 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   const [showInitForm, setShowInitForm] = useState(false)
   const [showPayForm, setShowPayForm] = useState(false)
   const [initForm, setInitForm] = useState({ account_id: '', amount: '', note: '' })
-  const [payForm, setPayForm]   = useState({ account_id: '', amount: '', date: new Date().toISOString().slice(0, 10), note: '' })
+  const [payForm, setPayForm]   = useState({
+    account_id: '',
+    payment_account_id: '',
+    cross_account: false,
+    amount: '',
+    date: new Date().toISOString().slice(0, 10),
+    note: '',
+  })
   const [initError, setInitError] = useState<string | null>(null)
   const [payError, setPayError]   = useState<string | null>(null)
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
 
   const { from, to } = monthRange(ym)
 
@@ -706,7 +714,13 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: accountsApi.list,
-    enabled: showInitForm || showPayForm,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: imbalances = [] } = useQuery({
+    queryKey: ['imbalances', childId],
+    queryFn: () => billingApi.getImbalances(childId),
+    enabled: canEdit,
   })
 
   const initMutation = useMutation({
@@ -720,15 +734,73 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     onError: () => setInitError('Помилка збереження'),
   })
 
-  const payMutation = useMutation({
-    mutationFn: () => billingApi.registerPayment(childId, {
-      account_id: payForm.account_id, amount: Number(payForm.amount),
-      transaction_date: payForm.date || undefined, note: payForm.note || undefined,
-    }),
+  const resetPayForm = () => {
+    setPayForm({
+      account_id: '', payment_account_id: '', cross_account: false,
+      amount: '', date: new Date().toISOString().slice(0, 10), note: '',
+    })
+    setEditingPaymentId(null)
+  }
+
+  const openEditPayment = (tx: LedgerEntry) => {
+    // 1st priority: metadata_json (stored at creation time — works even if imbalance was resolved)
+    const metaPayAccountId = (tx.metadata_json as { payment_account_id?: string } | null)?.payment_account_id
+    // 2nd priority: unresolved imbalance (fallback for payments created before this fix)
+    const linkedImbalance = imbalances.find((im) => im.transaction_id === tx.id)
+    const resolvedPayAccountId = metaPayAccountId ?? linkedImbalance?.from_account_id ?? ''
+    const isCrossAccount = !!(metaPayAccountId || linkedImbalance)
+
+    setEditingPaymentId(tx.id)
+    setPayForm({
+      account_id: tx.account_id,
+      payment_account_id: resolvedPayAccountId,
+      cross_account: isCrossAccount,
+      amount: Number(tx.amount).toFixed(2),
+      date: tx.transaction_date.slice(0, 10),
+      note: tx.note ?? '',
+    })
+    setShowPayForm(true)
+    setPayError(null)
+    // Scroll to form (it renders above the monthly breakdown)
+    setTimeout(() => {
+      document.getElementById('pay-form-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 50)
+  }
+
+  const cancelPayMutation = useMutation({
+    mutationFn: (txId: string) => billingApi.cancelTransaction(txId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['balance', childId] })
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
-      setShowPayForm(false); setPayForm({ account_id: '', amount: '', date: new Date().toISOString().slice(0, 10), note: '' }); setPayError(null)
+      qc.invalidateQueries({ queryKey: ['imbalances', childId] })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string; message?: string } } })
+        ?.response?.data?.message ?? 'Помилка скасування оплати'
+      setPayError(msg)
+    },
+  })
+
+  const payMutation = useMutation({
+    mutationFn: async () => {
+      if (editingPaymentId) {
+        await billingApi.cancelTransaction(editingPaymentId)
+      }
+      return billingApi.registerPayment(childId, {
+        account_id: payForm.account_id,
+        payment_account_id: payForm.cross_account && payForm.payment_account_id ? payForm.payment_account_id : undefined,
+        amount: Number(payForm.amount),
+        transaction_date: payForm.date || undefined,
+        note: payForm.note || undefined,
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      qc.invalidateQueries({ queryKey: ['imbalances', childId] })
+      setShowPayForm(false)
+      resetPayForm()
+      setPayError(null)
     },
     onError: () => setPayError('Помилка при збереженні оплати'),
   })
@@ -772,6 +844,14 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
         )}
       </div>
 
+      {/* Inline error (cancel mutation errors show here, outside the pay form) */}
+      {payError && !showPayForm && (
+        <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 flex items-center justify-between">
+          <span>{payError}</span>
+          <button onClick={() => setPayError(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button>
+        </div>
+      )}
+
       {/* Balance cards */}
       {balLoading ? (
         <p className="text-sm text-gray-400">Завантаження...</p>
@@ -797,11 +877,17 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
       {/* Payment form */}
       {showPayForm && (
-        <div className="p-4 bg-green-50 rounded-lg space-y-3 border border-green-200">
-          <p className="text-sm font-medium text-gray-700">Внести оплату</p>
+        <div id="pay-form-anchor" className="p-4 bg-green-50 rounded-lg space-y-3 border border-green-200">
+          <p className="text-sm font-medium text-gray-700">
+            {editingPaymentId ? 'Редагування оплати' : 'Внести оплату'}
+          </p>
+
+          {/* Service account + amount */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Рахунок *</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                {payForm.cross_account ? 'Рахунок послуги (де борг) *' : 'Рахунок *'}
+              </label>
               <select value={payForm.account_id} onChange={(e) => setPayForm({ ...payForm, account_id: e.target.value })}
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500">
                 <option value="">— оберіть —</option>
@@ -816,6 +902,34 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
             </div>
           </div>
+
+          {/* Cross-account toggle */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={payForm.cross_account}
+              onChange={(e) => setPayForm({ ...payForm, cross_account: e.target.checked, payment_account_id: '' })}
+              className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+            <span className="text-xs text-gray-600">Гроші надійшли на інший рахунок</span>
+          </label>
+
+          {/* Payment account selector (cross-account only) */}
+          {payForm.cross_account && (
+            <div className="ml-5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <label className="block text-xs font-medium text-amber-700 mb-1">Рахунок зарахування (куди реально прийшли гроші) *</label>
+              <select value={payForm.payment_account_id}
+                onChange={(e) => setPayForm({ ...payForm, payment_account_id: e.target.value })}
+                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500">
+                <option value="">— оберіть —</option>
+                {accounts.filter((a) => a.is_active && a.id !== payForm.account_id).map((a) =>
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                )}
+              </select>
+              <p className="text-xs text-amber-600 mt-1.5">
+                Борг закриється по рахунку послуги · Міжрахунковий дисбаланс буде зафіксовано
+              </p>
+            </div>
+          )}
+
+          {/* Date + note */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Дата</label>
@@ -825,17 +939,24 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Нотатка</label>
               <input type="text" value={payForm.note} onChange={(e) => setPayForm({ ...payForm, note: e.target.value })}
+                placeholder="необов'язково"
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
             </div>
           </div>
+
           {payError && <p className="text-xs text-red-600">{payError}</p>}
           <div className="flex gap-2">
-            <button onClick={() => { if (!payForm.account_id || !payForm.amount) { setPayError('Оберіть рахунок та суму'); return } payMutation.mutate() }}
+            <button onClick={() => {
+              if (!payForm.account_id || !payForm.amount) { setPayError('Оберіть рахунок та суму'); return }
+              if (payForm.cross_account && !payForm.payment_account_id) { setPayError('Оберіть рахунок зарахування'); return }
+              payMutation.mutate()
+            }}
               disabled={payMutation.isPending}
               className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-md">
-              {payMutation.isPending ? '...' : 'Зберегти оплату'}
+              {payMutation.isPending ? '...' : editingPaymentId ? 'Зберегти зміни' : 'Зберегти оплату'}
             </button>
-            <button onClick={() => { setShowPayForm(false); setPayError(null) }} className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-900">Скасувати</button>
+            <button onClick={() => { setShowPayForm(false); resetPayForm(); setPayError(null) }}
+              className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-900">Скасувати</button>
           </div>
         </div>
       )}
@@ -962,11 +1083,62 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       </div>
                     )}
 
-                    {/* Payments — single total line */}
+                    {/* Payments — individual rows */}
                     {(group?.payments ?? []).length > 0 && (
-                      <div className="flex justify-between py-0.5">
-                        <span className="text-gray-400">Оплата</span>
-                        <span className="font-mono text-green-600">+{totalPayments.toFixed(2)}</span>
+                      <div>
+                        <p className="text-gray-400 mb-1">Оплати</p>
+                        {group.payments.map((tx) => {
+                          const metaPayId = (tx.metadata_json as { payment_account_id?: string } | null)?.payment_account_id
+                          const linkedImbalance = imbalances.find((im) => im.transaction_id === tx.id)
+                          const crossName = metaPayId
+                            ? (accounts.find((a) => a.id === metaPayId)?.name ?? null)
+                            : (linkedImbalance?.from_account_name ?? null)
+                          return (
+                          <div key={tx.id} className="flex items-center justify-between py-0.5">
+                            <div className="flex items-center gap-1.5 text-gray-600 min-w-0">
+                              <span className="shrink-0">{formatDate(tx.transaction_date)}</span>
+                              {tx.note && <span className="text-gray-400 truncate">· {tx.note}</span>}
+                              {crossName && (
+                                <span className="shrink-0 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                                  ← {crossName}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 ml-2 shrink-0">
+                              <span className="font-mono text-green-600">+{Number(tx.amount).toFixed(2)}</span>
+                              {canEdit && (
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => openEditPayment(tx)}
+                                    className="text-gray-300 hover:text-iris-600 text-xs px-1 py-0.5 rounded hover:bg-iris-50 transition-colors"
+                                    title="Редагувати"
+                                  >
+                                    ред.
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm('Скасувати цю оплату?')) {
+                                        cancelPayMutation.mutate(tx.id)
+                                      }
+                                    }}
+                                    disabled={cancelPayMutation.isPending}
+                                    className="text-gray-300 hover:text-red-500 text-xs px-1 py-0.5 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                                    title="Скасувати оплату"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                        })}
+                        {(group?.payments ?? []).length > 1 && (
+                          <div className="flex justify-between py-0.5 border-t border-gray-100 mt-1 pt-1">
+                            <span className="text-gray-400">Разом оплат</span>
+                            <span className="font-mono text-green-600">+{totalPayments.toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
                     )}
 

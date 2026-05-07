@@ -199,6 +199,18 @@ export interface InitialBalancesTable {
   created_at: Generated<Date>
 }
 
+export interface InterAccountImbalancesTable {
+  id:              Generated<string>
+  from_account_id: string
+  to_account_id:   string
+  amount:          ColumnType<string, number | string, number | string>
+  transaction_id:  string | null
+  note:            string | null
+  created_at:      Generated<Date>
+  resolved_at:     ColumnType<Date | null, string | null, string | null>
+  resolved_by:     string | null
+}
+
 export interface BillingRunLogTable {
   id:             Generated<string>
   billing_month:  ColumnType<Date, string, string>
@@ -231,5 +243,6 @@ export interface Database {
   child_balances:        ChildBalancesTable
   initial_balances:      InitialBalancesTable
   billing_run_log:       BillingRunLogTable
-  smart_tariff_configs:  SmartTariffConfigsTable
+  smart_tariff_configs:       SmartTariffConfigsTable
+  inter_account_imbalances:   InterAccountImbalancesTable
 }
