@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
+import { getFamilyDebts, computeWaterfall } from '../services/waterfallService.js'
+import { createTransaction } from '../services/balanceService.js'
 
 export async function familiesRoutes(app: FastifyInstance) {
   // GET /api/families?search=&limit=&offset=
@@ -129,6 +131,118 @@ export async function familiesRoutes(app: FastifyInstance) {
       })
 
       return reply.status(201).send(family)
+    }
+  )
+
+  // GET /api/families/:id/debts?account_id= — debt breakdown for all children
+  app.get<{ Params: { id: string }; Querystring: { account_id: string } }>(
+    '/:id/debts',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const { account_id } = request.query
+      if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'account_id є обовʼязковим' })
+
+      const family = await db.selectFrom('families').select('id').where('id', '=', request.params.id).executeTakeFirst()
+      if (!family) return reply.status(404).send({ error: 'NotFound' })
+
+      const debts = await getFamilyDebts(request.params.id, account_id)
+      const total_debt = debts.reduce((s, c) => s + c.debt, 0)
+      return { debts, total_debt: Math.round(total_debt * 100) / 100 }
+    }
+  )
+
+  // POST /api/families/:id/payment — family waterfall payment (Owner/Admin)
+  app.post<{
+    Params: { id: string }
+    Body: {
+      account_id: string
+      payment_account_id?: string
+      amount: number
+      transaction_date?: string
+      note?: string
+      advance_child_id?: string            // child that receives excess advance
+      manual_match?: { child_id: string; amount: number }[]  // override auto-waterfall
+    }
+  }>(
+    '/:id/payment',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const { account_id, payment_account_id, amount, transaction_date, note, advance_child_id, manual_match } = request.body
+
+      if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'account_id є обовʼязковим' })
+      if (!amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
+
+      const family = await db.selectFrom('families').select('id').where('id', '=', request.params.id).executeTakeFirst()
+      if (!family) return reply.status(404).send({ error: 'NotFound' })
+
+      // Determine allocation: manual or auto-waterfall
+      let allocations: { child_id: string; child_name: string; amount: number }[]
+
+      if (manual_match && manual_match.length > 0) {
+        // Validate that all children belong to this family
+        const childIds = manual_match.map(m => m.child_id)
+        const familyChildren = await db
+          .selectFrom('children')
+          .select(['id', 'full_name'])
+          .where('family_id', '=', request.params.id)
+          .where('id', 'in', childIds)
+          .execute()
+
+        const childMap = new Map(familyChildren.map(c => [c.id, c.full_name]))
+        for (const match of manual_match) {
+          if (!childMap.has(match.child_id)) {
+            return reply.status(400).send({ error: 'BadRequest', message: `Дитина ${match.child_id} не належить цій сім'ї` })
+          }
+        }
+
+        allocations = manual_match
+          .filter(m => m.amount > 0)
+          .map(m => ({ child_id: m.child_id, child_name: childMap.get(m.child_id)!, amount: m.amount }))
+      } else {
+        const debts = await getFamilyDebts(request.params.id, account_id)
+        const waterfall = computeWaterfall(debts, amount, advance_child_id)
+        allocations = waterfall.allocations
+      }
+
+      if (allocations.length === 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Немає розподілу платежу' })
+      }
+
+      const dateStr = transaction_date ?? new Date().toISOString().slice(0, 10)
+      const payAccountId = payment_account_id ?? account_id
+      const isCrossAccount = payAccountId !== account_id
+      const createdBy = request.user.sub
+
+      const results: { child_id: string; child_name: string; amount: number; tx_id: string }[] = []
+
+      for (const alloc of allocations) {
+        const txId = await createTransaction({
+          type: 'PAYMENT',
+          child_id: alloc.child_id,
+          account_id,
+          amount: alloc.amount,
+          transaction_date: dateStr,
+          note: note ?? null,
+          created_by: createdBy,
+          metadata_json: isCrossAccount
+            ? { payment_account_id: payAccountId, family_payment: true }
+            : { family_payment: true },
+        })
+
+        if (isCrossAccount) {
+          await db.insertInto('inter_account_imbalances').values({
+            from_account_id: payAccountId,
+            to_account_id: account_id,
+            amount: alloc.amount,
+            transaction_id: txId,
+            note: note ?? null,
+          }).execute()
+        }
+
+        results.push({ child_id: alloc.child_id, child_name: alloc.child_name, amount: alloc.amount, tx_id: txId })
+      }
+
+      return reply.status(201).send({ ok: true, allocations: results, cross_account: isCrossAccount })
     }
   )
 

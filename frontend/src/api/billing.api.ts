@@ -15,6 +15,7 @@ export interface LedgerEntry {
   billing_month: string | null
   note: string | null
   is_deleted: boolean
+  deleted_at: string | null
   created_at: string
   account_id: string
   account_name: string
@@ -22,6 +23,8 @@ export interface LedgerEntry {
   activity_name: string | null
   enrollment_id: string | null
   metadata_json: Record<string, unknown> | null
+  created_by_email: string | null
+  deleted_by_email: string | null
 }
 
 export interface LedgerResponse {
@@ -57,13 +60,14 @@ export const billingApi = {
     return data
   },
 
-  getLedger: async (childId: string, params?: { account_id?: string; from?: string; to?: string; limit?: number; offset?: number }): Promise<LedgerResponse> => {
+  getLedger: async (childId: string, params?: { account_id?: string; from?: string; to?: string; limit?: number; offset?: number; include_deleted?: boolean }): Promise<LedgerResponse> => {
     const q = new URLSearchParams()
-    if (params?.account_id) q.set('account_id', params.account_id)
-    if (params?.from)       q.set('from', params.from)
-    if (params?.to)         q.set('to', params.to)
-    if (params?.limit)      q.set('limit', String(params.limit))
-    if (params?.offset)     q.set('offset', String(params.offset))
+    if (params?.account_id)     q.set('account_id', params.account_id)
+    if (params?.from)           q.set('from', params.from)
+    if (params?.to)             q.set('to', params.to)
+    if (params?.limit)          q.set('limit', String(params.limit))
+    if (params?.offset)         q.set('offset', String(params.offset))
+    if (params?.include_deleted) q.set('include_deleted', 'true')
     const { data } = await apiClient.get<LedgerResponse>(`/children/${childId}/ledger?${q}`)
     return data
   },
@@ -136,8 +140,8 @@ export const billingApi = {
     return data
   },
 
-  cancelTransaction: async (txId: string): Promise<{ ok: boolean }> => {
-    const { data } = await apiClient.post<{ ok: boolean }>(`/transactions/${txId}/cancel`, {})
+  cancelTransaction: async (txId: string, reason?: string): Promise<{ ok: boolean }> => {
+    const { data } = await apiClient.post<{ ok: boolean }>(`/transactions/${txId}/cancel`, { reason })
     return data
   },
 

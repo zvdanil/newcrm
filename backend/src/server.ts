@@ -13,6 +13,7 @@ import { enrollmentsRoutes } from './routes/enrollments.js'
 import { journalsRoutes } from './routes/journals.js'
 import { billingRoutes } from './routes/billing.js'
 import { transactionsRoutes } from './routes/transactions.js'
+import { expensesRoutes } from './routes/expenses.js'
 import cron from 'node-cron'
 import { runBilling, currentBillingMonth } from './services/billingRunService.js'
 import { runSmartAccruals } from './services/smartTariffService.js'
@@ -51,6 +52,7 @@ await app.register(enrollmentsRoutes, { prefix: '/api' })
 await app.register(journalsRoutes,    { prefix: '/api/journals' })
 await app.register(billingRoutes,        { prefix: '/api/billing' })
 await app.register(transactionsRoutes,   { prefix: '/api/transactions' })
+await app.register(expensesRoutes,       { prefix: '/api/expenses' })
 
 // Billing Run cron — runs at 06:00 on the 1st of every month
 cron.schedule('0 6 1 * *', async () => {

@@ -16,6 +16,7 @@ import { ActivityCreatePage } from './pages/Activities/ActivityCreatePage'
 import { ActivityCardPage } from './pages/Activities/ActivityCardPage'
 import { JournalsListPage } from './pages/Journals/JournalsListPage'
 import { JournalPage } from './pages/Journals/JournalPage'
+import { ExpensesPage } from './pages/Expenses/ExpensesPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +67,9 @@ export function App() {
               {/* Журнали */}
               <Route path="journals"             element={<JournalsListPage />} />
               <Route path="journals/:activityId" element={<JournalPage />} />
+              {/* Витрати */}
+              <Route path="expenses" element={<ExpensesPage />} />
+
               <Route path="staff"     element={<Placeholder title="Персонал" />} />
               <Route path="reports"   element={<Placeholder title="Звіти" />} />
             </Route>

@@ -211,10 +211,10 @@ export async function childrenRoutes(app: FastifyInstance) {
     }
   )
 
-  // GET /api/children/:id/ledger?account_id=&from=&to=&limit=&offset=
+  // GET /api/children/:id/ledger?account_id=&from=&to=&limit=&offset=&include_deleted=
   app.get<{
     Params: { id: string }
-    Querystring: { account_id?: string; from?: string; to?: string; limit?: string; offset?: string }
+    Querystring: { account_id?: string; from?: string; to?: string; limit?: string; offset?: string; include_deleted?: string }
   }>(
     '/:id/ledger',
     { preHandler: authenticate },
@@ -222,7 +222,8 @@ export async function childrenRoutes(app: FastifyInstance) {
       const { id } = request.params
       const limit = Math.min(Number(request.query.limit ?? 100), 500)
       const offset = Number(request.query.offset ?? 0)
-      const { account_id, from, to } = request.query
+      const { account_id, from, to, include_deleted } = request.query
+      const showDeleted = include_deleted === 'true'
 
       const child = await db
         .selectFrom('children')
@@ -233,17 +234,24 @@ export async function childrenRoutes(app: FastifyInstance) {
 
       let query = db
         .selectFrom('transactions as t')
-        .leftJoin('accounts as a', 'a.id', 't.account_id')
+        .leftJoin('accounts as a',    'a.id',   't.account_id')
         .leftJoin('activities as act', 'act.id', 't.activity_id')
+        .leftJoin('users as cu',       'cu.id',  't.created_by')
+        .leftJoin('users as du',       'du.id',  't.deleted_by')
         .select([
           't.id', 't.type', 't.amount', 't.transaction_date', 't.billing_month',
           't.note', 't.is_deleted', 't.deleted_at', 't.created_at',
           't.account_id', 'a.name as account_name',
           't.activity_id', 'act.name as activity_name',
           't.enrollment_id', 't.metadata_json',
+          'cu.email as created_by_email',
+          'du.email as deleted_by_email',
         ])
         .where('t.child_id', '=', id)
-        .where('t.is_deleted', '=', false)
+
+      if (!showDeleted) {
+        query = query.where('t.is_deleted', '=', false)
+      }
 
       if (account_id) query = query.where('t.account_id', '=', account_id)
       if (from) query = query.where('t.transaction_date', '>=', new Date(from))

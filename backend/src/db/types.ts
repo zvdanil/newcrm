@@ -199,6 +199,48 @@ export interface InitialBalancesTable {
   created_at: Generated<Date>
 }
 
+export type ExpenseStatus = 'pending' | 'paid'
+
+export interface ExpenseCategoriesTable {
+  id:         Generated<string>
+  name:       string
+  parent_id:  string | null
+  is_active:  Generated<boolean>
+  sort_order: Generated<number>
+  created_at: Generated<Date>
+}
+
+export interface ExpensesTable {
+  id:                     Generated<string>
+  account_id:             string
+  category_id:            string | null
+  amount:                 ColumnType<string, number | string, number | string>
+  accrual_date:           ColumnType<Date, string, string>
+  payment_date:           ColumnType<Date | null, string | null, string | null>
+  status:                 Generated<ExpenseStatus>
+  is_instant:             Generated<boolean>
+  is_dividend:            Generated<boolean>
+  note:                   string | null
+  created_by:             string | null
+  withdrawal_transfer_id: string | null
+  is_deleted:             Generated<boolean>
+  deleted_at:             ColumnType<Date | null, string | null, string | null>
+  deleted_by:             string | null
+  created_at:             Generated<Date>
+}
+
+export interface AccountTransfersTable {
+  id:              Generated<string>
+  from_account_id: string
+  to_account_id:   string
+  amount:          ColumnType<string, number | string, number | string>
+  commission:      ColumnType<string, number | string, number | string>
+  transfer_date:   ColumnType<Date, string, string>
+  note:            string | null
+  created_by:      string | null
+  created_at:      Generated<Date>
+}
+
 export interface InterAccountImbalancesTable {
   id:              Generated<string>
   from_account_id: string
@@ -245,4 +287,7 @@ export interface Database {
   billing_run_log:       BillingRunLogTable
   smart_tariff_configs:       SmartTariffConfigsTable
   inter_account_imbalances:   InterAccountImbalancesTable
+  expense_categories:         ExpenseCategoriesTable
+  expenses:                   ExpensesTable
+  account_transfers:          AccountTransfersTable
 }

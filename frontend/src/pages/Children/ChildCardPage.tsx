@@ -653,6 +653,98 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
 }
 
 
+// ─── Audit helpers ──────────────────────────────────────────────────────────
+
+const TX_LABEL: Record<string, string> = {
+  ACCRUAL:    'Нарахування',
+  PAYMENT:    'Оплата',
+  REFUND:     'Повернення',
+  REVERSAL:   'Сторно',
+  ADJUSTMENT: 'Коригування',
+}
+
+const TX_BADGE: Record<string, string> = {
+  ACCRUAL:    'bg-red-50 text-red-700',
+  PAYMENT:    'bg-green-50 text-green-700',
+  REFUND:     'bg-blue-50 text-blue-700',
+  REVERSAL:   'bg-gray-100 text-gray-500',
+  ADJUSTMENT: 'bg-amber-50 text-amber-700',
+}
+
+function amountSign(type: string, amount: string) {
+  const n = Number(amount)
+  if (['PAYMENT', 'REFUND', 'REVERSAL'].includes(type)) return { sign: '+', color: 'text-green-600' as const, value: n }
+  return { sign: '−', color: 'text-red-500' as const, value: n }
+}
+
+function AuditView({
+  entries, canEdit, onCancel, cancelPending,
+}: {
+  entries: LedgerEntry[]
+  canEdit: boolean
+  onCancel: (tx: LedgerEntry) => void
+  cancelPending: boolean
+}) {
+  if (entries.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-4">Рухів за цей місяць немає</p>
+  }
+  return (
+    <div className="space-y-1">
+      {entries.map((tx) => {
+        const { sign, color, value } = amountSign(tx.type, tx.amount)
+        const deleted = tx.is_deleted
+        return (
+          <div key={tx.id} className={`rounded-lg px-3 py-2 text-xs ${deleted ? 'bg-gray-50 opacity-60' : 'bg-white border border-gray-100'}`}>
+            <div className="flex items-start justify-between gap-2">
+              {/* Left: badge + description */}
+              <div className="flex items-start gap-2 min-w-0">
+                <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${TX_BADGE[tx.type] ?? 'bg-gray-100 text-gray-600'} ${deleted ? 'line-through' : ''}`}>
+                  {TX_LABEL[tx.type] ?? tx.type}
+                </span>
+                <div className="min-w-0">
+                  <p className={`font-medium text-gray-700 ${deleted ? 'line-through' : ''}`}>
+                    {tx.activity_name ?? tx.account_name}
+                  </p>
+                  {tx.note && (
+                    <p className="text-gray-400 mt-0.5 break-words">{tx.note}</p>
+                  )}
+                  {/* Audit trail */}
+                  <p className="text-gray-300 mt-0.5">
+                    {formatDate(tx.transaction_date)}
+                    {tx.created_by_email && ` · додав ${tx.created_by_email}`}
+                  </p>
+                  {deleted && tx.deleted_by_email && (
+                    <p className="text-amber-500 mt-0.5">
+                      скасовано {tx.deleted_at ? formatDate(tx.deleted_at) : ''}
+                      {` · ${tx.deleted_by_email}`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {/* Right: amount + cancel */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`font-mono font-medium ${deleted ? 'line-through text-gray-400' : color}`}>
+                  {sign}{value.toFixed(2)}
+                </span>
+                {canEdit && !deleted && tx.type !== 'REVERSAL' && (
+                  <button
+                    onClick={() => onCancel(tx)}
+                    disabled={cancelPending}
+                    className="text-gray-300 hover:text-red-500 px-1 py-0.5 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                    title="Скасувати транзакцію"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Balances + Monthly Breakdown Block ─────────────────────────────────────
 
 function monthLabel(ym: string) {
@@ -698,6 +790,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   const [initError, setInitError] = useState<string | null>(null)
   const [payError, setPayError]   = useState<string | null>(null)
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
+  const [showAudit, setShowAudit] = useState(false)
 
   const { from, to } = monthRange(ym)
 
@@ -707,8 +800,8 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   })
 
   const { data: ledger, isLoading: ledgerLoading } = useQuery({
-    queryKey: ['ledger', childId, ym],
-    queryFn: () => billingApi.getLedger(childId, { from, to, limit: 500 }),
+    queryKey: ['ledger', childId, ym, showAudit],
+    queryFn: () => billingApi.getLedger(childId, { from, to, limit: 500, include_deleted: showAudit }),
   })
 
   const { data: accounts = [] } = useQuery({
@@ -767,19 +860,23 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     }, 50)
   }
 
-  const cancelPayMutation = useMutation({
-    mutationFn: (txId: string) => billingApi.cancelTransaction(txId),
+  const cancelTxMutation = useMutation({
+    mutationFn: ({ txId, reason }: { txId: string; reason?: string }) =>
+      billingApi.cancelTransaction(txId, reason),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['balance', childId] })
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
       qc.invalidateQueries({ queryKey: ['imbalances', childId] })
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: string; message?: string } } })
-        ?.response?.data?.message ?? 'Помилка скасування оплати'
+      const msg = (err as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? 'Помилка скасування'
       setPayError(msg)
     },
   })
+
+  // Alias for payment rows in normal view
+  const cancelPayMutation = cancelTxMutation
 
   const payMutation = useMutation({
     mutationFn: async () => {
@@ -998,20 +1095,52 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
       {/* Monthly breakdown */}
       <div className="border-t border-gray-100 pt-4">
-        {/* Month navigation */}
+        {/* Month navigation + audit toggle */}
         <div className="flex items-center justify-between mb-4">
           <button onClick={() => setYm(prevMonth(ym))} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
             ‹
           </button>
           <span className="text-sm font-medium text-gray-700 capitalize">{monthLabel(ym)}</span>
-          <button onClick={() => setYm(nextMonth(ym))} disabled={ym >= currentYM()}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-30">
-            ›
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAudit((v) => !v)}
+              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                showAudit
+                  ? 'border-amber-400 bg-amber-50 text-amber-700'
+                  : 'border-gray-200 text-gray-400 hover:text-gray-600'
+              }`}
+              title="Журнал змін — показати всі транзакції включно зі скасованими"
+            >
+              аудит
+            </button>
+            <button onClick={() => setYm(nextMonth(ym))} disabled={ym >= currentYM()}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-30">
+              ›
+            </button>
+          </div>
         </div>
 
         {ledgerLoading ? (
           <p className="text-sm text-gray-400 text-center py-4">Завантаження...</p>
+        ) : showAudit ? (
+          /* ── Audit view: flat list of all transactions ── */
+          <AuditView
+            entries={ledger?.data ?? []}
+            canEdit={canEdit}
+            onCancel={(tx) => {
+              if (tx.type === 'PAYMENT') {
+                if (window.confirm('Скасувати цю оплату?')) {
+                  cancelTxMutation.mutate({ txId: tx.id })
+                }
+              } else {
+                const reason = window.prompt(`Причина скасування (${TX_LABEL[tx.type] ?? tx.type}):`)
+                if (reason !== null) {
+                  cancelTxMutation.mutate({ txId: tx.id, reason: reason || undefined })
+                }
+              }
+            }}
+            cancelPending={cancelTxMutation.isPending}
+          />
         ) : Object.keys(groupedByAccount).length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">Рухів за цей місяць немає</p>
         ) : (
@@ -1118,7 +1247,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                                   <button
                                     onClick={() => {
                                       if (window.confirm('Скасувати цю оплату?')) {
-                                        cancelPayMutation.mutate(tx.id)
+                                        cancelPayMutation.mutate({ txId: tx.id })
                                       }
                                     }}
                                     disabled={cancelPayMutation.isPending}

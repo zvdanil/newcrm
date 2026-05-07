@@ -17,7 +17,7 @@ interface RunResult {
  * Global discount and activity discount are applied on top.
  * custom_amount from attendance is only for per_lesson (not billing run).
  */
-async function getEffectivePrice(childId: string, activityId: string, billingDate: Date): Promise<number | null> {
+export async function getEffectivePrice(childId: string, activityId: string, billingDate: Date): Promise<number | null> {
   // 1. Individual child price (SCD Type 2)
   const childPrice = await db
     .selectFrom('child_prices')

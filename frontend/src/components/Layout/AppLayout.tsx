@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { to: '/journals',   label: 'Журнали' },
   { to: '/staff',      label: 'Персонал' },
   { to: '/accounts',   label: 'Рахунки' },
+  { to: '/expenses',   label: 'Витрати' },
   { to: '/reports',    label: 'Звіти' },
 ]
 

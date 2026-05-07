@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
+import { getEffectivePrice } from '../services/billingRunService.js'
+import { createTransaction } from '../services/balanceService.js'
 
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments
@@ -53,6 +55,51 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         .values({ child_id, activity_id, account_id, start_date, end_date: end_date || null, note: note || null })
         .returningAll()
         .executeTakeFirstOrThrow()
+
+      // Pro-rata ACCRUAL for mid-month enrollment (monthly tariff only)
+      const activity = await db
+        .selectFrom('activities')
+        .select('tariff_type')
+        .where('id', '=', activity_id)
+        .executeTakeFirst()
+
+      if (activity?.tariff_type === 'monthly') {
+        const d = new Date(start_date)
+        const dayOfMonth = d.getUTCDate()
+        if (dayOfMonth > 1) {
+          const year = d.getUTCFullYear()
+          const month = d.getUTCMonth()
+          const daysInMonth = new Date(year, month + 1, 0).getDate()
+          const daysRemaining = daysInMonth - dayOfMonth + 1
+          const billingMonthStr = `${year}-${String(month + 1).padStart(2, '0')}-01`
+          const billingDate = new Date(billingMonthStr)
+
+          const price = await getEffectivePrice(child_id, activity_id, billingDate)
+          if (price && price > 0) {
+            const proRata = Math.round((price / daysInMonth) * daysRemaining * 100) / 100
+            const createdBy = (req as { user?: { sub?: string } }).user?.sub ?? null
+            await createTransaction({
+              type: 'ACCRUAL',
+              child_id,
+              account_id,
+              activity_id,
+              enrollment_id: enrollment.id,
+              amount: proRata,
+              transaction_date: start_date,
+              billing_month: billingMonthStr,
+              note: `Нарахування за ${billingMonthStr.slice(0, 7)} (про-рата ${daysRemaining}/${daysInMonth} дн.)`,
+              metadata_json: {
+                pro_rata: true,
+                days_remaining: daysRemaining,
+                days_in_month: daysInMonth,
+                full_price: price,
+              },
+              created_by: createdBy,
+            })
+          }
+        }
+      }
+
       return reply.status(201).send(enrollment)
     }
   )
