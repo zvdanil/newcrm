@@ -252,9 +252,69 @@ UI менеджера **не имеет доступа** к `/api/transactions` 
 
 ---
 
-## 13. ОТКРЫТЫЕ ВОПРОСЫ / УТОЧНИТЬ ПОЗЖЕ
+## 13. МОДУЛЬ ПЕРСОНАЛА И ЗАРПЛАТЫ (Этап 6)
 
-- Точная формула рабочих дней для pro-rata (календарные или только будни?)
+### 13.1 Таблицы
+
+```
+staff               — сотрудники (type: employee | partner)
+staff_rates         — ставки SCD Type 2 (valid_from / valid_to NULL = активная)
+staff_smart_configs — конфиг смарт-ставки (rate_id PK)
+salary_transactions — все зарплатные проводки (отдельная таблица, не transactions)
+```
+
+### 13.2 Типы ставок (`rate_type`)
+| Тип | Логика начисления |
+|---|---|
+| `per_lesson` | авто: 1 занятие = `rate_value` (или `revenue × rate_pct%`) |
+| `per_child` | авто: кол-во присутствующих детей × `rate_value` |
+| `fixed_monthly` | авто: Cron 1-го числа, `rate_value` единоразово |
+| `hourly` | ручное: `quantity (часы) × rate_value` |
+| `smart` | авто: base + CORRECTION при пороге пропусков |
+| `bonus` | ручное: свободная сумма |
+
+### 13.3 Режим значения (`value_mode`)
+- `fixed` — `rate_value` в гривнах за единицу
+- `percent_of_revenue` — `rate_value` в % от выручки клиентов за активность
+
+### 13.4 Формула gross
+```
+per_lesson (fixed):          gross = rate_value × 1
+per_lesson (percent):        gross = revenue_on_date × rate_pct / 100
+per_child (fixed):           gross = rate_value × present_count
+per_child (percent):         gross = revenue_on_date × rate_pct / 100
+hourly / manual (fixed):     gross = rate_value × quantity
+fixed_monthly (fixed):       gross = rate_value
+fixed_monthly (percent):     gross = monthly_revenue × rate_pct / 100
+```
+
+### 13.5 Типы salary_transactions
+| Тип | Описание |
+|---|---|
+| `ACCRUAL` | Начисление (авто от отметок или ручное) |
+| `PAYMENT` | Выплата зарплаты |
+| `CORRECTION` | Ретро-корректировка при backdated ставке |
+
+### 13.6 Ретроспективный пересчёт
+При создании ставки с `valid_from` в прошлом:
+1. Предыдущая ставка закрывается (valid_to = fromDate)
+2. `recalcRetroAccruals(staffId, oldRateId, newRateId, newValue, fromDate)`:
+   - Берёт все ACCRUAL старой ставки в ретро-периоде
+   - Считает delta = newAmount − oldAmount (из metadata_json: quantity/revenue)
+   - Группирует по billing_month → создаёт CORRECTION per месяц
+   - Дубли CORRECTION (повторный пересчёт) — soft-deleted перед созданием новых
+
+### 13.7 Смарт-ставка педагога
+- Конфиг: `base_lessons`, `absence_threshold`, `threshold_rate` в `staff_smart_configs`
+- Cron: ACCRUAL = `rate_value × base_lessons` на 1-е число
+- После каждой отметки: `recalcSmartStaffBenefit` → CORRECTION если пропусков ≥ threshold
+
+---
+
+## 14. ОТКРЫТЫЕ ВОПРОСЫ / УТОЧНИТЬ ПОЗЖЕ
+
+- Точная формула рабочих дней для pro-rata (календарные — принято, финально уточнить)
 - Порядок детей в семейном Waterfall при нескольких детях (старший первый или по FIFO долгов?)
 - Как именно отображается "Межсчётный дисбаланс" в карточке счёта (отдельный виджет или строка?)
 - Максимальный срок заморозки подписки
+- Модуль замен педагогов (`substitutions`) — логика и UI отложены

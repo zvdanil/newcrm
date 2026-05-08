@@ -3,6 +3,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
+import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -393,6 +394,19 @@ export async function journalsRoutes(app: FastifyInstance) {
         await recalcSmartBenefit(enrollment_id, billingMonth)
       }
 
+      // Staff salary auto-accruals
+      await recalcStaffAccruals(enrollment.activity_id, date)
+      // Smart staff rates: recalc for all smart rates on this activity
+      const smartStaffRates = await db.selectFrom('staff_rates')
+        .select('id')
+        .where('activity_id', '=', enrollment.activity_id)
+        .where('rate_type', '=', 'smart')
+        .where('rate_category', '=', 'auto')
+        .execute()
+      for (const r of smartStaffRates) {
+        await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
+      }
+
       return reply.status(201).send(log.main)
     }
   )
@@ -487,6 +501,18 @@ export async function journalsRoutes(app: FastifyInstance) {
         }
       }
 
+      // Staff salary auto-accruals after PUT
+      await recalcStaffAccruals(existing.activity_id, dateStr)
+      const smartStaffRatesPut = await db.selectFrom('staff_rates')
+        .select('id')
+        .where('activity_id', '=', existing.activity_id)
+        .where('rate_type', '=', 'smart')
+        .where('rate_category', '=', 'auto')
+        .execute()
+      for (const r of smartStaffRatesPut) {
+        await recalcSmartStaffBenefit(r.id, dateStr.slice(0, 7) + '-01')
+      }
+
       return updated
     }
   )
@@ -526,6 +552,21 @@ export async function journalsRoutes(app: FastifyInstance) {
             const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', log.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
             if (le) await reverseRefund(le.id, le.account_id, log.child_id, dateStr, deletedBy)
           }
+        }
+      }
+
+      // Staff salary auto-accruals after DELETE
+      if (log.activity_id) {
+        const dateStrDel = toDateStr(log.date as unknown as Date)
+        await recalcStaffAccruals(log.activity_id, dateStrDel)
+        const smartStaffRatesDel = await db.selectFrom('staff_rates')
+          .select('id')
+          .where('activity_id', '=', log.activity_id)
+          .where('rate_type', '=', 'smart')
+          .where('rate_category', '=', 'auto')
+          .execute()
+        for (const r of smartStaffRatesDel) {
+          await recalcSmartStaffBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
         }
       }
 

@@ -14,9 +14,13 @@ import { journalsRoutes } from './routes/journals.js'
 import { billingRoutes } from './routes/billing.js'
 import { transactionsRoutes } from './routes/transactions.js'
 import { expensesRoutes } from './routes/expenses.js'
+import { staffRoutes } from './routes/staff.js'
+import { salaryRoutes } from './routes/salary.js'
+import { mergedJournalsRoutes } from './routes/mergedJournals.js'
 import cron from 'node-cron'
 import { runBilling, currentBillingMonth } from './services/billingRunService.js'
 import { runSmartAccruals } from './services/smartTariffService.js'
+import { runFixedMonthlyAccruals, runSmartStaffAccruals } from './services/salaryService.js'
 
 const app = Fastify({
   logger: {
@@ -53,6 +57,9 @@ await app.register(journalsRoutes,    { prefix: '/api/journals' })
 await app.register(billingRoutes,        { prefix: '/api/billing' })
 await app.register(transactionsRoutes,   { prefix: '/api/transactions' })
 await app.register(expensesRoutes,       { prefix: '/api/expenses' })
+await app.register(staffRoutes,          { prefix: '/api/staff' })
+await app.register(salaryRoutes,         { prefix: '/api' })
+await app.register(mergedJournalsRoutes, { prefix: '/api/merged-journals' })
 
 // Billing Run cron — runs at 06:00 on the 1st of every month
 cron.schedule('0 6 1 * *', async () => {
@@ -63,6 +70,12 @@ cron.schedule('0 6 1 * *', async () => {
 
   const smartResult = await runSmartAccruals(month, null)
   console.log(`[Billing Cron] Smart accruals done: created=${smartResult.created} skipped=${smartResult.skipped}`)
+
+  await runFixedMonthlyAccruals(month)
+  console.log('[Billing Cron] Fixed monthly salary accruals done')
+
+  await runSmartStaffAccruals(month)
+  console.log('[Billing Cron] Smart staff accruals done')
 })
 
 // Start

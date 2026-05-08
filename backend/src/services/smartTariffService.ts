@@ -1,6 +1,7 @@
 import { sql } from 'kysely'
 import { db } from '../db'
 import { createTransaction, recalcBalance } from './balanceService'
+import { getEffectivePrice } from './billingRunService'
 
 /**
  * Recalculates the smart benefit REFUND for an enrollment in a billing month.
@@ -27,17 +28,8 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
 
   const billingDate = new Date(billingMonth)
 
-  const tariff = await db
-    .selectFrom('tariffs')
-    .select('base_fee')
-    .where('activity_id', '=', enrollment.activity_id)
-    .where('valid_from', '<=', billingDate)
-    .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', billingDate)]))
-    .orderBy('valid_from', 'desc')
-    .executeTakeFirst()
-
-  if (!tariff) return
-  const B = parseFloat(tariff.base_fee as string)
+  const B = await getEffectivePrice(enrollment.child_id, enrollment.activity_id, billingDate)
+  if (!B || B <= 0) return
 
   // Count excused absences in the billing month
   const nextMonth = new Date(billingDate)
@@ -142,22 +134,8 @@ export async function runSmartAccruals(
       continue
     }
 
-    const tariff = await db
-      .selectFrom('tariffs')
-      .select('base_fee')
-      .where('activity_id', '=', enrollment.activity_id)
-      .where('valid_from', '<=', billingDate)
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', billingDate)]))
-      .orderBy('valid_from', 'desc')
-      .executeTakeFirst()
-
-    if (!tariff) {
-      skipped++
-      continue
-    }
-
-    const B = parseFloat(tariff.base_fee as string)
-    if (B <= 0) {
+    const B = await getEffectivePrice(enrollment.child_id, enrollment.activity_id, billingDate)
+    if (!B || B <= 0) {
       skipped++
       continue
     }

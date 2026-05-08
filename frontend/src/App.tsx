@@ -16,7 +16,11 @@ import { ActivityCreatePage } from './pages/Activities/ActivityCreatePage'
 import { ActivityCardPage } from './pages/Activities/ActivityCardPage'
 import { JournalsListPage } from './pages/Journals/JournalsListPage'
 import { JournalPage } from './pages/Journals/JournalPage'
+import { MergedJournalPage } from './pages/Journals/MergedJournalPage'
 import { ExpensesPage } from './pages/Expenses/ExpensesPage'
+import { StaffListPage } from './pages/Staff/StaffListPage'
+import { StaffCardPage } from './pages/Staff/StaffCardPage'
+import { SalaryJournalPage } from './pages/Salary/SalaryJournalPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,12 +69,19 @@ export function App() {
               <Route path="activities/:id"  element={<ActivityCardPage />} />
 
               {/* Журнали */}
-              <Route path="journals"             element={<JournalsListPage />} />
-              <Route path="journals/:activityId" element={<JournalPage />} />
+              <Route path="journals"                    element={<JournalsListPage />} />
+              <Route path="journals/merged/:id"         element={<MergedJournalPage />} />
+              <Route path="journals/:activityId"        element={<JournalPage />} />
               {/* Витрати */}
               <Route path="expenses" element={<ExpensesPage />} />
 
-              <Route path="staff"     element={<Placeholder title="Персонал" />} />
+              {/* Персонал */}
+              <Route path="staff"       element={<StaffListPage />} />
+              <Route path="staff/:id"   element={<StaffCardPage />} />
+
+              {/* Зарплата */}
+              <Route path="salary/journal" element={<SalaryJournalPage />} />
+
               <Route path="reports"   element={<Placeholder title="Звіти" />} />
             </Route>
           </Route>

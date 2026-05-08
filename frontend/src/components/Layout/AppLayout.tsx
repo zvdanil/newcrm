@@ -3,14 +3,15 @@ import { useAuthStore } from '../../store/auth.store'
 import { useCanAccess } from '../../hooks/useCanAccess'
 
 const NAV_LINKS = [
-  { to: '/children',   label: 'Діти' },
-  { to: '/families',   label: 'Сімʼї' },
-  { to: '/activities', label: 'Активності' },
-  { to: '/journals',   label: 'Журнали' },
-  { to: '/staff',      label: 'Персонал' },
-  { to: '/accounts',   label: 'Рахунки' },
-  { to: '/expenses',   label: 'Витрати' },
-  { to: '/reports',    label: 'Звіти' },
+  { to: '/children',        label: 'Діти' },
+  { to: '/families',        label: 'Сімʼї' },
+  { to: '/activities',      label: 'Активності' },
+  { to: '/journals',        label: 'Журнали' },
+  { to: '/staff',           label: 'Персонал' },
+  { to: '/salary/journal',  label: 'Журнал ЗП' },
+  { to: '/accounts',        label: 'Рахунки' },
+  { to: '/expenses',        label: 'Витрати' },
+  { to: '/reports',         label: 'Звіти' },
 ]
 
 export function AppLayout() {

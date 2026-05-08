@@ -222,31 +222,55 @@
 ---
 
 ## ЭТАП 6 — Персонал и Зарплата
-**Статус:** `[ ] Не начат`
+**Статус:** `[~] В процессе` *(основной функционал реализован, замены и роль Teacher — отложены)*
+
+> ⚠️ **Изменения от первоначального плана:**
+> 1. **`substitutions` (замены) — не реализована.** Отложено на будущую итерацию.
+> 2. **Формула начисления изменена:** `gross = quantity × rate_value` (не flat rate). Поддерживаются типы: hourly, per_lesson, per_child (с quantity), fixed_monthly, bonus, smart (без quantity).
+> 3. **Добавлен `value_mode`** — два режима ставки: `fixed` (абсолютная сумма) и `percent_of_revenue` (% от выручки за активность). Миграция `012_staff_rate_value_mode.sql`.
+> 4. **Ретроспективный пересчёт** при задании ставки "задним числом" — автоматически через `recalcRetroAccruals()` создаёт CORRECTION транзакции.
+> 5. **Soft delete начислений** — сотрудники из попапа в фин. истории могут удалять транзакции (is_deleted=true).
+> 6. **Тип транзакций:** ACCRUAL / PAYMENT / CORRECTION (не SALARY_ACCRUAL/SALARY_PAYMENT — используется отдельная таблица `salary_transactions`).
 
 ### База данных
-- [ ] Таблица `staff` (id, full_name, phone, user_id, is_active)
-- [ ] Таблица `staff_rates` (id, staff_id, activity_id, rate_type: percent/fixed_per_lesson/fixed_per_child/salary, rate_value, valid_from, valid_to) — SCD Type 2
-- [ ] Таблица `salary_transactions` (id, staff_id, type: SALARY_ACCRUAL/SALARY_PAYMENT, amount, period, transaction_date, metadata_json)
-- [ ] Таблица `substitutions` (id, original_staff_id, substitute_staff_id, activity_id, date, custom_amount)
+- [x] Таблица `staff` (id, full_name, specialization, type: employee/partner, phone, start_date, is_active, note)
+- [x] Таблица `staff_rates` (id, staff_id, activity_id, rate_category: auto/manual, rate_type: per_lesson/per_child/fixed_monthly/hourly/smart/bonus, value_mode: fixed/percent_of_revenue, rate_value, deduction_pct, valid_from, valid_to, note) — SCD Type 2
+- [x] Таблица `staff_smart_configs` (rate_id PK, base_lessons, absence_threshold, threshold_rate)
+- [x] Таблица `salary_transactions` (id, staff_id, rate_id, activity_id, type: ACCRUAL/PAYMENT/CORRECTION, gross_amount, deduction_pct, transaction_date, billing_month, note, edit_note, metadata_json, is_deleted, deleted_at, deleted_by, created_by)
+- [x] Миграция `011_staff.sql`, `012_staff_rate_value_mode.sql`
+- [ ] Таблица `substitutions` (замены педагогов) — отложено
 
 ### Бэкенд
-- [ ] CRUD /api/staff
-- [ ] CRUD /api/staff/:id/rates (с SCD Type 2)
-- [ ] Триггер от attendance_logs → генерация SALARY_ACCRUAL по ставке педагога
-- [ ] Логика замен: ручная сумма → ставка замещающего → базовая ставка активности
-- [ ] POST /api/staff/:id/salary-payment (выплата ЗП с указанием периода)
-- [ ] GET /api/staff/:id/ledger (история начислений и выплат)
-- [ ] GET /api/salary-journal (сводная ведомость)
-- [ ] POST /api/staff/:id/bonus
+- [x] CRUD /api/staff (GET список, GET /:id, POST, PUT /:id)
+- [x] GET /api/staff/:id/rates — ставки с join smart_config
+- [x] POST /api/staff/:id/rates — создание ставки (SCD Type 2: закрывает предыдущую); запускает `recalcRetroAccruals` если valid_from < today
+- [x] PUT /api/staff/:id/rates/:rateId — редактирование (deduction_pct, valid_to, note, smart_config)
+- [x] DELETE /api/staff/:id/rates/:rateId — закрытие ставки (valid_to = today)
+- [x] GET /api/staff/:id/salary?month=YYYY-MM — транзакции + summary (gross/deduction/net/paid/balance)
+- [x] POST /api/staff/:id/salary — ручное начисление (quantity × rate или gross_amount)
+- [x] PUT /api/staff/:id/salary/:txId — редактирование начисления (требует edit_note)
+- [x] DELETE /api/staff/:id/salary/:txId — мягкое удаление начисления
+- [x] POST /api/staff/:id/salary/pay — выплата ЗП
+- [x] GET /api/salary/journal?month=YYYY-MM — сводная ведомость по всем сотрудникам
+- [x] Триггер attendance → `recalcStaffAccruals(activityId, date)` — авто-начисление per_lesson/per_child
+- [x] Смарт-ставка педагога: `recalcSmartStaffBenefit(rateId, billingMonth)` после каждой отметки
+- [x] Cron: `runFixedMonthlyAccruals` + `runSmartStaffAccruals` 1-го числа
+- [x] `recalcRetroAccruals` — ретроспективный пересчёт при backdated ставке (CORRECTION по delta)
+- [ ] Логика замен педагогов — отложено
 
 ### Фронтенд
-- [ ] Раздел "Персонал": список сотрудников
-- [ ] Карточка сотрудника: данные, ставки, история изменений
-- [ ] Staff Ledger (фильтр по месяцу)
-- [ ] Блок ЗП в шапке журнала (ФИО + сумма за текущее занятие)
-- [ ] Журнал ЗП: сводная ведомость + кнопка "Виплатити"
-- [ ] Teacher: видит только своё расписание и свою ЗП
+- [x] Раздел "Персонал" /staff — список сотрудников (тип, специализация, статус)
+- [x] Карточка сотрудника /staff/:id — анкетные данные (просмотр + редактирование)
+- [x] Блок ставок: просмотр, добавление (все типы + value_mode), инлайн-редактирование (deduction_pct, valid_to, note, smart_config), закрытие
+- [x] Фин. история: календарная сетка (строки = активности, колонки = дни месяца)
+- [x] Навигация по месяцам в фин. истории
+- [x] Попап транзакции: просмотр деталей, инлайн-редактирование суммы (с edit_note), удаление
+- [x] Форма ручного начисления: выбор ставки, поле quantity (или gross_amount), вычисленная сумма
+- [x] Форма выплаты ЗП
+- [x] Журнал ЗП /salary/journal — сводная таблица по всем сотрудникам с навигацией по месяцам
+- [x] Навигация: "Персонал" → /staff, "Журнал ЗП" → /salary/journal
+- [ ] Блок ЗП в шапке журнала посещений — отложено
+- [ ] Teacher: видит только своё расписание и свою ЗП — отложено
 
 ---
 

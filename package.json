@@ -8,6 +8,7 @@
     "db"
   ],
   "scripts": {
+    "predev": "docker compose up -d postgres && docker compose exec postgres sh -c 'until pg_isready -U iris -d iris_db; do sleep 1; done'",
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
     "db:migrate": "npm run migrate --workspace=db",
     "db:seed": "npm run seed --workspace=db",

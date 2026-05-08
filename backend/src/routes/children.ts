@@ -60,7 +60,11 @@ export async function childrenRoutes(app: FastifyInstance) {
       }
 
       if (search) {
-        query = query.where('c.full_name', 'ilike', `%${search}%`)
+        query = query.where((eb) => eb.or([
+          eb('c.full_name', 'ilike', `%${search}%`),
+          eb('c.note',      'ilike', `%${search}%`),
+          eb('f.name',      'ilike', `%${search}%`),
+        ]))
       }
 
       if (group_id) {

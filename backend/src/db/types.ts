@@ -265,6 +265,80 @@ export interface BillingRunLogTable {
   error:          string | null
 }
 
+export type StaffType     = 'employee' | 'partner'
+export type RateCategory  = 'auto' | 'manual'
+export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+export type SalaryTxType  = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
+
+export interface StaffTable {
+  id:             Generated<string>
+  full_name:      string
+  specialization: string | null
+  type:           Generated<StaffType>
+  phone:          string | null
+  start_date:     ColumnType<Date | null, string | null, string | null>
+  is_active:      Generated<boolean>
+  note:           string | null
+  created_at:     Generated<Date>
+}
+
+export interface StaffRatesTable {
+  id:            Generated<string>
+  staff_id:      string
+  activity_id:   string | null
+  rate_category: Generated<RateCategory>
+  rate_type:     RateType
+  value_mode:    Generated<'fixed' | 'percent_of_revenue'>
+  rate_value:    ColumnType<string, number | string, number | string>
+  deduction_pct: ColumnType<string, number | string, number | string>
+  valid_from:    ColumnType<Date, string, string>
+  valid_to:      ColumnType<Date | null, string | null, string | null>
+  note:          string | null
+  created_at:    Generated<Date>
+}
+
+export interface StaffSmartConfigsTable {
+  rate_id:           string
+  base_lessons:      Generated<number>
+  absence_threshold: number
+  threshold_rate:    ColumnType<string, number | string, number | string>
+  updated_at:        Generated<Date>
+}
+
+export interface SalaryTransactionsTable {
+  id:               Generated<string>
+  staff_id:         string
+  rate_id:          string | null
+  activity_id:      string | null
+  type:             SalaryTxType
+  gross_amount:     ColumnType<string, number | string, number | string>
+  deduction_pct:    ColumnType<string, number | string, number | string>
+  transaction_date: ColumnType<Date, string, string>
+  billing_month:    ColumnType<Date | null, string | null, string | null>
+  note:             string | null
+  edit_note:        string | null
+  metadata_json:    ColumnType<unknown | null, object | null, object | null>
+  is_deleted:       Generated<boolean>
+  deleted_at:       ColumnType<Date | null, string | null, string | null>
+  deleted_by:       string | null
+  created_by:       string | null
+  created_at:       Generated<Date>
+}
+
+export interface MergedJournalsTable {
+  id:         Generated<string>
+  name:       string
+  note:       string | null
+  created_at: Generated<Date>
+  created_by: string | null
+}
+
+export interface MergedJournalActivitiesTable {
+  merged_journal_id: string
+  activity_id:       string
+  sort_order:        Generated<number>
+}
+
 export interface Database {
   users:                 UsersTable
   groups:                GroupsTable
@@ -290,4 +364,10 @@ export interface Database {
   expense_categories:         ExpenseCategoriesTable
   expenses:                   ExpensesTable
   account_transfers:          AccountTransfersTable
+  staff:                      StaffTable
+  staff_rates:                StaffRatesTable
+  staff_smart_configs:        StaffSmartConfigsTable
+  salary_transactions:        SalaryTransactionsTable
+  merged_journals:            MergedJournalsTable
+  merged_journal_activities:  MergedJournalActivitiesTable
 }
