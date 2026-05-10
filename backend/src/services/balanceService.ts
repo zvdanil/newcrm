@@ -1,5 +1,5 @@
-import { db } from '../db'
-import type { TransactionType } from '../db/types'
+import { db } from '../db/index.js'
+import type { TransactionType } from '../db/types.js'
 
 /**
  * Recalculates and upserts child_balances for a given child+account pair.

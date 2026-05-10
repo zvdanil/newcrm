@@ -1,5 +1,5 @@
 import { sql } from 'kysely'
-import { db } from '../db'
+import { db } from '../db/index.js'
 import { createTransaction, recalcBalance } from './balanceService'
 import { getChildIndividualTariff } from './billingRunService'
 

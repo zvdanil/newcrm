@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
-import { db } from '../db'
-import { requireRole } from '../plugins/authenticate'
-import { runBilling, currentBillingMonth } from '../services/billingRunService'
+import { db } from '../db/index.js'
+import { requireRole } from '../plugins/authenticate.js'
+import { runBilling, currentBillingMonth } from '../services/billingRunService.js'
 
 export async function billingRoutes(app: FastifyInstance) {
   // GET /api/billing/run-log — last 20 billing runs (Owner/Admin)

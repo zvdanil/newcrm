@@ -1,4 +1,4 @@
-import { db } from '../db'
+import { db } from '../db/index.js'
 import { createTransaction } from './balanceService'
 
 interface RunResult {
