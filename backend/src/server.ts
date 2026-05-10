@@ -1,6 +1,12 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import staticPlugin from '@fastify/static'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const isProd = process.env.NODE_ENV === 'production'
 
 import { authRoutes } from './routes/auth.js'
 import { childrenRoutes } from './routes/children.js'
@@ -23,17 +29,14 @@ import { runSmartAccruals } from './services/smartTariffService.js'
 import { runFixedMonthlyAccruals, runSmartStaffAccruals } from './services/salaryService.js'
 
 const app = Fastify({
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: { colorize: true },
-    },
-  },
+  logger: isProd
+    ? true
+    : { transport: { target: 'pino-pretty', options: { colorize: true } } },
 })
 
 // Plugins
 await app.register(cors, {
-  origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  origin: isProd ? true : (process.env.FRONTEND_URL ?? 'http://localhost:5173'),
   credentials: true,
 })
 
@@ -60,6 +63,20 @@ await app.register(expensesRoutes,       { prefix: '/api/expenses' })
 await app.register(staffRoutes,          { prefix: '/api/staff' })
 await app.register(salaryRoutes,         { prefix: '/api' })
 await app.register(mergedJournalsRoutes, { prefix: '/api/merged-journals' })
+
+// Serve frontend in production (single-service mode)
+if (isProd) {
+  const frontendDist = join(__dirname, '../../frontend/dist')
+  await app.register(staticPlugin, { root: frontendDist, prefix: '/' })
+  // SPA fallback — all non-API routes return index.html
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) {
+      reply.status(404).send({ error: 'NotFound' })
+    } else {
+      reply.sendFile('index.html')
+    }
+  })
+}
 
 // Billing Run cron — runs at 06:00 on the 1st of every month
 cron.schedule('0 6 1 * *', async () => {
