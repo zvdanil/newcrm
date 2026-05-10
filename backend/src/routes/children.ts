@@ -501,4 +501,128 @@ export async function childrenRoutes(app: FastifyInstance) {
       return reply.status(201).send(row)
     }
   )
+
+  // ─── Individual tariffs ────────────────────────────────────────────────────
+
+  // GET /api/children/:id/individual-tariffs
+  app.get<{ Params: { id: string } }>(
+    '/:id/individual-tariffs',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req) => {
+      return db
+        .selectFrom('child_individual_tariffs as cit')
+        .leftJoin('child_smart_tariff_configs as csc', 'csc.individual_tariff_id', 'cit.id')
+        .select([
+          'cit.id', 'cit.activity_id', 'cit.tariff_type', 'cit.price',
+          'cit.valid_from', 'cit.valid_to', 'cit.created_at',
+          'csc.base_lessons', 'csc.l1_threshold_absences', 'csc.l1_threshold_fee',
+          'csc.l2_max_refunds', 'csc.l2_refund_per_absence',
+        ])
+        .where('cit.child_id', '=', req.params.id)
+        .orderBy('cit.valid_from', 'desc')
+        .execute()
+    }
+  )
+
+  // POST /api/children/:id/individual-tariffs
+  app.post<{
+    Params: { id: string }
+    Body: {
+      activity_id:           string
+      tariff_type:           'monthly' | 'per_lesson' | 'smart'
+      price:                 number
+      valid_from:            string
+      base_lessons?:         number
+      l1_threshold_absences?: number | null
+      l1_threshold_fee?:     number | null
+      l2_max_refunds?:       number | null
+      l2_refund_per_absence?: number | null
+    }
+  }>(
+    '/:id/individual-tariffs',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { activity_id, tariff_type, price, valid_from, base_lessons, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence } = req.body
+
+      if (!activity_id || !tariff_type || price == null || !valid_from) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, tariff_type, price, valid_from є обовʼязковими' })
+      }
+
+      // Close any existing active tariff for this child+activity
+      await db.updateTable('child_individual_tariffs')
+        .set({ valid_to: valid_from })
+        .where('child_id', '=', req.params.id)
+        .where('activity_id', '=', activity_id)
+        .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(valid_from))]))
+        .execute()
+
+      const row = await db.insertInto('child_individual_tariffs')
+        .values({ child_id: req.params.id, activity_id, tariff_type, price, valid_from, created_by: req.user.sub })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      if (tariff_type === 'smart') {
+        await db.insertInto('child_smart_tariff_configs')
+          .values({
+            individual_tariff_id:  row.id,
+            base_lessons:          base_lessons ?? 0,
+            l1_threshold_absences: l1_threshold_absences ?? null,
+            l1_threshold_fee:      l1_threshold_fee ?? null,
+            l2_max_refunds:        l2_max_refunds ?? null,
+            l2_refund_per_absence: l2_refund_per_absence ?? null,
+          })
+          .execute()
+      }
+
+      return reply.status(201).send(row)
+    }
+  )
+
+  // PUT /api/children/:id/individual-tariffs/:tariffId/smart-config
+  app.put<{
+    Params: { id: string; tariffId: string }
+    Body: { base_lessons?: number; l1_threshold_absences?: number | null; l1_threshold_fee?: number | null; l2_max_refunds?: number | null; l2_refund_per_absence?: number | null }
+  }>(
+    '/:id/individual-tariffs/:tariffId/smart-config',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { base_lessons, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence } = req.body
+
+      await db.insertInto('child_smart_tariff_configs')
+        .values({
+          individual_tariff_id:  req.params.tariffId,
+          base_lessons:          base_lessons ?? 0,
+          l1_threshold_absences: l1_threshold_absences ?? null,
+          l1_threshold_fee:      l1_threshold_fee ?? null,
+          l2_max_refunds:        l2_max_refunds ?? null,
+          l2_refund_per_absence: l2_refund_per_absence ?? null,
+        })
+        .onConflict((oc) => oc.column('individual_tariff_id').doUpdateSet({
+          base_lessons:          base_lessons ?? 0,
+          l1_threshold_absences: l1_threshold_absences ?? null,
+          l1_threshold_fee:      l1_threshold_fee ?? null,
+          l2_max_refunds:        l2_max_refunds ?? null,
+          l2_refund_per_absence: l2_refund_per_absence ?? null,
+          updated_at:            new Date().toISOString() as unknown as Date,
+        }))
+        .execute()
+
+      return reply.send({ ok: true })
+    }
+  )
+
+  // DELETE /api/children/:id/individual-tariffs/:tariffId — close tariff (set valid_to = today)
+  app.delete<{ Params: { id: string; tariffId: string }; Querystring: { valid_to?: string } }>(
+    '/:id/individual-tariffs/:tariffId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const validTo = req.query.valid_to ?? new Date().toISOString().slice(0, 10)
+      await db.updateTable('child_individual_tariffs')
+        .set({ valid_to: validTo })
+        .where('id', '=', req.params.tariffId)
+        .where('child_id', '=', req.params.id)
+        .execute()
+      return reply.status(204).send()
+    }
+  )
 }

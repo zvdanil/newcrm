@@ -9,6 +9,35 @@ export interface ChildrenFilters {
   offset?: number
 }
 
+export type IndTariffType = 'monthly' | 'per_lesson' | 'smart'
+
+export interface IndividualTariff {
+  id:                    string
+  activity_id:           string
+  tariff_type:           IndTariffType
+  price:                 string
+  valid_from:            string
+  valid_to:              string | null
+  created_at:            string
+  base_lessons:          number | null
+  l1_threshold_absences: number | null
+  l1_threshold_fee:      string | null
+  l2_max_refunds:        number | null
+  l2_refund_per_absence: string | null
+}
+
+export interface IndividualTariffPayload {
+  activity_id:            string
+  tariff_type:            IndTariffType
+  price:                  number
+  valid_from:             string
+  base_lessons?:          number
+  l1_threshold_absences?: number | null
+  l1_threshold_fee?:      number | null
+  l2_max_refunds?:        number | null
+  l2_refund_per_absence?: number | null
+}
+
 export const childrenApi = {
   list: async (filters: ChildrenFilters = {}) => {
     const params = new URLSearchParams()
@@ -35,5 +64,29 @@ export const childrenApi = {
   update: async (id: string, payload: Partial<Child>) => {
     const { data } = await apiClient.put<Child>(`/children/${id}`, payload)
     return data
+  },
+
+  listIndividualTariffs: async (childId: string): Promise<IndividualTariff[]> => {
+    const { data } = await apiClient.get<IndividualTariff[]>(`/children/${childId}/individual-tariffs`)
+    return data
+  },
+
+  setIndividualTariff: async (childId: string, payload: IndividualTariffPayload): Promise<void> => {
+    await apiClient.post(`/children/${childId}/individual-tariffs`, payload)
+  },
+
+  updateSmartConfig: async (childId: string, tariffId: string, config: {
+    base_lessons?: number
+    l1_threshold_absences?: number | null
+    l1_threshold_fee?: number | null
+    l2_max_refunds?: number | null
+    l2_refund_per_absence?: number | null
+  }): Promise<void> => {
+    await apiClient.put(`/children/${childId}/individual-tariffs/${tariffId}/smart-config`, config)
+  },
+
+  closeIndividualTariff: async (childId: string, tariffId: string, validTo?: string): Promise<void> => {
+    const params = validTo ? `?valid_to=${validTo}` : ''
+    await apiClient.delete(`/children/${childId}/individual-tariffs/${tariffId}${params}`)
   },
 }

@@ -4,6 +4,7 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
+import { getChildIndividualTariff } from '../services/billingRunService.js'
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -97,14 +98,16 @@ async function triggerPerLessonAccrual(
   activityId: string,
   date: string,
   customAmount: number | null,
+  overridePrice: number | null,  // from child_individual_tariff
   createdBy: string | null,
 ): Promise<string | null> {
   let amount: number
 
   if (customAmount !== null && customAmount > 0) {
     amount = customAmount
+  } else if (overridePrice !== null && overridePrice > 0) {
+    amount = overridePrice
   } else {
-    // Ищем действующий тариф на дату занятия (с учётом индивидуальной цены и скидки)
     const tariff = await db
       .selectFrom('tariffs')
       .select('base_fee')
@@ -117,7 +120,6 @@ async function triggerPerLessonAccrual(
     if (!tariff) return null
     amount = parseFloat(tariff.base_fee as string)
 
-    // Индивидуальная цена ребёнка
     const childPrice = await db
       .selectFrom('child_prices')
       .select(['price', 'discount_pct'])
@@ -380,16 +382,18 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       // Финансовые триггеры (вне DB-транзакции, после записи лога)
       const activity = await db.selectFrom('activities').select('tariff_type').where('id', '=', enrollment.activity_id).executeTakeFirst()
-      const tariffType = activity?.tariff_type
+      const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, new Date(date))
+      const effectiveTariffType = ind?.tariff_type ?? activity?.tariff_type
+      const indPrice = ind ? Math.round(parseFloat(ind.price as string) * 100) / 100 : null
 
-      if (tariffType === 'per_lesson' && (status === 'present' || status === 'special')) {
-        await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, createdBy)
-      } else if (tariffType === 'monthly' && status === 'absent_excused') {
+      if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special')) {
+        await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, indPrice, createdBy)
+      } else if (effectiveTariffType === 'monthly' && status === 'absent_excused') {
         await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, createdBy)
         for (const le of log.linkedEnrollments) {
           await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, createdBy)
         }
-      } else if (tariffType === 'smart') {
+      } else if (effectiveTariffType === 'smart') {
         const billingMonth = date.slice(0, 7) + '-01'
         await recalcSmartBenefit(enrollment_id, billingMonth)
       }
@@ -463,21 +467,23 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       // Финансовые триггеры вне DB-транзакции
       const activityRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', existing.activity_id).executeTakeFirst()
-      const putTariffType = activityRow?.tariff_type
+      const putInd = await getChildIndividualTariff(existing.child_id, existing.activity_id, new Date(dateStr))
+      const putEffectiveType = putInd?.tariff_type ?? activityRow?.tariff_type
+      const putIndPrice = putInd ? Math.round(parseFloat(putInd.price as string) * 100) / 100 : null
 
       const wasChargeable = oldStatus === 'present' || oldStatus === 'special'
       const isChargeable  = status === 'present' || status === 'special'
 
-      if (putTariffType === 'per_lesson') {
+      if (putEffectiveType === 'per_lesson') {
         if (!wasChargeable && isChargeable) {
-          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, createdBy)
+          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
         } else if (wasChargeable && !isChargeable) {
           await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
         } else if (wasChargeable && isChargeable && oldStatus !== status) {
           await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, createdBy)
+          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
         }
-      } else if (putTariffType === 'smart') {
+      } else if (putEffectiveType === 'smart') {
         if (oldStatus !== status) {
           const billingMonth = dateStr.slice(0, 7) + '-01'
           await recalcSmartBenefit(existing.enrollment_id, billingMonth)
@@ -534,18 +540,19 @@ export async function journalsRoutes(app: FastifyInstance) {
       if (enrollment) {
         const dateStr = toDateStr(log.date as unknown as Date)
         const actRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', log.activity_id).executeTakeFirst()
+        const delInd = await getChildIndividualTariff(log.child_id, log.activity_id, new Date(dateStr))
+        const delEffectiveType = delInd?.tariff_type ?? actRow?.tariff_type
 
-        if (actRow?.tariff_type === 'per_lesson') {
+        if (delEffectiveType === 'per_lesson') {
           if (log.status === 'present' || log.status === 'special') {
             await reversePerLessonAccrual(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
           }
-        } else if (actRow?.tariff_type === 'smart') {
+        } else if (delEffectiveType === 'smart') {
           if (log.status === 'absent_excused') {
             const billingMonth = dateStr.slice(0, 7) + '-01'
             await recalcSmartBenefit(log.enrollment_id, billingMonth)
           }
         } else if (log.status === 'absent_excused') {
-          // monthly: реверс REFUND
           await reverseRefund(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
           const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', log.activity_id).execute()
           for (const { child_activity_id } of linked) {

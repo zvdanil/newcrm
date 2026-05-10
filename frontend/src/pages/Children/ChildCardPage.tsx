@@ -2,13 +2,14 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { childrenApi } from '../../api/children.api'
+import type { IndividualTariff, IndTariffType } from '../../api/children.api'
 import { groupsApi } from '../../api/groups.api'
 import { familiesApi } from '../../api/families.api'
 import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { enrollmentsApi } from '../../api/enrollments.api'
 import { billingApi } from '../../api/billing.api'
-import type { LedgerEntry, ChildPrice, GlobalDiscount } from '../../api/billing.api'
+import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 
 function formatDate(iso: string | null) {
@@ -256,59 +257,81 @@ const STATUS_COLORS = {
   archived: 'bg-gray-100 text-gray-500',
 }
 
+const TARIFF_TYPE_LABEL: Record<IndTariffType, string> = {
+  monthly:    'Місячний',
+  per_lesson: 'За заняття',
+  smart:      'Смарт',
+}
+
+const TODAY = new Date().toISOString().slice(0, 10)
+
+const EMPTY_TARIFF_FORM = {
+  tariff_type:           'monthly' as IndTariffType,
+  price:                 '',
+  valid_from:            TODAY,
+  close_date:            TODAY,
+  base_lessons:          '',
+  l1_threshold_absences: '',
+  l1_threshold_fee:      '',
+  l2_max_refunds:        '',
+  l2_refund_per_absence: '',
+}
+
 function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: string; canEdit: boolean; canEditTariffs: boolean }) {
   const qc = useQueryClient()
-  const [showForm, setShowForm] = useState(false)
-  const [freezeId, setFreezeId] = useState<string | null>(null)
-  const [tariffId, setTariffId] = useState<string | null>(null) // enrollment id with open tariff form
-  const [freezeForm, setFreezeForm] = useState({ frozen_from: '', frozen_to: '' })
-  const [tariffForm, setTariffForm] = useState({ mode: 'price' as 'price' | 'discount', value: '', valid_from: new Date().toISOString().slice(0, 10), reset_date: new Date().toISOString().slice(0, 10) })
+  const [showForm, setShowForm]       = useState(false)
+  const [freezeId, setFreezeId]       = useState<string | null>(null)
+  const [tariffEnrollId, setTariffEnrollId] = useState<string | null>(null) // enrollment id with open tariff form
+  const [freezeForm, setFreezeForm]   = useState({ frozen_from: '', frozen_to: '' })
+  const [tariffForm, setTariffForm]   = useState(EMPTY_TARIFF_FORM)
   const [tariffError, setTariffError] = useState<string | null>(null)
-  const [discountForm, setDiscountForm] = useState({ discount_pct: '', valid_from: new Date().toISOString().slice(0, 10) })
+  const [discountForm, setDiscountForm]   = useState({ discount_pct: '', valid_from: TODAY })
   const [showDiscountForm, setShowDiscountForm] = useState(false)
-  const [discountError, setDiscountError] = useState<string | null>(null)
-  const [enrollForm, setEnrollForm] = useState({ activity_id: '', account_id: '', start_date: new Date().toISOString().slice(0, 10), note: '' })
+  const [discountError, setDiscountError]   = useState<string | null>(null)
+  const [enrollForm, setEnrollForm]   = useState({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
   const [enrollError, setEnrollError] = useState<string | null>(null)
 
   const { data: enrollments = [], isLoading } = useQuery({
     queryKey: ['enrollments', childId],
-    queryFn: () => enrollmentsApi.listByChild(childId),
+    queryFn:  () => enrollmentsApi.listByChild(childId),
   })
 
-  const { data: prices = [] } = useQuery<ChildPrice[]>({
-    queryKey: ['child-prices', childId],
-    queryFn: () => billingApi.getPrices(childId),
+  const { data: individualTariffs = [] } = useQuery<IndividualTariff[]>({
+    queryKey: ['individual-tariffs', childId],
+    queryFn:  () => childrenApi.listIndividualTariffs(childId),
   })
 
   const { data: globalDiscount } = useQuery<GlobalDiscount | null>({
     queryKey: ['child-global-discount', childId],
-    queryFn: () => billingApi.getGlobalDiscount(childId),
+    queryFn:  () => billingApi.getGlobalDiscount(childId),
   })
 
   const { data: activities = [] } = useQuery({
     queryKey: ['activities'],
-    queryFn: () => activitiesApi.list(),
-    enabled: showForm,
+    queryFn:  () => activitiesApi.list(),
+    enabled:  showForm,
   })
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
-    queryFn: accountsApi.list,
-    enabled: showForm,
+    queryFn:  accountsApi.list,
+    enabled:  showForm,
   })
 
-  // Index active prices by activity_id for quick lookup
-  const priceByActivity = prices.reduce<Record<string, ChildPrice>>((acc, p) => {
-    if (p.valid_to === null) acc[p.activity_id] = p
+  // Active individual tariff by activity_id
+  const indTariffByActivity = individualTariffs.reduce<Record<string, IndividualTariff>>((acc, t) => {
+    if (t.valid_to === null) acc[t.activity_id] = t
     return acc
   }, {})
 
+  const invalidateTariffs = () => qc.invalidateQueries({ queryKey: ['individual-tariffs', childId] })
+
   const createMutation = useMutation({
     mutationFn: () => enrollmentsApi.create({ child_id: childId, ...enrollForm, note: enrollForm.note || undefined }),
-    onSuccess: () => {
+    onSuccess:  () => {
       qc.invalidateQueries({ queryKey: ['enrollments', childId] })
       setShowForm(false)
-      setEnrollForm({ activity_id: '', account_id: '', start_date: new Date().toISOString().slice(0, 10), note: '' })
+      setEnrollForm({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
       setEnrollError(null)
     },
     onError: () => setEnrollError('Помилка при записі'),
@@ -316,71 +339,66 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
 
   const freezeMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => enrollmentsApi.freeze(id, freezeForm),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['enrollments', childId] }); setFreezeId(null) },
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['enrollments', childId] }); setFreezeId(null) },
   })
-
   const unfreezeMutation = useMutation({
     mutationFn: enrollmentsApi.unfreeze,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
   })
-
   const archiveMutation = useMutation({
     mutationFn: enrollmentsApi.archive,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
   })
 
   const setTariffMutation = useMutation({
-    mutationFn: (activityId: string) => billingApi.setPrice(childId, {
-      activity_id: activityId,
-      price: tariffForm.mode === 'price' ? Number(tariffForm.value) : null,
-      discount_pct: tariffForm.mode === 'discount' ? Number(tariffForm.value) : null,
-      valid_from: tariffForm.valid_from,
+    mutationFn: (activityId: string) => childrenApi.setIndividualTariff(childId, {
+      activity_id:            activityId,
+      tariff_type:            tariffForm.tariff_type,
+      price:                  Number(tariffForm.price),
+      valid_from:             tariffForm.valid_from,
+      base_lessons:           tariffForm.base_lessons ? Number(tariffForm.base_lessons) : undefined,
+      l1_threshold_absences:  tariffForm.l1_threshold_absences ? Number(tariffForm.l1_threshold_absences) : null,
+      l1_threshold_fee:       tariffForm.l1_threshold_fee ? Number(tariffForm.l1_threshold_fee) : null,
+      l2_max_refunds:         tariffForm.l2_max_refunds ? Number(tariffForm.l2_max_refunds) : null,
+      l2_refund_per_absence:  tariffForm.l2_refund_per_absence ? Number(tariffForm.l2_refund_per_absence) : null,
     }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['child-prices', childId] })
-      setTariffId(null)
-      setTariffError(null)
-    },
-    onError: () => setTariffError('Помилка збереження'),
+    onSuccess: () => { invalidateTariffs(); setTariffEnrollId(null); setTariffError(null) },
+    onError:   () => setTariffError('Помилка збереження'),
   })
 
-  const removeTariffMutation = useMutation({
-    mutationFn: ({ priceId, validTo }: { priceId: string; validTo: string }) =>
-      billingApi.deletePrice(childId, priceId, validTo),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['child-prices', childId] }),
+  const closeTariffMutation = useMutation({
+    mutationFn: ({ tariffId, validTo }: { tariffId: string; validTo: string }) =>
+      childrenApi.closeIndividualTariff(childId, tariffId, validTo),
+    onSuccess:  () => { invalidateTariffs(); setTariffEnrollId(null) },
   })
 
   const setDiscountMutation = useMutation({
-    mutationFn: () => billingApi.setGlobalDiscount(childId, {
-      discount_pct: Number(discountForm.discount_pct),
-      valid_from: discountForm.valid_from,
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['child-global-discount', childId] })
-      setShowDiscountForm(false)
-      setDiscountError(null)
-    },
-    onError: () => setDiscountError('Помилка збереження'),
+    mutationFn: () => billingApi.setGlobalDiscount(childId, { discount_pct: Number(discountForm.discount_pct), valid_from: discountForm.valid_from }),
+    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['child-global-discount', childId] }); setShowDiscountForm(false); setDiscountError(null) },
+    onError:    () => setDiscountError('Помилка збереження'),
   })
-
   const removeDiscountMutation = useMutation({
     mutationFn: () => billingApi.deleteGlobalDiscount(childId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['child-global-discount', childId] }),
+    onSuccess:  () => qc.invalidateQueries({ queryKey: ['child-global-discount', childId] }),
   })
 
   const activeEnrollments   = enrollments.filter((e) => e.status !== 'archived')
   const archivedEnrollments = enrollments.filter((e) => e.status === 'archived')
 
   const openTariffForm = (enrollmentId: string, activityId: string) => {
-    const existing = priceByActivity[activityId]
-    const today = new Date().toISOString().slice(0, 10)
+    const existing = indTariffByActivity[activityId]
     setTariffForm({
-      mode: existing?.price != null ? 'price' : 'discount',
-      value: existing ? (existing.price != null ? String(Number(existing.price).toFixed(0)) : String(Number(existing.discount_pct).toFixed(0))) : '',
-      valid_from: today,
-      reset_date: today,
+      tariff_type:           (existing?.tariff_type ?? 'monthly') as IndTariffType,
+      price:                 existing ? String(Number(existing.price).toFixed(0)) : '',
+      valid_from:            TODAY,
+      close_date:            TODAY,
+      base_lessons:          existing?.base_lessons != null ? String(existing.base_lessons) : '',
+      l1_threshold_absences: existing?.l1_threshold_absences != null ? String(existing.l1_threshold_absences) : '',
+      l1_threshold_fee:      existing?.l1_threshold_fee != null ? String(Number(existing.l1_threshold_fee).toFixed(0)) : '',
+      l2_max_refunds:        existing?.l2_max_refunds != null ? String(existing.l2_max_refunds) : '',
+      l2_refund_per_absence: existing?.l2_refund_per_absence != null ? String(Number(existing.l2_refund_per_absence).toFixed(0)) : '',
     })
-    setTariffId(enrollmentId)
+    setTariffEnrollId(enrollmentId)
     setTariffError(null)
   }
 
@@ -391,7 +409,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
         <h2 className="font-medium text-gray-900">Підписки на активності ({activeEnrollments.length})</h2>
         <div className="flex items-center gap-3">
           {canEditTariffs && (
-            <button onClick={() => { setShowDiscountForm(true) }}
+            <button onClick={() => setShowDiscountForm(true)}
               className="text-xs text-gray-400 hover:text-amber-600 transition-colors">
               {globalDiscount ? `Знижка ${Number(globalDiscount.discount_pct).toFixed(0)}% ✕` : '+ глоб. знижка'}
             </button>
@@ -445,13 +463,8 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Активність *</label>
-              <select
-                value={enrollForm.activity_id}
-                onChange={(e) => {
-                  const activityId = e.target.value
-                  const selected = activities.find((a) => a.id === activityId)
-                  setEnrollForm({ ...enrollForm, activity_id: activityId, account_id: selected?.account_id ?? '' })
-                }}
+              <select value={enrollForm.activity_id}
+                onChange={(e) => { const a = activities.find((x) => x.id === e.target.value); setEnrollForm({ ...enrollForm, activity_id: e.target.value, account_id: a?.account_id ?? '' }) }}
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500">
                 <option value="">— оберіть —</option>
                 {activities.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -495,7 +508,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
       ) : (
         <ul className="divide-y divide-gray-100">
           {activeEnrollments.map((e) => {
-            const indPrice = priceByActivity[e.activity_id]
+            const indTariff = indTariffByActivity[e.activity_id]
             return (
               <li key={e.id} className="py-3">
                 {/* Freeze form */}
@@ -522,24 +535,29 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                       <button onClick={() => setFreezeId(null)} className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900">Скасувати</button>
                     </div>
                   </div>
-                ) : /* Inline tariff form */ tariffId === e.id ? (
-                  <div className="space-y-2 p-3 bg-iris-50 border border-iris-200 rounded-lg">
+
+                ) : tariffEnrollId === e.id ? (
+                  /* ── Individual tariff form ── */
+                  <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
                     <p className="text-xs font-medium text-gray-700">Індивідуальний тариф · {e.activity_name}</p>
+
+                    {/* Tariff type */}
                     <div className="flex gap-4">
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input type="radio" checked={tariffForm.mode === 'price'} onChange={() => setTariffForm({ ...tariffForm, mode: 'price' })} />
-                        Ціна (грн)
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input type="radio" checked={tariffForm.mode === 'discount'} onChange={() => setTariffForm({ ...tariffForm, mode: 'discount' })} />
-                        Знижка (%)
-                      </label>
+                      {(['monthly', 'per_lesson', 'smart'] as IndTariffType[]).map((t) => (
+                        <label key={t} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                          <input type="radio" checked={tariffForm.tariff_type === t}
+                            onChange={() => setTariffForm({ ...tariffForm, tariff_type: t })} />
+                          {TARIFF_TYPE_LABEL[t]}
+                        </label>
+                      ))}
                     </div>
-                    <div className="flex gap-2 items-end">
+
+                    {/* Price + valid_from */}
+                    <div className="flex gap-2 items-end flex-wrap">
                       <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">{tariffForm.mode === 'price' ? 'Сума (грн)' : 'Знижка (%)'}</label>
-                        <input type="number" min="0.01" step="0.01" value={tariffForm.value}
-                          onChange={(ev) => setTariffForm({ ...tariffForm, value: ev.target.value })}
+                        <label className="block text-xs text-gray-500 mb-0.5">Ціна (грн)</label>
+                        <input type="number" min="0.01" step="0.01" value={tariffForm.price}
+                          onChange={(ev) => setTariffForm({ ...tariffForm, price: ev.target.value })}
                           className="w-28 rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
                       </div>
                       <div>
@@ -548,35 +566,70 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                           onChange={(ev) => setTariffForm({ ...tariffForm, valid_from: ev.target.value })}
                           className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
                       </div>
-                      <button onClick={() => { if (!tariffForm.value) { setTariffError('Введіть значення'); return } setTariffMutation.mutate(e.activity_id) }}
+                      <button
+                        onClick={() => { if (!tariffForm.price) { setTariffError('Введіть ціну'); return } setTariffMutation.mutate(e.activity_id) }}
                         disabled={setTariffMutation.isPending}
                         className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md">
                         {setTariffMutation.isPending ? '...' : 'Зберегти'}
                       </button>
-                      <button onClick={() => { setTariffId(null); setTariffError(null) }} className="text-xs text-gray-400 hover:text-gray-700">Скасувати</button>
+                      <button onClick={() => { setTariffEnrollId(null); setTariffError(null) }} className="text-xs text-gray-400 hover:text-gray-700">Скасувати</button>
                     </div>
-                    {priceByActivity[e.activity_id] && (
+
+                    {/* Smart config */}
+                    {tariffForm.tariff_type === 'smart' && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-iris-100">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Базових занять</label>
+                          <input type="number" min="0" value={tariffForm.base_lessons}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, base_lessons: ev.target.value })}
+                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Поріг пропусків (L1)</label>
+                          <input type="number" min="0" value={tariffForm.l1_threshold_absences}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_absences: ev.target.value })}
+                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Сума при порозі (L1, грн)</label>
+                          <input type="number" min="0" step="0.01" value={tariffForm.l1_threshold_fee}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_fee: ev.target.value })}
+                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Макс. повернень (L2)</label>
+                          <input type="number" min="0" value={tariffForm.l2_max_refunds}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, l2_max_refunds: ev.target.value })}
+                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Повернення за пропуск (L2, грн)</label>
+                          <input type="number" min="0" step="0.01" value={tariffForm.l2_refund_per_absence}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, l2_refund_per_absence: ev.target.value })}
+                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Close tariff */}
+                    {indTariff && (
                       <div className="pt-2 border-t border-iris-100 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500">Скинути тариф з</span>
-                        <input
-                          type="date"
-                          value={tariffForm.reset_date}
-                          onChange={(ev) => setTariffForm({ ...tariffForm, reset_date: ev.target.value })}
-                          className="rounded border-gray-300 text-xs shadow-sm focus:border-red-400 focus:ring-red-300"
-                        />
+                        <span className="text-xs text-gray-500">Скасувати тариф з</span>
+                        <input type="date" value={tariffForm.close_date}
+                          onChange={(ev) => setTariffForm({ ...tariffForm, close_date: ev.target.value })}
+                          className="rounded border-gray-300 text-xs shadow-sm" />
                         <button
-                          onClick={() => {
-                            removeTariffMutation.mutate({ priceId: priceByActivity[e.activity_id].id, validTo: tariffForm.reset_date })
-                            setTariffId(null)
-                          }}
-                          disabled={removeTariffMutation.isPending}
+                          onClick={() => closeTariffMutation.mutate({ tariffId: indTariff.id, validTo: tariffForm.close_date })}
+                          disabled={closeTariffMutation.isPending}
                           className="text-xs text-red-400 hover:text-red-600 transition-colors underline underline-offset-2">
-                          {removeTariffMutation.isPending ? '...' : '→ повернути базову ціну'}
+                          {closeTariffMutation.isPending ? '...' : '→ повернути базову ціну'}
                         </button>
                       </div>
                     )}
+
                     {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
                   </div>
+
                 ) : (
                   /* Normal row */
                   <div className="flex items-center justify-between">
@@ -584,14 +637,11 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                       <p className="text-sm font-medium text-gray-900">{e.activity_name}</p>
                       <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
                         <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
-                        {/* Price display: individual overrides base */}
-                        {indPrice ? (
+                        {indTariff ? (
                           <>
                             {e.base_fee && <span className="line-through">{Number(e.base_fee).toFixed(0)} грн</span>}
                             <span className="text-iris-600 font-medium">
-                              {indPrice.price != null
-                                ? `${Number(indPrice.price).toFixed(0)} грн`
-                                : `−${Number(indPrice.discount_pct).toFixed(0)}%`}
+                              {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн
                             </span>
                           </>
                         ) : (
@@ -609,14 +659,14 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                       <div className="flex gap-2 text-xs text-gray-400">
                         {canEditTariffs && (
                           <button onClick={() => openTariffForm(e.id, e.activity_id)}
-                            className={`transition-colors ${indPrice ? 'hover:text-iris-600' : 'hover:text-iris-600'}`}>
-                            {indPrice ? 'тариф' : '+ тариф'}
+                            className="hover:text-iris-600 transition-colors">
+                            {indTariff ? 'тариф' : '+ тариф'}
                           </button>
                         )}
                         {canEdit && (
                           <>
                             {e.status === 'active' && (
-                              <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: new Date().toISOString().slice(0, 10), frozen_to: '' }) }}
+                              <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: TODAY, frozen_to: '' }) }}
                                 className="hover:text-blue-600 transition-colors">заморозити</button>
                             )}
                             {e.status === 'frozen' && (

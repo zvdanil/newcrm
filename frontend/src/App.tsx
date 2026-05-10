@@ -11,6 +11,7 @@ import { FamilyCardPage } from './pages/Families/FamilyCardPage'
 import { FamilyCreatePage } from './pages/Families/FamilyCreatePage'
 import { GroupsPage } from './pages/Groups/GroupsPage'
 import { AccountsPage } from './pages/Accounts/AccountsPage'
+import { AccountCardPage } from './pages/Accounts/AccountCardPage'
 import { ActivitiesListPage } from './pages/Activities/ActivitiesListPage'
 import { ActivityCreatePage } from './pages/Activities/ActivityCreatePage'
 import { ActivityCardPage } from './pages/Activities/ActivityCardPage'
@@ -62,6 +63,7 @@ export function App() {
 
               {/* Рахунки */}
               <Route path="accounts" element={<AccountsPage />} />
+              <Route path="accounts/:id" element={<AccountCardPage />} />
 
               {/* Активності */}
               <Route path="activities"      element={<ActivitiesListPage />} />

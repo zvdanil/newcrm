@@ -325,6 +325,28 @@ export interface SalaryTransactionsTable {
   created_at:       Generated<Date>
 }
 
+export interface ChildIndividualTariffsTable {
+  id:          Generated<string>
+  child_id:    string
+  activity_id: string
+  tariff_type: 'monthly' | 'per_lesson' | 'smart'
+  price:       ColumnType<string, number | string, number | string>
+  valid_from:  ColumnType<Date, string, string>
+  valid_to:    ColumnType<Date | null, string | null, string | null>
+  created_at:  Generated<Date>
+  created_by:  string | null
+}
+
+export interface ChildSmartTariffConfigsTable {
+  individual_tariff_id:  string
+  base_lessons:          Generated<number>
+  l1_threshold_absences: number | null
+  l1_threshold_fee:      ColumnType<string | null, number | string | null, number | string | null>
+  l2_max_refunds:        number | null
+  l2_refund_per_absence: ColumnType<string | null, number | string | null, number | string | null>
+  updated_at:            Generated<Date>
+}
+
 export interface MergedJournalsTable {
   id:         Generated<string>
   name:       string
@@ -370,4 +392,6 @@ export interface Database {
   salary_transactions:        SalaryTransactionsTable
   merged_journals:            MergedJournalsTable
   merged_journal_activities:  MergedJournalActivitiesTable
+  child_individual_tariffs:   ChildIndividualTariffsTable
+  child_smart_tariff_configs: ChildSmartTariffConfigsTable
 }
