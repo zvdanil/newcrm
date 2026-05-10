@@ -1,6 +1,9 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm ci && npm run build --workspace=frontend && npm run build --workspace=backend"
+buildCommand = "npm run build --workspace=frontend && npm run build --workspace=backend"
+
+[build.nixpacksPlan.variables]
+NIXPACKS_NODE_VERSION = "22"
 
 [deploy]
 startCommand = "node db/migrate.js && node backend/dist/server.js"
