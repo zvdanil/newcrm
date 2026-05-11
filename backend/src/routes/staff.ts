@@ -147,6 +147,7 @@ export async function staffRoutes(app: FastifyInstance) {
           .select(['id', 'rate_value'])
           .where('staff_id',    '=', req.params.id)
           .where('activity_id', '=', activity_id)
+          .where('rate_type',   '=', rate_type)
           .where('valid_to', 'is', null)
           .executeTakeFirst()
 
