@@ -735,7 +735,7 @@ function enrichAccruals(accruals: LedgerEntry[], adjustments: LedgerEntry[]): {
       if (m['source'] === 'retro_recalc' && m['original_accrual_id'] === accrual.id) return true
       if (m['adjustment_reason'] === 'tariff_changed' &&
           adj.enrollment_id === accrual.enrollment_id &&
-          adj.billing_month  === accrual.billing_month) return true
+          String(adj.billing_month ?? '').slice(0, 7) === String(accrual.billing_month ?? '').slice(0, 7)) return true
       return false
     })
     related.forEach(a => linkedIds.add(a.id))

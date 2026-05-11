@@ -138,6 +138,15 @@ async function billMonthlyEnrollment(
     } else {
       const delta = Math.abs(price - existingAmount)
       const isIncrease = price > existingAmount
+      // Idempotency: remove previous tariff-change adjustment for this enrollment+month
+      await db.updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+        .where('type', '=', 'ADJUSTMENT')
+        .where('enrollment_id', '=', enrollmentId)
+        .where('billing_month', '=', billingDate)
+        .where('is_deleted', '=', false)
+        .where(sql`metadata_json->>'adjustment_reason'`, '=', 'tariff_changed')
+        .execute()
       await createTransaction({
         type: 'ADJUSTMENT',
         child_id: childId,
