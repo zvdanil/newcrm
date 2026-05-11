@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
@@ -628,45 +629,36 @@ export async function childrenRoutes(app: FastifyInstance) {
   )
 
   // POST /api/children/:id/clear-month-accruals
-  // Owner only. Cancels all accruals for a child+activity in a given month.
-  // For per_lesson: also hard-deletes the attendance marks so recalc won't recreate them.
+  // Owner only. Cancels all accruals + refunds for a child+activity in a given month.
+  // For per_lesson: also hard-deletes ALL attendance marks so recalc won't recreate them.
   app.post<{
     Params: { id: string }
-    Body: { activity_id: string; billing_month: string; reason?: string }
+    Body: { activity_id: string; billing_month: string; is_per_lesson: boolean; reason?: string }
   }>(
     '/:id/clear-month-accruals',
     { preHandler: requireRole('owner') },
     async (req, reply) => {
-      const childId    = req.params.id
-      const { activity_id: activityId, billing_month, reason } = req.body
+      const childId = req.params.id
+      const { activity_id: activityId, billing_month, is_per_lesson: isPerLesson, reason } = req.body
 
-      // billing_month is "YYYY-MM-01"
-      const [y, m] = billing_month.split('-').map(Number)
-      const monthStart = billing_month
-      // last day of month: first day of next month minus 1
-      const lastDay = new Date(y, m, 0).getDate()
-      const monthEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      // Normalize billing_month: "2026-05-01" or "2026-05-01T00:00:00.000Z" → "2026-05-01"
+      const parts = billing_month.split('-')
+      const y = Number(parts[0])
+      const m = Number(parts[1])
+      const monthStart = `${y}-${String(m).padStart(2, '0')}-01`
+      const lastDay    = new Date(y, m, 0).getDate()
+      const monthEnd   = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
+      // Include archived enrollments — child may have been unenrolled but accruals still exist
       const enrollment = await db
         .selectFrom('enrollments')
         .select(['id', 'account_id'])
         .where('child_id', '=', childId)
         .where('activity_id', '=', activityId)
-        .where('status', '!=', 'archived')
+        .orderBy(sql`CASE status WHEN 'active' THEN 0 WHEN 'frozen' THEN 1 ELSE 2 END`, 'asc')
         .executeTakeFirst()
 
       if (!enrollment) return reply.status(404).send({ error: 'EnrollmentNotFound' })
-
-      // Determine per_lesson vs monthly by checking existing ACCRUALs' billing_month
-      const sampleAccrual = await db
-        .selectFrom('transactions')
-        .select('billing_month')
-        .where('enrollment_id', '=', enrollment.id)
-        .where('type', '=', 'ACCRUAL')
-        .where('is_deleted', '=', false)
-        .executeTakeFirst()
-
-      const isPerLesson = !sampleAccrual?.billing_month
 
       const softDeleteSet = {
         is_deleted: true as const,
@@ -674,32 +666,52 @@ export async function childrenRoutes(app: FastifyInstance) {
         deleted_by: (req.user as { sub: string }).sub,
       } as const
 
+      const startDate = new Date(monthStart)
+      const endDate   = new Date(monthEnd)
+
       if (isPerLesson) {
-        // Find all attendance marks for this enrollment in the month
+        // Hard-delete ALL attendance marks for this enrollment in the month (any status)
         const logs = await db
           .selectFrom('attendance_logs')
           .select(['id', 'date'])
           .where('enrollment_id', '=', enrollment.id)
-          .where('date', '>=', new Date(monthStart))
-          .where('date', '<=', new Date(monthEnd))
-          .where('status', 'in', ['present', 'special'])
+          .where('date', '>=', startDate)
+          .where('date', '<=', endDate)
           .execute()
 
         const dates = new Set<string>()
         for (const log of logs) {
           const d = log.date as Date
-          dates.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+          dates.add(d.toISOString().slice(0, 10))
           await db.deleteFrom('attendance_logs').where('id', '=', log.id).execute()
         }
 
-        // Soft-delete all per_lesson ACCRUALs for this enrollment in the month
+        // Soft-delete all per_lesson ACCRUALs in the month
         await db.updateTable('transactions').set(softDeleteSet)
           .where('enrollment_id', '=', enrollment.id)
           .where('type', '=', 'ACCRUAL')
           .where('is_deleted', '=', false)
           .where('billing_month', 'is', null)
-          .where('transaction_date', '>=', new Date(monthStart))
-          .where('transaction_date', '<=', new Date(monthEnd))
+          .where('transaction_date', '>=', startDate)
+          .where('transaction_date', '<=', endDate)
+          .execute()
+
+        // Soft-delete REFUNDs in the month (except smart_benefit)
+        await db.updateTable('transactions').set(softDeleteSet)
+          .where('enrollment_id', '=', enrollment.id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>=', startDate)
+          .where('transaction_date', '<=', endDate)
+          .where(sql`metadata_json->>'source'`, 'is', null)
+          .execute()
+        await db.updateTable('transactions').set(softDeleteSet)
+          .where('enrollment_id', '=', enrollment.id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>=', startDate)
+          .where('transaction_date', '<=', endDate)
+          .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
         // Recalculate staff salary for each deleted lesson date
@@ -719,26 +731,42 @@ export async function childrenRoutes(app: FastifyInstance) {
         }
 
       } else {
-        // monthly / smart: soft-delete the ACCRUAL directly
+        // monthly / smart: soft-delete ACCRUAL + REFUNDs for this billing_month
         const noteAppend = reason ? ` [Скасовано: ${reason}]` : ''
+
         const existing = await db
           .selectFrom('transactions')
           .select(['id', 'note'])
           .where('enrollment_id', '=', enrollment.id)
           .where('type', '=', 'ACCRUAL')
           .where('is_deleted', '=', false)
-          .where('billing_month', '=', new Date(billing_month))
+          .where('billing_month', '=', startDate)
           .executeTakeFirst()
 
         if (existing) {
           await db.updateTable('transactions')
-            .set({
-              ...softDeleteSet,
-              note: ((existing.note ?? '') + noteAppend).trim() || null,
-            })
+            .set({ ...softDeleteSet, note: ((existing.note ?? '') + noteAppend).trim() || null })
             .where('id', '=', existing.id)
             .execute()
         }
+
+        // Soft-delete REFUNDs for this billing_month (except smart_benefit)
+        await db.updateTable('transactions').set(softDeleteSet)
+          .where('enrollment_id', '=', enrollment.id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>=', startDate)
+          .where('transaction_date', '<=', endDate)
+          .where(sql`metadata_json->>'source'`, 'is', null)
+          .execute()
+        await db.updateTable('transactions').set(softDeleteSet)
+          .where('enrollment_id', '=', enrollment.id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>=', startDate)
+          .where('transaction_date', '<=', endDate)
+          .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
+          .execute()
       }
 
       await recalcBalance(childId, enrollment.account_id)

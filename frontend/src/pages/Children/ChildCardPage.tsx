@@ -955,16 +955,18 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     },
   })
 
+  const [clearError, setClearError] = useState<string | null>(null)
   const clearMonthMutation = useMutation({
-    mutationFn: ({ activityId, billingMonth, reason }: { activityId: string; billingMonth: string; reason?: string }) =>
-      billingApi.clearMonthAccruals(childId, activityId, billingMonth, reason),
+    mutationFn: ({ activityId, billingMonth, isPerLesson, reason }: { activityId: string; billingMonth: string; isPerLesson: boolean; reason?: string }) =>
+      billingApi.clearMonthAccruals(childId, activityId, billingMonth, isPerLesson, reason),
     onSuccess: () => {
+      setClearError(null)
       qc.invalidateQueries({ queryKey: ['balance', childId] })
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Помилка скасування'
-      setPayError(msg)
+      setClearError(msg)
     },
   })
 
@@ -1296,11 +1298,11 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                                     const bm = billingMonth ?? selectedBillingMonth
                                     if (isPerLesson) {
                                       if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?\nВсі відмітки в журналі за цей місяць будуть видалені.`)) return
-                                      clearMonthMutation.mutate({ activityId, billingMonth: bm })
+                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, isPerLesson: true })
                                     } else {
                                       const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
                                       if (reason === null) return
-                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, reason: reason || undefined })
+                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
                                     }
                                   }}
                                   disabled={clearMonthMutation.isPending}
@@ -1412,6 +1414,10 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
           </div>
         )}
       </div>
+
+      {clearError && (
+        <p className="text-xs text-red-600 mt-2">{clearError}</p>
+      )}
     </div>
   )
 }

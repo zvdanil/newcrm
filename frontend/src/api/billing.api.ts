@@ -145,10 +145,11 @@ export const billingApi = {
     return data
   },
 
-  clearMonthAccruals: async (childId: string, activityId: string, billingMonth: string, reason?: string): Promise<{ ok: boolean }> => {
+  clearMonthAccruals: async (childId: string, activityId: string, billingMonth: string, isPerLesson: boolean, reason?: string): Promise<{ ok: boolean }> => {
     const { data } = await apiClient.post<{ ok: boolean }>(`/children/${childId}/clear-month-accruals`, {
-      activity_id: activityId,
+      activity_id:  activityId,
       billing_month: billingMonth,
+      is_per_lesson: isPerLesson,
       reason,
     })
     return data
