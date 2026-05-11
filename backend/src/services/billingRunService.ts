@@ -420,9 +420,9 @@ export async function recalcActivityAccruals(
               activity_id: activityId,
               enrollment_id: e.enrollment_id,
               amount: refundAmount,
-              transaction_date: String(abs.date).slice(0, 10),
+              transaction_date: new Date(abs.date as Date).toISOString().slice(0, 10),
               billing_month: monthStr,
-              note: `Повернення за відсутність ${String(abs.date).slice(0, 10)}`,
+              note: `Повернення за відсутність ${new Date(abs.date as Date).toISOString().slice(0, 10)}`,
               metadata_json: { source: 'retro_recalc', attendance_log_id: abs.id },
               created_by: triggeredBy,
             })
@@ -477,10 +477,11 @@ export async function recalcActivityAccruals(
       .execute()
 
     for (const mark of marks) {
-      const lessonDate = new Date(String(mark.date))
+      const lessonDate = new Date(mark.date as Date)
       const price = await getEffectivePrice(mark.child_id, activityId, lessonDate)
       if (!price || price <= 0) continue
 
+      const lessonDateStr = lessonDate.toISOString().slice(0, 10)
       await createTransaction({
         type: 'ACCRUAL',
         child_id: mark.child_id,
@@ -488,9 +489,9 @@ export async function recalcActivityAccruals(
         activity_id: activityId,
         enrollment_id: mark.enrollment_id,
         amount: price,
-        transaction_date: String(mark.date).slice(0, 10),
+        transaction_date: lessonDateStr,
         billing_month: null,
-        note: `Нарахування за заняття ${String(mark.date).slice(0, 10)}`,
+        note: `Нарахування за заняття ${lessonDateStr}`,
         metadata_json: { tariff_snapshot: { price }, source: 'retro_recalc', attendance_log_id: mark.log_id },
         created_by: triggeredBy,
       })
