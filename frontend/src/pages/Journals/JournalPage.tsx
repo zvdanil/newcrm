@@ -222,6 +222,14 @@ export function JournalPage() {
     onSuccess: invalidate,
   })
 
+  const groupMarkMutation = useMutation({
+    mutationFn: async ({ dateStr, logId, status }: { dateStr: string; logId: string | null; status: 'conducted' | 'cancelled' | null }) => {
+      if (status === null && logId) { await attendanceApi.removeGroup(logId); return }
+      if (status !== null) { await attendanceApi.markGroup({ activity_id: activityId!, date: dateStr, status }) }
+    },
+    onSuccess: invalidate,
+  })
+
   const specialMutation = useMutation({
     mutationFn: ({ enrollmentId, dateStr, logId, amount, note }: { enrollmentId: string; dateStr: string; logId: string | null; amount: number; note: string }) => {
       if (logId) return attendanceApi.update(logId, { status: 'special', custom_amount: amount, note: note || null })
@@ -232,14 +240,27 @@ export function JournalPage() {
 
   const handleMark = useCallback((enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => {
     markMutation.mutate({ enrollmentId, dateStr, logId, status })
-  }, [markMutation])
+    if (data?.activity?.auto_group_classes && (status === 'present' || status === 'special')) {
+      const gLog = data.group_logs[dateStr]
+      if (!gLog || gLog.status !== 'conducted') {
+        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted' })
+      }
+    }
+  }, [markMutation, groupMarkMutation, data])
 
   const handleSpecialSave = (enrollmentId: string, dateStr: string, logId: string | null, amount: number, note: string) => {
     specialMutation.mutate({ enrollmentId, dateStr, logId, amount, note })
+    if (data?.activity?.auto_group_classes) {
+      const gLog = data.group_logs[dateStr]
+      if (!gLog || gLog.status !== 'conducted') {
+        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted' })
+      }
+    }
   }
 
   const activity = data?.activity
   const rows = data?.rows ?? []
+  const groupLogs = data?.group_logs ?? {}
   const dates = data?.dates ?? []
   const compact = mode === 'month'
 
@@ -332,6 +353,39 @@ export function JournalPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
+              {activity?.has_group_classes && (
+                <tr className="bg-iris-50/50 hover:bg-iris-50 transition-colors">
+                  <td className="px-5 py-3 font-medium text-iris-900 flex items-center gap-2">
+                    Групове заняття
+                    {activity.auto_group_classes && <span className="text-[10px] uppercase tracking-wider text-iris-500 border border-iris-200 bg-white px-1.5 rounded-sm">auto</span>}
+                  </td>
+                  <td className="px-5 py-3">
+                    {(() => {
+                      const gLog = groupLogs[from]
+                      if (!gLog) {
+                        return (
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: null, status: 'conducted' })}
+                            className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors h-8 px-3 min-w-[2rem]`}
+                            title="Відмітити проведення">
+                            <span className="text-xs">+</span>
+                          </button>
+                        )
+                      }
+                      if (gLog.status === 'conducted') {
+                        return (
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: gLog.id, status: null })}
+                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 h-8 px-2 text-xs min-w-[2rem]`}
+                            title="Проведено (натисніть щоб скасувати)">
+                            <span>✔ Проведено</span>
+                          </button>
+                        )
+                      }
+                      return null
+                    })()}
+                  </td>
+                  <td className="px-5 py-3 text-xs text-gray-400 hidden sm:table-cell"></td>
+                </tr>
+              )}
               {rows.map((row) => {
                 const frozen = isFrozenOn(row, from)
                 const log = row.logs[from]
@@ -371,6 +425,34 @@ export function JournalPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
+              {activity?.has_group_classes && (
+                <tr className="bg-iris-50/50 hover:bg-iris-50 transition-colors">
+                  <td className="px-4 py-2 font-medium text-iris-900 sticky left-0 bg-iris-50 border-r border-iris-100 flex items-center justify-between">
+                    <span>Групове заняття</span>
+                    {activity.auto_group_classes && <span className="text-[9px] uppercase tracking-wider text-iris-500 border border-iris-200 bg-white px-1 rounded-sm mr-1">auto</span>}
+                  </td>
+                  {dates.map((d) => {
+                    const gLog = groupLogs[d]
+                    return (
+                      <td key={d} className="px-1 py-1.5 text-center">
+                        {!gLog ? (
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: null, status: 'conducted' })}
+                            className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors ${compact ? 'h-7 w-7' : 'h-8 w-8'}`}
+                            title="Відмітити проведення">
+                            <span className="text-xs">+</span>
+                          </button>
+                        ) : gLog.status === 'conducted' ? (
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: gLog.id, status: null })}
+                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 flex items-center justify-center mx-auto ${compact ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-xs'}`}
+                            title="Проведено (натисніть щоб скасувати)">
+                            <span>✔</span>
+                          </button>
+                        ) : null}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )}
               {rows.map((row) => (
                 <tr key={row.enrollment_id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-2 font-medium text-gray-900 sticky left-0 bg-white border-r border-gray-100">

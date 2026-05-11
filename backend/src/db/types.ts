@@ -74,6 +74,8 @@ export interface ActivitiesTable {
   tariff_type: Generated<'monthly' | 'per_lesson' | 'smart'>
   is_rigid:    Generated<boolean>
   is_active:   Generated<boolean>
+  has_group_classes: Generated<boolean>
+  auto_group_classes: Generated<boolean>
   note:        string | null
   created_at:  Generated<Date>
 }
@@ -149,6 +151,16 @@ export interface AttendanceLogsTable {
   created_by:    string | null
   created_at:    Generated<Date>
   updated_at:    Generated<Date>
+}
+
+export interface GroupLessonLogsTable {
+  id:          Generated<string>
+  activity_id: string
+  date:        ColumnType<Date, string, string>
+  status:      'conducted' | 'cancelled'
+  created_by:  string | null
+  created_at:  Generated<Date>
+  updated_at:  Generated<Date>
 }
 
 export interface RefundConfigsTable {
@@ -267,7 +279,7 @@ export interface BillingRunLogTable {
 
 export type StaffType     = 'employee' | 'partner'
 export type RateCategory  = 'auto' | 'manual'
-export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'group_lesson'
 export type SalaryTxType  = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
 export interface StaffTable {
@@ -394,4 +406,5 @@ export interface Database {
   merged_journal_activities:  MergedJournalActivitiesTable
   child_individual_tariffs:   ChildIndividualTariffsTable
   child_smart_tariff_configs: ChildSmartTariffConfigsTable
+  group_lesson_logs:          GroupLessonLogsTable
 }

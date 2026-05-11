@@ -328,7 +328,7 @@ export function ActivityCardPage() {
   const canEdit = useCanAccess('owner', 'admin')
 
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, note: '' })
+  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, has_group_classes: false, auto_group_classes: false, note: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: today() })
@@ -424,7 +424,7 @@ export function ActivityCardPage() {
   if (!activity)  return <div className="py-12 text-center text-sm text-gray-400">Активність не знайдена</div>
 
   const startEdit = () => {
-    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type as 'monthly' | 'per_lesson' | 'smart', is_rigid: activity.is_rigid, note: activity.note ?? '' })
+    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type as 'monthly' | 'per_lesson' | 'smart', is_rigid: activity.is_rigid, has_group_classes: activity.has_group_classes, auto_group_classes: activity.auto_group_classes, note: activity.note ?? '' })
     setEditing(true)
     setSaveError(null)
   }
@@ -498,6 +498,7 @@ export function ActivityCardPage() {
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Поточний тариф</dt>
               <dd className="mt-1 text-sm text-gray-900">{activity.current_tariff ? `${Number(activity.current_tariff.base_fee).toFixed(2)} грн` : '—'}</dd></div>
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Жорсткий абонемент</dt><dd className="mt-1 text-sm text-gray-900">{activity.is_rigid ? 'Так' : 'Ні'}</dd></div>
+            <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Групові заняття</dt><dd className="mt-1 text-sm text-gray-900">{activity.has_group_classes ? (activity.auto_group_classes ? 'Так (авто)' : 'Так (вручну)') : 'Ні'}</dd></div>
             {activity.note && <div className="col-span-2"><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Нотатка</dt><dd className="mt-1 text-sm text-gray-900">{activity.note}</dd></div>}
           </dl>
         ) : (
@@ -531,6 +532,20 @@ export function ActivityCardPage() {
                 className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
               <span className="text-sm text-gray-700">Жорсткий абонемент</span>
             </label>
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={editForm.has_group_classes} onChange={(e) => setEditForm({ ...editForm, has_group_classes: e.target.checked, auto_group_classes: e.target.checked ? editForm.auto_group_classes : false })}
+                  className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                <span className="text-sm text-gray-700">Є групові заняття</span>
+              </label>
+              {editForm.has_group_classes && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={editForm.auto_group_classes} onChange={(e) => setEditForm({ ...editForm, auto_group_classes: e.target.checked })}
+                    className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                  <span className="text-sm text-gray-700">Встановлювати автоматично</span>
+                </label>
+              )}
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Нотатка</label>
               <textarea value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}

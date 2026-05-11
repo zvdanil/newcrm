@@ -12,6 +12,7 @@ function fmt(v: string | number) { return Number(v).toFixed(2) }
 const RATE_TYPE_LABELS: Record<RateType, string> = {
   per_lesson:    'За заняття',
   per_child:     'За дитину',
+  group_lesson:  'За групу',
   fixed_monthly: 'Фіксований оклад',
   hourly:        'Погодинна',
   smart:         'Смарт',
@@ -199,7 +200,7 @@ function AddRateForm({ staffId, activities, onDone }: {
     mutation.mutate()
   }
 
-  const needsActivity = ['per_lesson', 'per_child', 'fixed_monthly', 'smart'].includes(form.rate_type)
+  const needsActivity = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart'].includes(form.rate_type)
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">

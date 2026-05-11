@@ -210,10 +210,10 @@ export async function journalsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, from, to є обовʼязковими' })
       }
 
-      const [activity, refundConfig, enrollments, logs] = await Promise.all([
+      const [activity, refundConfig, enrollments, logs, groupLogs] = await Promise.all([
         db.selectFrom('activities as a')
           .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
-          .select(['a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'ac.name as account_name'])
+          .select(['a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.has_group_classes', 'a.auto_group_classes', 'ac.name as account_name'])
           .where('a.id', '=', activity_id)
           .executeTakeFirst(),
 
@@ -239,6 +239,13 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('date', '>=', new Date(from))
           .where('date', '<=', new Date(to))
           .execute(),
+
+        db.selectFrom('group_lesson_logs')
+          .selectAll()
+          .where('activity_id', '=', activity_id)
+          .where('date', '>=', new Date(from))
+          .where('date', '<=', new Date(to))
+          .execute(),
       ])
 
       if (!activity) return reply.status(404).send({ error: 'NotFound' })
@@ -248,6 +255,12 @@ export async function journalsRoutes(app: FastifyInstance) {
       for (const log of logs) {
         if (!logsIndex[log.enrollment_id]) logsIndex[log.enrollment_id] = {}
         logsIndex[log.enrollment_id][toDateStr(log.date)] = log
+      }
+
+      // Индекс group logs: date → log
+      const groupLogsIndex: Record<string, typeof groupLogs[0]> = {}
+      for (const log of groupLogs) {
+        groupLogsIndex[toDateStr(log.date)] = log
       }
 
       return {
@@ -262,6 +275,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
           logs: logsIndex[e.enrollment_id] ?? {},
         })),
+        group_logs: groupLogsIndex,
       }
     }
   )
@@ -593,6 +607,65 @@ export async function journalsRoutes(app: FastifyInstance) {
           await recalcSmartStaffBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
         }
       }
+
+      return { ok: true }
+    }
+  )
+
+  // POST /api/journals/group-attendance
+  app.post<{
+    Body: {
+      activity_id: string
+      date: string
+      status: 'conducted' | 'cancelled'
+    }
+  }>(
+    '/group-attendance',
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    async (req, reply) => {
+      const { activity_id, date, status } = req.body
+      if (!activity_id || !date || !status) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, date, status є обовʼязковими' })
+      }
+
+      const createdBy = (req.user as { sub: string }).sub
+
+      const log = await db.insertInto('group_lesson_logs')
+        .values({
+          activity_id,
+          date,
+          status,
+          created_by: createdBy,
+        })
+        .onConflict((oc) =>
+          oc.columns(['activity_id', 'date']).doUpdateSet({
+            status,
+            updated_at: new Date().toISOString() as unknown as Date,
+          })
+        )
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      // Staff salary auto-accruals
+      await recalcStaffAccruals(activity_id, date)
+      
+      return reply.status(201).send(log)
+    }
+  )
+
+  // DELETE /api/journals/group-attendance/:id
+  app.delete<{ Params: { id: string } }>(
+    '/group-attendance/:id',
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    async (req, reply) => {
+      const log = await db.selectFrom('group_lesson_logs').selectAll().where('id', '=', req.params.id).executeTakeFirst()
+      if (!log) return reply.status(404).send({ error: 'NotFound' })
+
+      await db.deleteFrom('group_lesson_logs').where('id', '=', req.params.id).execute()
+
+      // Staff salary auto-accruals after DELETE
+      const dateStrDel = toDateStr(log.date as unknown as Date)
+      await recalcStaffAccruals(log.activity_id, dateStrDel)
 
       return { ok: true }
     }

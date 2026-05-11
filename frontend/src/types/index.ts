@@ -89,6 +89,8 @@ export interface Activity {
   tariff_type: 'monthly' | 'per_lesson' | 'smart'
   is_rigid: boolean
   is_active: boolean
+  has_group_classes: boolean
+  auto_group_classes: boolean
   note: string | null
   created_at: string
   current_tariff?: Tariff | null
@@ -140,6 +142,16 @@ export interface AttendanceLog {
   updated_at: string
 }
 
+export interface GroupLessonLog {
+  id: string
+  activity_id: string
+  date: string
+  status: 'conducted' | 'cancelled'
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface JournalRow {
   enrollment_id: string
   child_id: string
@@ -156,11 +168,14 @@ export interface JournalData {
     name: string
     tariff_type: 'monthly' | 'per_lesson' | 'smart'
     is_rigid: boolean
+    has_group_classes: boolean
+    auto_group_classes: boolean
     account_name: string | null
     refund_config: import('./index').RefundConfig | null
   }
   dates: string[]
   rows: JournalRow[]
+  group_logs: Record<string, GroupLessonLog>
 }
 
 export interface PriceResolution {

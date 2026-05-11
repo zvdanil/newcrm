@@ -176,6 +176,10 @@ async function computeGross(
   if (rate.rate_type === 'per_lesson') {
     return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv } }
   }
+  if (rate.rate_type === 'group_lesson') {
+    return { gross: rv, meta: { source: 'auto_group_lesson', quantity: 1, rate_value: rv } }
+  }
+
   // per_child
   const gross = Math.round(rv * presentCount * 100) / 100
   return { gross, meta: { source: 'auto_per_child', quantity: presentCount, rate_value: rv } }
@@ -196,6 +200,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where((eb) => eb.or([
       eb('rate_type', '=', 'per_lesson'),
       eb('rate_type', '=', 'per_child'),
+      eb('rate_type', '=', 'group_lesson'),
     ]))
     .where('valid_from', '<=', dateObj)
     .where((eb) => eb.or([
@@ -216,7 +221,16 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .executeTakeFirst()
 
   const presentCount = Number(presentResult?.cnt ?? 0)
-  const billing      = billingMonthOf(date)
+
+  const groupLog = await db
+    .selectFrom('group_lesson_logs')
+    .select('status')
+    .where('activity_id', '=', activityId)
+    .where('date', '=', dateObj)
+    .executeTakeFirst()
+
+  const groupConducted = groupLog?.status === 'conducted'
+  const billing        = billingMonthOf(date)
 
   for (const rate of rates) {
     const existing = await db
@@ -231,7 +245,12 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       .executeTakeFirst()
 
     const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount)
-    const hasLesson = presentCount > 0 || rate.value_mode === 'percent_of_revenue'
+    let hasLesson = false
+    if (rate.rate_type === 'group_lesson') {
+      hasLesson = groupConducted || rate.value_mode === 'percent_of_revenue'
+    } else {
+      hasLesson = presentCount > 0 || rate.value_mode === 'percent_of_revenue'
+    }
 
     if (!hasLesson || newAmount <= 0) {
       // No lesson or zero revenue → remove existing accrual
