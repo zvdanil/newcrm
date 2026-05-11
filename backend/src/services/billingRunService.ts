@@ -351,12 +351,14 @@ export async function recalcActivityAccruals(
           .execute()
 
         // Soft-delete existing REFUNDs this month where metadata_json source is null
+        // REFUNDs from normal journal ops have billing_month=null, so match by transaction_date range
         await db.updateTable('transactions')
           .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
-          .where('billing_month', '=', billingDate)
+          .where('transaction_date', '>=', billingDate)
+          .where('transaction_date', '<=', new Date(monthLastDay))
           .where(sql`metadata_json->>'source'`, 'is', null)
           .execute()
 
@@ -366,7 +368,8 @@ export async function recalcActivityAccruals(
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
-          .where('billing_month', '=', billingDate)
+          .where('transaction_date', '>=', billingDate)
+          .where('transaction_date', '<=', new Date(monthLastDay))
           .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
