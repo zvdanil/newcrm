@@ -185,6 +185,36 @@
 - [x] GET/PUT /api/activities/:id/smart-tariff
 - [x] Фронтенд: `SmartTariffConfigBlock` (L1 + L2, правило max)
 
+### 4.6б — Биллинг: критические исправления (2026-05-11)
+
+> Обнаружены и устранены системные баги после завершения основного этапа 4.
+
+**billingRunService.ts**
+- [x] `getChildIndividualTariff` + `getEffectivePrice`: `valid_to >=` → `valid_to >` (SCD Type 2 exclusive end — закрытый тариф не залипает на дату закрытия)
+- [x] `recalcActivityAccruals`: добавлен параметр `childId?` — скоупит пересчёт на одного ребёнка
+- [x] `recalcActivityAccruals`: фильтр soft-delete REFUNDs переключён с `billing_month = billingDate` на диапазон `transaction_date` (REFUNDs от журнала имеют `billing_month = null`)
+- [x] `recalcActivityAccruals`: добавлена проверка `effectiveType !== 'smart'` — не создаёт per-absence REFUNDs при смарт-тарифе (смарт использует только `recalcSmartBenefit`)
+- [x] `recalcActivityAccruals`: условие пропуска исправлено с `!== 'monthly'` → `=== 'per_lesson'` (смарт-индивидуальный тариф теперь создаёт ACCRUAL корректно)
+
+**children.ts**
+- [x] `POST/DELETE /:id/individual-tariffs` и `POST/DELETE /:id/prices`: после изменения автоматически запускают `recalcActivityAccruals` — карточка мгновенно пересчитывается без ожидания Billing Run
+- [x] Дефолт `valid_to` при закрытии тарифа изменён на `firstOfCurrentMonth` (не сегодня)
+- [x] `recalcSmartBenefit` вызывается по каждому месяцу при установке / закрытии смарт-индивидуального тарифа
+
+**journals.ts**
+- [x] `reverseRefund`: исправлен с `executeTakeFirst()` → `execute()` + цикл — удаляет ВСЕ активные REFUND для enrollment+date (дубли больше не залипают)
+- [x] `triggerRefund` + `triggerPerLessonAccrual`: `valid_to >=` → `valid_to >` (3 места — согласование с billingRunService)
+- [x] `POST /attendance`: проверка существующего REFUND перед `triggerRefund` — при upsert той же отметки REFUND не дублируется. Проверка для каждой linked-активности
+
+**transactions.ts**
+- [x] `POST /:id/cancel` при ACCRUAL: каскадная очистка:
+  - monthly/smart: soft-delete всех REFUND за enrollment+billing_month + физическое удаление `absent_excused` из `attendance_logs` + каскад на все linked-активности
+  - per_lesson: физическое удаление `present/special` отметки из `attendance_logs` за дату ACCRUAL
+
+**ChildCardPage.tsx**
+- [x] Дефолт `close_date` в форме закрытия тарифа/цены → `firstOfMonth()`
+- [x] `onSuccess` у `setTariffMutation` и `closeTariffMutation`: инвалидация `['balance']` и `['ledger']` — мгновенное обновление UI
+
 ### 4.6 — Pro-rata при Quick Enrollment
 > ⚠️ **Изменение от плана:** реализовано только для `tariff_type = 'monthly'`. Для per_lesson и smart — не применяется (логично по природе этих тарифов).
 
