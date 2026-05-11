@@ -1,3 +1,4 @@
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { createTransaction } from './balanceService.js'
 
@@ -269,4 +270,129 @@ export async function runBilling(billingMonthStr: string, triggeredBy: string | 
 export function currentBillingMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+// ─── Retroactive recalculation for a single activity ─────────────────────────
+
+export async function recalcActivityAccruals(
+  activityId: string,
+  fromDate: Date,
+  toDate: Date,
+  triggeredBy: string | null,
+): Promise<{ adjusted: number; skipped: number }> {
+  const activity = await db
+    .selectFrom('activities')
+    .select('tariff_type')
+    .where('id', '=', activityId)
+    .executeTakeFirst()
+
+  if (!activity) return { adjusted: 0, skipped: 0 }
+
+  let adjusted = 0
+  let skipped = 0
+  const today = new Date().toISOString().slice(0, 10)
+
+  if (activity.tariff_type === 'monthly' || activity.tariff_type === 'smart') {
+    // Re-run billing for each month in range — billMonthlyEnrollment handles ADJUSTMENT
+    const months: string[] = []
+    const cur = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1)
+    const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1)
+    while (cur <= end) {
+      months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`)
+      cur.setMonth(cur.getMonth() + 1)
+    }
+
+    const enrollments = await db
+      .selectFrom('enrollments as e')
+      .select(['e.id as enrollment_id', 'e.child_id', 'e.account_id', 'e.activity_id', 'e.start_date', 'e.status'])
+      .where('e.activity_id', '=', activityId)
+      .where('e.status', 'in', ['active', 'frozen'])
+      .execute()
+
+    for (const monthStr of months) {
+      const billingDate = new Date(monthStr)
+      const monthResult: RunResult = { billing_month: monthStr, created_count: 0, adjusted_count: 0, skipped_count: 0 }
+
+      for (const e of enrollments) {
+        if (new Date(e.start_date as Date) > billingDate) { skipped++; continue }
+        const ind = await getChildIndividualTariff(e.child_id, e.activity_id, billingDate)
+        if (ind && ind.tariff_type !== 'monthly') { skipped++; continue }
+        const price = ind
+          ? Math.round(parseFloat(ind.price as string) * 100) / 100
+          : await getEffectivePrice(e.child_id, e.activity_id, billingDate)
+        if (!price || price <= 0) { skipped++; continue }
+        await billMonthlyEnrollment(e.enrollment_id, e.child_id, e.account_id, e.activity_id, price, monthStr, billingDate, triggeredBy, monthResult)
+      }
+
+      adjusted += monthResult.adjusted_count
+      skipped  += monthResult.skipped_count
+    }
+  } else {
+    // per_lesson: find all ACCRUALs in the period, skip custom_amount overrides
+    const accruals = await db
+      .selectFrom('transactions as t')
+      .innerJoin('enrollments as e', 'e.id', 't.enrollment_id')
+      .select([
+        't.id', 't.amount', 't.child_id', 't.account_id', 't.enrollment_id',
+        't.transaction_date', 't.metadata_json',
+      ])
+      .where('e.activity_id', '=', activityId)
+      .where('t.type', '=', 'ACCRUAL')
+      .where('t.is_deleted', '=', false)
+      .where('t.transaction_date', '>=', fromDate)
+      .where('t.transaction_date', '<=', toDate)
+      .execute()
+
+    for (const tx of accruals) {
+      const meta = tx.metadata_json as Record<string, unknown> | null
+      // Skip if amount was manually set in journal cell
+      if (meta?.custom_amount !== null && meta?.custom_amount !== undefined && meta?.custom_amount !== 'null') {
+        skipped++
+        continue
+      }
+
+      const lessonDate = new Date(String(tx.transaction_date))
+      const newAmount = await getEffectivePrice(tx.child_id, activityId, lessonDate)
+      if (!newAmount) { skipped++; continue }
+
+      const oldAmount = parseFloat(tx.amount as string)
+      const delta = newAmount - oldAmount
+      if (Math.abs(delta) < 0.01) { skipped++; continue }
+
+      // Idempotency: soft-delete previous retro-adjustment for this ACCRUAL
+      await db.updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+        .where('type', '=', 'ADJUSTMENT')
+        .where('is_deleted', '=', false)
+        .where('enrollment_id', '=', tx.enrollment_id as string)
+        .where(sql`metadata_json->>'source'`, '=', 'retro_recalc')
+        .where(sql`metadata_json->>'original_accrual_id'`, '=', tx.id)
+        .execute()
+
+      const lessonDateStr = String(tx.transaction_date).slice(0, 10)
+      await createTransaction({
+        type: 'ADJUSTMENT',
+        child_id: tx.child_id,
+        account_id: tx.account_id as string,
+        activity_id: activityId,
+        enrollment_id: tx.enrollment_id as string,
+        amount: delta,
+        transaction_date: today,
+        billing_month: null,
+        note: delta > 0
+          ? `Доначислення за ${lessonDateStr} (тариф змінено)`
+          : `Зменшення нарахування за ${lessonDateStr} (тариф змінено)`,
+        metadata_json: {
+          source: 'retro_recalc',
+          original_accrual_id: tx.id,
+          original_amount: oldAmount,
+          new_amount: newAmount,
+        },
+        created_by: triggeredBy,
+      })
+      adjusted++
+    }
+  }
+
+  return { adjusted, skipped }
 }

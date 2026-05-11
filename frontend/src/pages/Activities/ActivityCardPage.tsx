@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi } from '../../api/activities.api'
@@ -333,6 +333,8 @@ export function ActivityCardPage() {
   const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: new Date().toISOString().slice(0, 10) })
   const [showTariffForm, setShowTariffForm] = useState(false)
   const [tariffError, setTariffError] = useState<string | null>(null)
+  const [recalcFrom, setRecalcFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [recalcResult, setRecalcResult] = useState<{ adjusted: number; skipped: number } | null>(null)
 
   const [refundForm, setRefundForm] = useState({
     refund_on_excused: false,
@@ -355,6 +357,13 @@ export function ActivityCardPage() {
     queryFn: () => activitiesApi.getTariffHistory(id!),
     enabled: !!id,
   })
+
+  useEffect(() => {
+    if (history.length > 0) {
+      const latest = history.reduce((a, b) => String(a.valid_from) > String(b.valid_from) ? a : b)
+      setRecalcFrom(String(latest.valid_from).slice(0, 10))
+    }
+  }, [history.length])
 
   const { data: refundConfig } = useQuery({
     queryKey: ['activity-refund-config', id],
@@ -380,6 +389,11 @@ export function ActivityCardPage() {
       setTariffError(null)
     },
     onError: () => setTariffError('Помилка при збереженні тарифу'),
+  })
+
+  const recalcMutation = useMutation({
+    mutationFn: () => activitiesApi.retroRecalc(id!, recalcFrom),
+    onSuccess: (result) => setRecalcResult(result),
   })
 
   const refundMutation = useMutation({
@@ -700,6 +714,39 @@ export function ActivityCardPage() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {canEdit && history.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs font-medium text-gray-600 mb-2">Ретроспективний перерахунок</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">від</span>
+              <input
+                type="date"
+                value={recalcFrom}
+                onChange={(e) => { setRecalcFrom(e.target.value); setRecalcResult(null) }}
+                className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+              />
+              <button
+                onClick={() => { setRecalcResult(null); recalcMutation.mutate() }}
+                disabled={recalcMutation.isPending}
+                className="text-xs px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-md transition-colors"
+              >
+                {recalcMutation.isPending ? 'Рахує...' : 'Перерахувати'}
+              </button>
+              {recalcResult && (
+                <span className="text-xs text-gray-600">
+                  {recalcResult.adjusted > 0
+                    ? <span className="text-green-700 font-medium">✓ Скориговано: {recalcResult.adjusted} транзакцій</span>
+                    : <span className="text-gray-400">Нічого не змінилось</span>
+                  }
+                </span>
+              )}
+              {recalcMutation.isError && (
+                <span className="text-xs text-red-500">Помилка перерахунку</span>
+              )}
+            </div>
+          </div>
         )}
       </div>
 

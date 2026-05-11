@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
+import { recalcActivityAccruals } from '../services/billingRunService.js'
 
 export async function activitiesRoutes(app: FastifyInstance) {
   // GET /api/activities?include_archived=true
@@ -280,6 +281,23 @@ export async function activitiesRoutes(app: FastifyInstance) {
         .where('child_activity_id', '=', _req.params.childId)
         .execute()
       return { ok: true }
+    }
+  )
+
+  // POST /api/activities/:id/retro-recalc
+  app.post<{ Params: { id: string }; Body: { from_date: string } }>(
+    '/:id/retro-recalc',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { from_date } = req.body
+      if (!from_date) return reply.status(400).send({ error: 'BadRequest', message: 'from_date є обовʼязковим' })
+
+      const fromDate = new Date(from_date)
+      if (isNaN(fromDate.getTime())) return reply.status(400).send({ error: 'BadRequest', message: 'Невірний формат дати' })
+
+      const toDate = new Date()
+      const result = await recalcActivityAccruals(req.params.id, fromDate, toDate, req.user.sub)
+      return result
     }
   )
 }
