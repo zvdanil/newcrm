@@ -330,18 +330,29 @@ export async function recalcActivityAccruals(
       const monthLastDay = new Date(nextMonth.getTime() - 1).toISOString().slice(0, 10)
 
       for (const e of enrollments) {
+        const softDeleteSet = { is_deleted: true as const, deleted_at: new Date().toISOString(), deleted_by: triggeredBy }
+
         // Soft-delete existing ACCRUAL for this enrollment+billing_month
         await db.updateTable('transactions')
-          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+          .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
           .where('billing_month', '=', billingDate)
           .where('type', '=', 'ACCRUAL')
           .where('is_deleted', '=', false)
           .execute()
 
+        // Soft-delete existing ADJUSTMENTs for this enrollment+billing_month (cleanup old data)
+        await db.updateTable('transactions')
+          .set(softDeleteSet)
+          .where('enrollment_id', '=', e.enrollment_id)
+          .where('billing_month', '=', billingDate)
+          .where('type', '=', 'ADJUSTMENT')
+          .where('is_deleted', '=', false)
+          .execute()
+
         // Soft-delete existing REFUNDs this month where metadata_json source is null
         await db.updateTable('transactions')
-          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+          .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
@@ -351,7 +362,7 @@ export async function recalcActivityAccruals(
 
         // Soft-delete existing REFUNDs this month where source is not smart_benefit
         await db.updateTable('transactions')
-          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+          .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
