@@ -195,17 +195,21 @@ export async function childrenRoutes(app: FastifyInstance) {
         .executeTakeFirst()
       if (!child) return reply.status(404).send({ error: 'NotFound' })
 
-      // Показываем все счета из активных подписок ребёнка (даже если транзакций ещё нет → balance = 0)
       const balances = await db
         .selectFrom('enrollments as e')
         .innerJoin('accounts as a', 'a.id', 'e.account_id')
         .leftJoin('child_balances as cb', (join) =>
           join.onRef('cb.child_id', '=', 'e.child_id').onRef('cb.account_id', '=', 'e.account_id')
         )
+        .leftJoin('initial_balances as ib', (join) =>
+          join.onRef('ib.child_id', '=', 'e.child_id').onRef('ib.account_id', '=', 'e.account_id')
+        )
         .select([
           'e.account_id',
           'a.name as account_name',
           (eb) => eb.fn.coalesce('cb.balance', eb.lit(0)).as('balance'),
+          (eb) => eb.fn.coalesce('ib.amount', eb.lit(0)).as('initial_balance'),
+          'ib.note as initial_balance_note',
           'cb.updated_at',
         ])
         .where('e.child_id', '=', id)

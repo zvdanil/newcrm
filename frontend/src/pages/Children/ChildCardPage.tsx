@@ -1072,6 +1072,26 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                   {num > 0 ? '+' : ''}{num.toFixed(2)} грн
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">{num > 0 ? 'аванс' : num < 0 ? 'борг' : 'нуль'}</p>
+                {(Number(b.initial_balance) !== 0 || b.initial_balance_note) && (
+                  <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-gray-500">Поч. залишок: </span>
+                      <span className="text-xs font-medium text-gray-700">{Number(b.initial_balance).toFixed(2)}</span>
+                    </div>
+                    {canEdit && (
+                      <button 
+                        onClick={() => {
+                          setInitForm({ account_id: b.account_id, amount: String(b.initial_balance), note: b.initial_balance_note ?? '' })
+                          setShowInitForm(true)
+                          setShowPayForm(false)
+                        }}
+                        className="text-xs text-iris-600 hover:text-iris-700 transition-colors"
+                      >
+                        Ред.
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

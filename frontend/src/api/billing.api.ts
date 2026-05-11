@@ -4,6 +4,8 @@ export interface ChildBalance {
   account_id: string
   account_name: string
   balance: string
+  initial_balance: string
+  initial_balance_note: string | null
   updated_at: string
 }
 
