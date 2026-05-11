@@ -11,6 +11,7 @@ import { enrollmentsApi } from '../../api/enrollments.api'
 import { billingApi } from '../../api/billing.api'
 import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
+import { today as todayStr } from '../../utils/dateStr'
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -263,7 +264,7 @@ const TARIFF_TYPE_LABEL: Record<IndTariffType, string> = {
   smart:      'Смарт',
 }
 
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = todayStr()
 
 const EMPTY_TARIFF_FORM = {
   tariff_type:           'monthly' as IndTariffType,
@@ -859,7 +860,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     payment_account_id: '',
     cross_account: false,
     amount: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: todayStr(),
     note: '',
   })
   const [initError, setInitError] = useState<string | null>(null)
@@ -905,7 +906,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   const resetPayForm = () => {
     setPayForm({
       account_id: '', payment_account_id: '', cross_account: false,
-      amount: '', date: new Date().toISOString().slice(0, 10), note: '',
+      amount: '', date: todayStr(), note: '',
     })
     setEditingPaymentId(null)
   }

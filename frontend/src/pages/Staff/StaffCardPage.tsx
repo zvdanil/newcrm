@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { staffApi, type StaffMember, type StaffRate, type SalaryTransaction, type RateType, type RateCategory, type ValueMode } from '../../api/staff.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
+import { today as todayStr, localMonthStr } from '../../utils/dateStr'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -155,7 +156,7 @@ function AddRateForm({ staffId, activities, onDone }: {
   onDone: () => void
 }) {
   const qc = useQueryClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const [form, setForm] = useState({
     activity_id:   '',
     rate_category: 'auto' as RateCategory,
@@ -744,7 +745,7 @@ function TxPopup({ tx, staffId, onClose }: {
 
 function PayForm({ staffId, onDone }: { staffId: string; onDone: () => void }) {
   const qc = useQueryClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const [form, setForm] = useState({ gross_amount: '', transaction_date: today, billing_month: '', note: '' })
   const [error, setError] = useState<string | null>(null)
 
@@ -819,7 +820,7 @@ function ManualAccrualForm({ staffId, rates, onDone }: {
   onDone: () => void
 }) {
   const qc = useQueryClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const manualRates = rates.filter(r => r.rate_category === 'manual' && (!r.valid_to || new Date(r.valid_to) >= new Date()))
   const [form, setForm] = useState({
     rate_id:          manualRates[0]?.id ?? '',
@@ -965,7 +966,7 @@ function ManualAccrualForm({ staffId, rates, onDone }: {
 // ── Block 3: Financial History (calendar grid) ─────────────────────────────
 
 function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean }) {
-  const currentMonth = new Date().toISOString().slice(0, 7)
+  const currentMonth = localMonthStr()
   const [month, setMonth] = useState(currentMonth)
   const [selectedTx, setSelectedTx] = useState<SalaryTransaction | null>(null)
   const [selectedTxGroup, setSelectedTxGroup] = useState<SalaryTransaction[] | null>(null)

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { localDateStr, firstOfMonth } from '../../utils/dateStr'
 import { useQuery } from '@tanstack/react-query'
 import { accountsApi } from '../../api/accounts.api'
 import type { LedgerKind, LedgerRow } from '../../api/accounts.api'
@@ -43,8 +44,8 @@ function fmtBalance(v: string) {
 
 function thisMonthRange() {
   const now = new Date()
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const to   = now.toISOString().slice(0, 10)
+  const from = firstOfMonth(now)
+  const to   = localDateStr(now)
   return { from, to }
 }
 

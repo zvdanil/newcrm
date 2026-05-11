@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, type Expense, type ExpenseCategory } from '../../api/expenses.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
+import { today as todayStr } from '../../utils/dateStr'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -421,7 +422,7 @@ interface ExpenseFormProps {
 
 function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onSave, onCancel }: ExpenseFormProps) {
   const qc = useQueryClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const isEdit = !!initial?.id
 
   const [form, setForm] = useState({
@@ -569,7 +570,7 @@ function TransferForm({ accounts, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const qc = useQueryClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
   const [form, setForm] = useState({
     from_account_id: '', to_account_id: '',
     amount: '', commission: '0', transfer_date: today, note: '',
@@ -668,7 +669,7 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
 }) {
   const qc = useQueryClient()
   const amount = Number(expense.amount)
-  const today  = new Date().toISOString().slice(0, 10)
+  const today  = todayStr()
 
   const [form, setForm] = useState({
     target_account_id: '',

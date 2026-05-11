@@ -2,22 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { staffApi } from '../../api/staff.api'
+import { localMonthStr, shiftMonth } from '../../utils/dateStr'
 
 function fmt(n: number) {
   return n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function prevMonth(m: string) {
-  const d = new Date(m + '-01')
-  d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 7)
-}
-
-function nextMonth(m: string) {
-  const d = new Date(m + '-01')
-  d.setMonth(d.getMonth() + 1)
-  return d.toISOString().slice(0, 7)
-}
+function prevMonth(m: string) { return shiftMonth(m, -1) }
+function nextMonth(m: string) { return shiftMonth(m, 1) }
 
 function monthLabel(m: string) {
   const [y, mo] = m.split('-')
@@ -27,7 +19,7 @@ function monthLabel(m: string) {
 }
 
 export function SalaryJournalPage() {
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [month, setMonth] = useState(() => localMonthStr())
 
   const { data, isLoading } = useQuery({
     queryKey: ['salary-journal', month],

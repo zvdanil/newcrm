@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
+import { today } from '../../utils/dateStr'
 
 import type { Activity } from '../../types'
 
@@ -330,10 +331,10 @@ export function ActivityCardPage() {
   const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, note: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: new Date().toISOString().slice(0, 10) })
+  const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: today() })
   const [showTariffForm, setShowTariffForm] = useState(false)
   const [tariffError, setTariffError] = useState<string | null>(null)
-  const [recalcFrom, setRecalcFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [recalcFrom, setRecalcFrom] = useState(today())
   const [recalcResult, setRecalcResult] = useState<{ replaced: number; refunded: number } | null>(null)
 
   const [refundForm, setRefundForm] = useState({
@@ -385,7 +386,7 @@ export function ActivityCardPage() {
       qc.invalidateQueries({ queryKey: ['activity', id] })
       qc.invalidateQueries({ queryKey: ['activity-tariffs', id] })
       setShowTariffForm(false)
-      setNewTariff({ base_fee: '', valid_from: new Date().toISOString().slice(0, 10) })
+      setNewTariff({ base_fee: '', valid_from: today() })
       setTariffError(null)
     },
     onError: () => setTariffError('Помилка при збереженні тарифу'),

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { familiesApi, type ChildDebt } from '../../api/families.api'
 import { accountsApi } from '../../api/accounts.api'
+import { today } from '../../utils/dateStr'
 
 // ── Debt breakdown + payment form ──────────────────────────────────────────
 
@@ -30,7 +31,7 @@ function WaterfallBlock({ familyId }: { familyId: string }) {
     account_id: '',
     payment_account_id: '',
     amount: '',
-    transaction_date: new Date().toISOString().slice(0, 10),
+    transaction_date: today(),
     note: '',
     mode: 'auto',
     manual: {},
