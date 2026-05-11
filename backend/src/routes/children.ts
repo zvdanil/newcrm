@@ -5,6 +5,7 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
 import { recalcActivityAccruals } from '../services/billingRunService.js'
+import { recalcSmartBenefit } from '../services/smartTariffService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
   // GET /api/children?search=&group_id=&is_active=&limit=&offset=
@@ -593,6 +594,21 @@ export async function childrenRoutes(app: FastifyInstance) {
         const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
         const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
         await recalcActivityAccruals(activity_id, monthStart, curMonthStart, req.user.sub, req.params.id)
+
+        // For smart individual tariffs, also recalculate the smart benefit REFUND for each affected month
+        if (tariff_type === 'smart') {
+          const enrollment = await db.selectFrom('enrollments').select('id')
+            .where('child_id', '=', req.params.id).where('activity_id', '=', activity_id)
+            .where('status', 'in', ['active', 'frozen']).executeTakeFirst()
+          if (enrollment) {
+            const cur = new Date(monthStart)
+            while (cur <= curMonthStart) {
+              const mStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
+              await recalcSmartBenefit(enrollment.id, mStr)
+              cur.setMonth(cur.getMonth() + 1)
+            }
+          }
+        }
       }
 
       return reply.status(201).send(row)

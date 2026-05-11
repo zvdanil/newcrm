@@ -410,7 +410,9 @@ export async function recalcActivityAccruals(
         })
         replaced++
 
-        if (shouldRefund) {
+        // Smart tariffs use recalcSmartBenefit for REFUND — don't create per-absence REFUNDs here
+        const effectiveType = ind?.tariff_type ?? activity.tariff_type
+        if (shouldRefund && effectiveType !== 'smart') {
           const absences = await db
             .selectFrom('attendance_logs')
             .select(['id', 'date'])
