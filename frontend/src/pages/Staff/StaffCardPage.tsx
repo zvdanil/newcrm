@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { staffApi, type StaffMember, type StaffRate, type SalaryTransaction, type RateType, type RateCategory, type ValueMode } from '../../api/staff.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr, localMonthStr } from '../../utils/dateStr'
+import { activitiesApi } from '../../api/activities.api'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ function StaffInfoBlock({ staff }: { staff: StaffMember }) {
   )
 
   return (
-    <form onSubmit={e => { e.preventDefault(); mutation.mutate(form) }}
+    <form onSubmit={e => { e.preventDefault(); mutation.mutate({ ...form, start_date: form.start_date || null }) }}
       className="bg-iris-50 border border-iris-200 rounded-xl p-5 space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -334,10 +335,7 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
 
   const { data: activities = [] } = useQuery({
     queryKey: ['activities-list'],
-    queryFn: async () => {
-      const { data } = await import('../../api/client').then(m => m.apiClient.get<{ id: string; name: string }[]>('/activities'))
-      return data
-    },
+    queryFn: () => activitiesApi.list(),
     staleTime: 60_000,
   })
 
