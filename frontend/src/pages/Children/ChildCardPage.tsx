@@ -693,7 +693,11 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
             {archivedEnrollments.map((e) => (
               <li key={e.id} className="py-2 flex items-center justify-between text-gray-400">
                 <span>{e.activity_name}</span>
-                <span className="text-xs">архів</span>
+                <span className="text-xs">
+                  {e.end_date
+                    ? `відписка ${new Date(e.end_date).toLocaleDateString('uk-UA')}`
+                    : 'архів'}
+                </span>
               </li>
             ))}
           </ul>
@@ -947,6 +951,19 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })
         ?.response?.data?.message ?? 'Помилка скасування'
+      setPayError(msg)
+    },
+  })
+
+  const clearMonthMutation = useMutation({
+    mutationFn: ({ activityId, billingMonth, reason }: { activityId: string; billingMonth: string; reason?: string }) =>
+      billingApi.clearMonthAccruals(childId, activityId, billingMonth, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Помилка скасування'
       setPayError(msg)
     },
   })
@@ -1243,33 +1260,55 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
                   {(() => {
                     const { enriched, unlinkedAdjs } = enrichAccruals(group?.accruals ?? [], group?.adjustments ?? [])
-                    const byActivity = enriched.reduce<Record<string, { orig: number; eff: number; adjusted: boolean }>>((acc, tx) => {
+                    const byActivity = enriched.reduce<Record<string, { orig: number; eff: number; adjusted: boolean; activityId: string | null; billingMonth: string | null; isPerLesson: boolean }>>((acc, tx) => {
                       const key = tx.activity_name ?? '—'
-                      if (!acc[key]) acc[key] = { orig: 0, eff: 0, adjusted: false }
+                      if (!acc[key]) acc[key] = { orig: 0, eff: 0, adjusted: false, activityId: tx.activity_id, billingMonth: tx.billing_month, isPerLesson: tx.billing_month == null }
                       acc[key].orig += tx._orig
                       acc[key].eff  += tx._eff
                       acc[key].adjusted = acc[key].adjusted || tx._adjusted
                       return acc
                     }, {})
                     const unlinkedTotal = unlinkedAdjs.reduce((s, a) => s + Number(a.amount), 0)
+                    // billing_month for the selected month (used as fallback for per_lesson)
+                    const selectedBillingMonth = `${ym}-01`
                     return (
                   <div className="px-4 py-3 space-y-2 text-xs">
                     {/* Accruals grouped by activity — with before→after for adjusted ones */}
                     {enriched.length > 0 && (
                       <div>
                         <p className="text-gray-400 mb-1">Нарахування</p>
-                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted }]) => (
-                          <div key={name} className="flex justify-between py-0.5 gap-2">
+                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => (
+                          <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
                             <span className="text-gray-600 min-w-0 truncate">{name}</span>
-                            {adjusted ? (
-                              <span className="font-mono shrink-0 flex items-center gap-1">
-                                <span className="text-gray-400 line-through">{orig.toFixed(2)}</span>
-                                <span className="text-gray-400">→</span>
-                                <span className="text-red-500">−{eff.toFixed(2)}</span>
-                              </span>
-                            ) : (
-                              <span className="font-mono text-red-500 shrink-0">−{orig.toFixed(2)}</span>
-                            )}
+                            <span className="font-mono shrink-0 flex items-center gap-1">
+                              {adjusted ? (
+                                <>
+                                  <span className="text-gray-400 line-through">{orig.toFixed(2)}</span>
+                                  <span className="text-gray-400">→</span>
+                                  <span className="text-red-500">−{eff.toFixed(2)}</span>
+                                </>
+                              ) : (
+                                <span className="text-red-500">−{orig.toFixed(2)}</span>
+                              )}
+                              {canEdit && activityId && (
+                                <button
+                                  onClick={() => {
+                                    const bm = billingMonth ?? selectedBillingMonth
+                                    if (isPerLesson) {
+                                      if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?\nВсі відмітки в журналі за цей місяць будуть видалені.`)) return
+                                      clearMonthMutation.mutate({ activityId, billingMonth: bm })
+                                    } else {
+                                      const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
+                                      if (reason === null) return
+                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, reason: reason || undefined })
+                                    }
+                                  }}
+                                  disabled={clearMonthMutation.isPending}
+                                  className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity disabled:opacity-30"
+                                  title="Скасувати нарахування"
+                                >✕</button>
+                              )}
+                            </span>
                           </div>
                         ))}
                       </div>
