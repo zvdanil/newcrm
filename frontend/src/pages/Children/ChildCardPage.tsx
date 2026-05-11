@@ -721,6 +721,31 @@ const TX_BADGE: Record<string, string> = {
   ADJUSTMENT: 'bg-amber-50 text-amber-700',
 }
 
+type EnrichedAccrual = LedgerEntry & { _orig: number; _eff: number; _adjusted: boolean }
+
+function enrichAccruals(accruals: LedgerEntry[], adjustments: LedgerEntry[]): {
+  enriched: EnrichedAccrual[]
+  unlinkedAdjs: LedgerEntry[]
+} {
+  const linkedIds = new Set<string>()
+  const enriched: EnrichedAccrual[] = accruals.map(accrual => {
+    const related = adjustments.filter(adj => {
+      const m = adj.metadata_json
+      if (!m) return false
+      if (m['source'] === 'retro_recalc' && m['original_accrual_id'] === accrual.id) return true
+      if (m['adjustment_reason'] === 'tariff_changed' &&
+          adj.enrollment_id === accrual.enrollment_id &&
+          adj.billing_month  === accrual.billing_month) return true
+      return false
+    })
+    related.forEach(a => linkedIds.add(a.id))
+    const delta = related.reduce((s, a) => s + Number(a.amount), 0)
+    const orig  = Number(accrual.amount)
+    return { ...accrual, _orig: orig, _eff: orig + delta, _adjusted: related.length > 0 }
+  })
+  return { enriched, unlinkedAdjs: adjustments.filter(a => !linkedIds.has(a.id)) }
+}
+
 function amountSign(type: string, amount: string) {
   const n = Number(amount)
   if (['PAYMENT', 'REFUND', 'REVERSAL'].includes(type)) return { sign: '+', color: 'text-green-600' as const, value: n }
@@ -1215,21 +1240,35 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     </span>
                   </div>
 
+                  {(() => {
+                    const { enriched, unlinkedAdjs } = enrichAccruals(group?.accruals ?? [], group?.adjustments ?? [])
+                    const byActivity = enriched.reduce<Record<string, { orig: number; eff: number; adjusted: boolean }>>((acc, tx) => {
+                      const key = tx.activity_name ?? '—'
+                      if (!acc[key]) acc[key] = { orig: 0, eff: 0, adjusted: false }
+                      acc[key].orig += tx._orig
+                      acc[key].eff  += tx._eff
+                      acc[key].adjusted = acc[key].adjusted || tx._adjusted
+                      return acc
+                    }, {})
+                    const unlinkedTotal = unlinkedAdjs.reduce((s, a) => s + Number(a.amount), 0)
+                    return (
                   <div className="px-4 py-3 space-y-2 text-xs">
-                    {/* Accruals grouped by activity */}
-                    {(group?.accruals ?? []).length > 0 && (
+                    {/* Accruals grouped by activity — with before→after for adjusted ones */}
+                    {enriched.length > 0 && (
                       <div>
                         <p className="text-gray-400 mb-1">Нарахування</p>
-                        {Object.entries(
-                          group.accruals.reduce<Record<string, number>>((acc, tx) => {
-                            const key = tx.activity_name ?? '—'
-                            acc[key] = (acc[key] ?? 0) + Number(tx.amount)
-                            return acc
-                          }, {})
-                        ).map(([name, total]) => (
-                          <div key={name} className="flex justify-between py-0.5">
-                            <span className="text-gray-600">{name}</span>
-                            <span className="font-mono text-red-500">−{total.toFixed(2)}</span>
+                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted }]) => (
+                          <div key={name} className="flex justify-between py-0.5 gap-2">
+                            <span className="text-gray-600 min-w-0 truncate">{name}</span>
+                            {adjusted ? (
+                              <span className="font-mono shrink-0 flex items-center gap-1">
+                                <span className="text-gray-400 line-through">{orig.toFixed(2)}</span>
+                                <span className="text-gray-400">→</span>
+                                <span className="text-red-500">−{eff.toFixed(2)}</span>
+                              </span>
+                            ) : (
+                              <span className="font-mono text-red-500 shrink-0">−{orig.toFixed(2)}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1240,7 +1279,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       <div>
                         <p className="text-gray-400 mb-1">Повернення</p>
                         {Object.entries(
-                          group.refunds.reduce<Record<string, number>>((acc, tx) => {
+                          (group?.refunds ?? []).reduce<Record<string, number>>((acc, tx) => {
                             const key = tx.activity_name ?? tx.note ?? '—'
                             acc[key] = (acc[key] ?? 0) + Number(tx.amount)
                             return acc
@@ -1254,11 +1293,11 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       </div>
                     )}
 
-                    {/* Adjustments — single total line */}
-                    {(group?.adjustments ?? []).length > 0 && (
+                    {/* Unlinked adjustments only */}
+                    {unlinkedAdjs.length > 0 && (
                       <div className="flex justify-between py-0.5">
                         <span className="text-gray-400">Коригування</span>
-                        <span className="font-mono text-amber-500">{totalAdj >= 0 ? '+' : ''}{totalAdj.toFixed(2)}</span>
+                        <span className="font-mono text-amber-500">{unlinkedTotal >= 0 ? '+' : ''}{unlinkedTotal.toFixed(2)}</span>
                       </div>
                     )}
 
@@ -1325,6 +1364,8 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       <p className="text-gray-400 py-1">Рухів за цей рахунок немає</p>
                     )}
                   </div>
+                  )
+                })()}
                 </div>
               )
             })}
