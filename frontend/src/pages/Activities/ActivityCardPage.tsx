@@ -334,7 +334,7 @@ export function ActivityCardPage() {
   const [showTariffForm, setShowTariffForm] = useState(false)
   const [tariffError, setTariffError] = useState<string | null>(null)
   const [recalcFrom, setRecalcFrom] = useState(new Date().toISOString().slice(0, 10))
-  const [recalcResult, setRecalcResult] = useState<{ adjusted: number; skipped: number } | null>(null)
+  const [recalcResult, setRecalcResult] = useState<{ replaced: number; refunded: number } | null>(null)
 
   const [refundForm, setRefundForm] = useState({
     refund_on_excused: false,
@@ -736,8 +736,11 @@ export function ActivityCardPage() {
               </button>
               {recalcResult && (
                 <span className="text-xs text-gray-600">
-                  {recalcResult.adjusted > 0
-                    ? <span className="text-green-700 font-medium">✓ Скориговано: {recalcResult.adjusted} транзакцій</span>
+                  {recalcResult.replaced > 0 || recalcResult.refunded > 0
+                    ? <span className="text-green-700 font-medium">
+                        Замінено: {recalcResult.replaced} нарахувань
+                        {recalcResult.refunded > 0 ? `, ${recalcResult.refunded} повернень` : ''}
+                      </span>
                     : <span className="text-gray-400">Нічого не змінилось</span>
                   }
                 </span>

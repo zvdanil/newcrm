@@ -296,8 +296,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
       if (isNaN(fromDate.getTime())) return reply.status(400).send({ error: 'BadRequest', message: 'Невірний формат дати' })
 
       const toDate = new Date()
-      const result = await recalcActivityAccruals(req.params.id, fromDate, toDate, req.user.sub)
-      return result
+      return recalcActivityAccruals(req.params.id, fromDate, toDate, req.user.sub)
     }
   )
 }

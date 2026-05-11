@@ -66,8 +66,8 @@ export const activitiesApi = {
     return data
   },
 
-  retroRecalc: async (id: string, from_date: string): Promise<{ adjusted: number; skipped: number }> => {
-    const { data } = await apiClient.post<{ adjusted: number; skipped: number }>(`/activities/${id}/retro-recalc`, { from_date })
+  retroRecalc: async (id: string, from_date: string): Promise<{ replaced: number; refunded: number }> => {
+    const { data } = await apiClient.post<{ replaced: number; refunded: number }>(`/activities/${id}/retro-recalc`, { from_date })
     return data
   },
 }
