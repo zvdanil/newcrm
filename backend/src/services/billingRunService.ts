@@ -26,7 +26,7 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
     .where('cit.child_id', '=', childId)
     .where('cit.activity_id', '=', activityId)
     .where('cit.valid_from', '<=', date)
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', date)]))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', date)]))
     .orderBy('cit.valid_from', 'desc')
     .executeTakeFirst()
 }
@@ -46,7 +46,7 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .where('valid_from', '<=', billingDate)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', billingDate),
+      eb('valid_to', '>', billingDate),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -58,7 +58,7 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .where('valid_from', '<=', billingDate)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', billingDate),
+      eb('valid_to', '>', billingDate),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -82,7 +82,7 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .where('valid_from', '<=', billingDate)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', billingDate),
+      eb('valid_to', '>', billingDate),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()

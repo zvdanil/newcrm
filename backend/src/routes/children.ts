@@ -344,9 +344,25 @@ export async function childrenRoutes(app: FastifyInstance) {
     '/:id/prices/:priceId',
     { preHandler: requireRole('owner', 'admin') },
     async (request, reply) => {
-      const validTo = request.query.valid_to ?? new Date().toISOString().slice(0, 10)
+      const now = new Date()
+      const validTo = request.query.valid_to
+        ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+      const price = await db.selectFrom('child_prices').select('activity_id')
+        .where('id', '=', request.params.priceId).where('child_id', '=', request.params.id).executeTakeFirst()
+
       await db.updateTable('child_prices').set({ valid_to: validTo })
         .where('id', '=', request.params.priceId).where('child_id', '=', request.params.id).where('valid_to', 'is', null).execute()
+
+      if (price) {
+        const validToDate = new Date(validTo)
+        const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const fromDate = new Date(validToDate.getFullYear(), validToDate.getMonth(), 1)
+        if (fromDate <= curMonthStart) {
+          await recalcActivityAccruals(price.activity_id, fromDate, curMonthStart, request.user.sub, request.params.id)
+        }
+      }
+
       return { ok: true }
     }
   )
@@ -648,17 +664,51 @@ export async function childrenRoutes(app: FastifyInstance) {
     }
   )
 
-  // DELETE /api/children/:id/individual-tariffs/:tariffId — close tariff (set valid_to = today)
+  // DELETE /api/children/:id/individual-tariffs/:tariffId — close tariff
   app.delete<{ Params: { id: string; tariffId: string }; Querystring: { valid_to?: string } }>(
     '/:id/individual-tariffs/:tariffId',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const validTo = req.query.valid_to ?? new Date().toISOString().slice(0, 10)
+      const now = new Date()
+      // Default: first of current month — tariff stops from this billing period onwards
+      const validTo = req.query.valid_to
+        ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+
+      const tariff = await db.selectFrom('child_individual_tariffs')
+        .select(['activity_id', 'tariff_type'])
+        .where('id', '=', req.params.tariffId)
+        .where('child_id', '=', req.params.id)
+        .executeTakeFirst()
+
       await db.updateTable('child_individual_tariffs')
         .set({ valid_to: validTo })
         .where('id', '=', req.params.tariffId)
         .where('child_id', '=', req.params.id)
         .execute()
+
+      if (tariff) {
+        const validToDate = new Date(validTo)
+        const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const fromDate = new Date(validToDate.getFullYear(), validToDate.getMonth(), 1)
+        if (fromDate <= curMonthStart) {
+          await recalcActivityAccruals(tariff.activity_id, fromDate, curMonthStart, req.user.sub, req.params.id)
+
+          if (tariff.tariff_type === 'smart') {
+            const enrollment = await db.selectFrom('enrollments').select('id')
+              .where('child_id', '=', req.params.id).where('activity_id', '=', tariff.activity_id)
+              .where('status', 'in', ['active', 'frozen']).executeTakeFirst()
+            if (enrollment) {
+              const cur = new Date(fromDate)
+              while (cur <= curMonthStart) {
+                const mStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
+                await recalcSmartBenefit(enrollment.id, mStr)
+                cur.setMonth(cur.getMonth() + 1)
+              }
+            }
+          }
+        }
+      }
+
       return reply.status(204).send()
     }
   )

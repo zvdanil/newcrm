@@ -11,7 +11,7 @@ import { enrollmentsApi } from '../../api/enrollments.api'
 import { billingApi } from '../../api/billing.api'
 import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
-import { today as todayStr } from '../../utils/dateStr'
+import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -270,7 +270,7 @@ const EMPTY_TARIFF_FORM = {
   tariff_type:           'monthly' as IndTariffType,
   price:                 '',
   valid_from:            TODAY,
-  close_date:            TODAY,
+  close_date:            firstOfMonth(),
   base_lessons:          '',
   l1_threshold_absences: '',
   l1_threshold_fee:      '',
@@ -376,7 +376,12 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
   const closeTariffMutation = useMutation({
     mutationFn: ({ tariffId, validTo }: { tariffId: string; validTo: string }) =>
       childrenApi.closeIndividualTariff(childId, tariffId, validTo),
-    onSuccess:  () => { invalidateTariffs(); setTariffEnrollId(null) },
+    onSuccess:  () => {
+      invalidateTariffs()
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      setTariffEnrollId(null)
+    },
   })
 
   const setDiscountMutation = useMutation({
@@ -398,7 +403,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
       tariff_type:           (existing?.tariff_type ?? 'monthly') as IndTariffType,
       price:                 existing ? String(Number(existing.price).toFixed(0)) : '',
       valid_from:            TODAY,
-      close_date:            TODAY,
+      close_date:            firstOfMonth(),
       base_lessons:          existing?.base_lessons != null ? String(existing.base_lessons) : '',
       l1_threshold_absences: existing?.l1_threshold_absences != null ? String(existing.l1_threshold_absences) : '',
       l1_threshold_fee:      existing?.l1_threshold_fee != null ? String(Number(existing.l1_threshold_fee).toFixed(0)) : '',
