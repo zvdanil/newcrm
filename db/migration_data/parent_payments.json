@@ -1,0 +1,4102 @@
+[
+  {
+    "id": "2a278e7c-f3a8-40a3-ac91-077883778a71",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:27.948179+00"
+  },
+  {
+    "id": "efe131dd-e6fa-402a-94dd-8e869dabe9a6",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:37:56.781835+00"
+  },
+  {
+    "id": "9bab315b-f6d8-43f6-8f85-118081675e31",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:27.08208+00"
+  },
+  {
+    "id": "6dc4aab5-8cbe-4eaa-a2f7-be157fe3e095",
+    "student_id": "03f62f53-ae8e-4462-b718-d28d41560fe9",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:45:08.806089+00"
+  },
+  {
+    "id": "e30a8386-c596-4006-8a24-69a995294597",
+    "student_id": "03f62f53-ae8e-4462-b718-d28d41560fe9",
+    "activity_id": null,
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-01",
+    "description": "За малювання дала готівкою",
+    "created_at": "2026-05-01 15:15:28.334721+00"
+  },
+  {
+    "id": "fc72cc25-6f37-41a9-bdba-cb7081d1bb36",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "980.95",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:12.668687+00"
+  },
+  {
+    "id": "8164cb09-7621-43d6-8288-bb167985c099",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:13.503733+00"
+  },
+  {
+    "id": "e4d7ddba-cfee-49d8-8f79-85176f4a2cc8",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:39:56.952279+00"
+  },
+  {
+    "id": "9302f363-04a6-467a-85bd-ab3270f4602d",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:56.086429+00"
+  },
+  {
+    "id": "cff71092-5eb8-4800-9d61-2fdf3ccb357d",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:51.117729+00"
+  },
+  {
+    "id": "68eec15a-6a6b-42cc-9af7-c19b2bc37c68",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:50.17135+00"
+  },
+  {
+    "id": "c5a194ef-0f2c-4473-a7fb-a95ab5c4a5be",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:59.337842+00"
+  },
+  {
+    "id": "b15b9023-7005-4f36-980f-fdf8fb7d3bc6",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:00.074473+00"
+  },
+  {
+    "id": "708f5255-adaf-4678-9f3c-44d8fd69f74e",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:40.372464+00"
+  },
+  {
+    "id": "92eae441-e147-4526-835e-ba79dabeb480",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:53.059345+00"
+  },
+  {
+    "id": "b48a96d2-e1cd-4903-84a1-488c72bc2cad",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:39:53.610082+00"
+  },
+  {
+    "id": "e01d8032-f714-4098-a663-169c092c3baf",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:20.839647+00"
+  },
+  {
+    "id": "c3d8aecb-b6b5-4562-bf2c-5a7f493cc5ed",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:11.958124+00"
+  },
+  {
+    "id": "8f5bb542-d7ef-41e5-b7b5-b2df78d7ad02",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:37:30.916481+00"
+  },
+  {
+    "id": "8548a3b7-2b2d-4f85-885c-c2a8a5aad5e9",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:19.624236+00"
+  },
+  {
+    "id": "6159df47-0f0b-4478-b30c-8bb017d1d39a",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:24.140321+00"
+  },
+  {
+    "id": "24c740ab-60db-4790-a7d8-9f4235839a34",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:37:52.832626+00"
+  },
+  {
+    "id": "7c502ec3-9802-482f-94b0-e3461fc67de6",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:22.839549+00"
+  },
+  {
+    "id": "03e81980-9ab2-4c66-8ae8-c3b13a8680b3",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "997.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:08.502814+00"
+  },
+  {
+    "id": "d5a4acdf-f757-473d-8d3f-248fe17cedfc",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:41:09.379272+00"
+  },
+  {
+    "id": "85a114be-b806-47d2-9e9f-fa28ff85ff2b",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "666.67",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 11:52:46.732824+00"
+  },
+  {
+    "id": "d462988d-48fe-417b-8640-de9c5dc62b6e",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:38:11.952366+00"
+  },
+  {
+    "id": "69afd176-5372-4e54-9974-9e1e112bf306",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "711.91",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:52:44.719998+00"
+  },
+  {
+    "id": "3e37bcc4-359c-4b44-911c-54f0045de01d",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 11:52:47.293321+00"
+  },
+  {
+    "id": "b7b44e56-52b1-4a46-a5e9-dd5f7558a00a",
+    "student_id": "51c34ed8-c65b-4a46-82dd-9521dc50cd81",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:44:43.63799+00"
+  },
+  {
+    "id": "09b6df4f-6891-44d2-8777-431c33ecfd6f",
+    "student_id": "51c34ed8-c65b-4a46-82dd-9521dc50cd81",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:38.881303+00"
+  },
+  {
+    "id": "e26e2fd9-4110-4fa6-b98d-55604bd2c956",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:41:09.705552+00"
+  },
+  {
+    "id": "bda795df-6d97-4633-b51b-a8f9ad70a4ab",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:08.670652+00"
+  },
+  {
+    "id": "6a753fbd-e548-4712-9f64-9d1b574ef0e8",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "680.95",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:23.484593+00"
+  },
+  {
+    "id": "d1167432-1575-4ba6-9fc8-8f42cace5f2a",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:41:24.616895+00"
+  },
+  {
+    "id": "81ae652f-c01b-4895-ab12-7c07d5e87991",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:26.853941+00"
+  },
+  {
+    "id": "a348897d-5e58-4d63-9e5a-c8af4a5bffd2",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:25.50721+00"
+  },
+  {
+    "id": "7f122e33-8f0f-482b-93f0-cf77c3ab656d",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:05.475046+00"
+  },
+  {
+    "id": "f5be3e35-d0d8-4eb8-8f23-2413f698933d",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:04.66689+00"
+  },
+  {
+    "id": "a6673e9b-be22-4072-938b-7063c17d1ce3",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:39:19.240751+00"
+  },
+  {
+    "id": "ca20cab5-d65f-455a-8442-82b4a174c9ed",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:18.572205+00"
+  },
+  {
+    "id": "9c419e9b-e60c-41a6-af41-1ba91bb64910",
+    "student_id": "6dbfafdc-1366-4da4-82bc-a129634b6173",
+    "activity_id": null,
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "за заняття у  квітні",
+    "created_at": "2026-05-07 12:02:31.862459+00"
+  },
+  {
+    "id": "63a81125-4326-4af4-a0e8-f11b729098c8",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:14.040268+00"
+  },
+  {
+    "id": "b2dc0b5a-df88-47d8-adf9-4eaecce9abe6",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:41:14.838824+00"
+  },
+  {
+    "id": "93e683ff-824c-4834-99bd-94cf606cc0de",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:27.95339+00"
+  },
+  {
+    "id": "819803e4-5bfd-4810-a622-a0bbf4b6350e",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:40.994373+00"
+  },
+  {
+    "id": "1bffe0b9-254a-4d23-9083-bf6490e44711",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:29.986285+00"
+  },
+  {
+    "id": "45787488-7f43-494f-8f9b-54e18c7dcf5d",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:37:59.561306+00"
+  },
+  {
+    "id": "fbdf638e-8b82-4098-8400-1c4367b8f087",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:18.753778+00"
+  },
+  {
+    "id": "f5b2c6c5-a5e4-491e-b71b-addb99f6c1ae",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:20.444307+00"
+  },
+  {
+    "id": "58bf899e-1cba-45fd-aa01-2a3c7a6c5a9d",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:21.694391+00"
+  },
+  {
+    "id": "33332027-5c4f-4a10-b789-292f89df8115",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:09.619141+00"
+  },
+  {
+    "id": "2acf2b53-03b5-486e-a0d3-9ca59fef8d15",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:08.507366+00"
+  },
+  {
+    "id": "b3758343-7091-4545-b9ab-9cbca418cec8",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:09.055057+00"
+  },
+  {
+    "id": "12f0c6e0-01d7-4d9b-8bd6-dd73b2aa00c0",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:44:41.658978+00"
+  },
+  {
+    "id": "c5304a9e-b107-4d00-8b4f-74ecfc80af18",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:19.058684+00"
+  },
+  {
+    "id": "274d2322-1f40-44d2-ac24-01c934c64f0c",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:24.611345+00"
+  },
+  {
+    "id": "11f91ff4-c7a6-40f5-86ed-47c7aeaaa8dd",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:25.93216+00"
+  },
+  {
+    "id": "f5935937-a7bc-4a3f-b6df-c26d7d4cabc9",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:49.468665+00"
+  },
+  {
+    "id": "49978757-713e-4727-8053-92ffe87d98ca",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:37:54.421793+00"
+  },
+  {
+    "id": "a5b04444-ef30-43c2-acf5-a2a7193e939c",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "e4d8e5f5-8852-4ead-b6f9-3507aa901271",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:39:32.772427+00"
+  },
+  {
+    "id": "7f7e9aeb-6688-4341-85aa-2f00ba4531f9",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:51:44.430879+00"
+  },
+  {
+    "id": "ca7167eb-b671-465e-85a0-6bbb272792e3",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1168.57",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:01.757119+00"
+  },
+  {
+    "id": "2f03a32a-8023-46d1-8f4e-a3cf70eb5e2c",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1168.57",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:02.746805+00"
+  },
+  {
+    "id": "25a1a412-3c7f-4b0f-9951-b6d01664ad05",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:52.350169+00"
+  },
+  {
+    "id": "f0ded63f-bb75-4095-a3f6-0193446816f8",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:51:28.399196+00"
+  },
+  {
+    "id": "1a325d67-a852-4cfd-bfd0-eff435b95fd8",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:51.172456+00"
+  },
+  {
+    "id": "9c6ff216-ccee-4a68-9df3-21b21ad27b69",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:29.953183+00"
+  },
+  {
+    "id": "4300f4e0-69ba-409d-9951-790315e45141",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:32.452044+00"
+  },
+  {
+    "id": "bb111c91-020c-4396-b080-3ddeedb039ef",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:31.171882+00"
+  },
+  {
+    "id": "200cfc1e-7c0a-4950-b76c-2e0b7ce701ff",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:38:02.946275+00"
+  },
+  {
+    "id": "f2d0d549-d08a-4f97-972c-3bc89ee6d7c6",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:14.604381+00"
+  },
+  {
+    "id": "f529f9d8-1a0e-440f-8090-791805145ae1",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:15.628523+00"
+  },
+  {
+    "id": "37f0b4d9-2100-42c8-93c5-313276d107bc",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:16.903564+00"
+  },
+  {
+    "id": "65f18501-6ddf-413f-b3bc-8e16f8101b2c",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:20.605493+00"
+  },
+  {
+    "id": "beed0f86-5b65-46a5-879f-4948c03de082",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:18.44331+00"
+  },
+  {
+    "id": "9b895851-56cb-493d-8ff2-08071017be03",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:15.306599+00"
+  },
+  {
+    "id": "664e2cc1-55af-4a29-a6dd-8f5db6c4e1f3",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:31.189943+00"
+  },
+  {
+    "id": "2a01fd11-cac4-43ef-9853-2c99488d5fe6",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:16.611367+00"
+  },
+  {
+    "id": "4fe03b7a-a866-4f82-9f9c-61219faf9239",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:31.911046+00"
+  },
+  {
+    "id": "f6d279ce-127a-4bbd-8224-dbc6841919b9",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "719.05",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:05.926814+00"
+  },
+  {
+    "id": "795153be-2852-4c83-833b-d85f58f96919",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "719.05",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:05.337823+00"
+  },
+  {
+    "id": "9143cafa-ba55-408a-88b6-b8480714f0ef",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:31.785837+00"
+  },
+  {
+    "id": "e39273f8-19f3-49a2-bebe-4b595063a978",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:30.823803+00"
+  },
+  {
+    "id": "087d7187-9986-4211-8ad1-f4f6d273a3f2",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:45.975952+00"
+  },
+  {
+    "id": "fad5b418-9189-4c19-a922-6e0963e342d8",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:45.595775+00"
+  },
+  {
+    "id": "3f020a3e-758b-4eeb-921b-7685e6d1185d",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "922.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:44.724935+00"
+  },
+  {
+    "id": "e162055f-a44a-4797-b2fb-54a3884e5ab4",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "18950.00",
+    "date": "2026-05-01",
+    "description": "царiковська 39/25",
+    "created_at": "2026-05-04 18:36:02.428258+00"
+  },
+  {
+    "id": "7b1c5259-6417-444c-9375-e2ee4cfc8a22",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:44.724694+00"
+  },
+  {
+    "id": "c78c0615-1663-4247-b697-c6a9698e82e3",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:45.330373+00"
+  },
+  {
+    "id": "f21e22cd-3f72-4f1c-8525-9c422a57fdfa",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "922.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:43.867652+00"
+  },
+  {
+    "id": "b991101c-40db-40e6-a8c8-1df21dd535c8",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:26.963318+00"
+  },
+  {
+    "id": "d0a2797b-bf3b-430b-98ed-0a33139093d1",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:44:55.86027+00"
+  },
+  {
+    "id": "ab76a1ca-1a59-4dc3-a4b2-6ed28c3c010b",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:35.240623+00"
+  },
+  {
+    "id": "8aa1f78f-221a-4004-be38-9d00221d7d5a",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:34.833659+00"
+  },
+  {
+    "id": "9e914b1d-2802-4570-a45e-90298144e94e",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:34.312957+00"
+  },
+  {
+    "id": "1f520204-6b99-4982-9730-b899da552e06",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:22.940891+00"
+  },
+  {
+    "id": "aa561bea-8f72-4474-a7e9-ed8db73cef96",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:21.484395+00"
+  },
+  {
+    "id": "f46b3bee-e5de-4c4f-9f33-ec24ffc6eae9",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:22.841737+00"
+  },
+  {
+    "id": "02680f6f-1507-4f83-8ada-85e5db8a2310",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:16.571994+00"
+  },
+  {
+    "id": "d660d1a2-e0c8-4cf2-bd08-f3d18433e480",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:17.827233+00"
+  },
+  {
+    "id": "cf6effd3-a5ba-442a-a3bf-7e5fe06890af",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:48.263759+00"
+  },
+  {
+    "id": "17ae0a9f-f15f-469f-829f-3f8c91e429d5",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:14.474723+00"
+  },
+  {
+    "id": "05293a7e-4063-450a-9539-3ee162b47d15",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:13.435503+00"
+  },
+  {
+    "id": "83ec24bd-2ea7-4df9-b477-31a61eabf2a9",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:55.994103+00"
+  },
+  {
+    "id": "af593181-208d-4829-b250-e65dd8c0d7ff",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:44:47.997672+00"
+  },
+  {
+    "id": "6f6937a3-5c04-4844-9126-7dc8418e8d6c",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:15.932361+00"
+  },
+  {
+    "id": "5e7e468b-d3eb-4cd8-8248-909c0cb7b26f",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:17.303292+00"
+  },
+  {
+    "id": "43ad90fb-0f3e-4074-899b-01e9c9951d7e",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:40.834792+00"
+  },
+  {
+    "id": "005581ce-4ac3-46f0-be8e-9e5112866eba",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:29.144694+00"
+  },
+  {
+    "id": "052f897c-5670-42d8-b297-526d83259531",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:39:29.572975+00"
+  },
+  {
+    "id": "f754183d-b93e-4e18-88e6-ddc4d836b957",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:21.76395+00"
+  },
+  {
+    "id": "08f2d482-c3f9-4679-bbf1-e4c05e4ba1c6",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:41:22.848206+00"
+  },
+  {
+    "id": "77b5e050-0d51-45e7-acf6-d4cf4f4c6889",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:52:59.648111+00"
+  },
+  {
+    "id": "1b1eb967-257e-4671-bc18-93712fba6393",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:27.239727+00"
+  },
+  {
+    "id": "827b8267-f4a7-41bb-ba5c-28aa8887a14c",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:28.498175+00"
+  },
+  {
+    "id": "cefd6233-a616-48df-bb26-76de32540358",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:27.239447+00"
+  },
+  {
+    "id": "9d395a7c-e471-49a6-98b5-caa0bef4b4b2",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:26.364462+00"
+  },
+  {
+    "id": "2ddf0dfd-4175-4127-9adb-5c148a9dd94b",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:39:35.999642+00"
+  },
+  {
+    "id": "0b252f47-1280-4111-a024-68b006fb856b",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "871.43",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:39:35.462808+00"
+  },
+  {
+    "id": "861fbf00-5dc5-4ddc-bff3-374b405f181c",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:17.916182+00"
+  },
+  {
+    "id": "f4a22ab3-e8d0-4f79-8ffa-4edff6ed012c",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-04-30 18:40:18.975798+00"
+  },
+  {
+    "id": "ef4addda-264c-4e9b-bd51-2db5366413cc",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:17.298981+00"
+  },
+  {
+    "id": "4143c063-3f3f-48ef-8acf-3ca0d79ed7d0",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "214a8833-dfdc-4e92-94bd-440ffffc7807",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1400.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 16:53:05.420283+00"
+  },
+  {
+    "id": "bbbd7683-c758-4922-b3cb-a01696e51d13",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "ec218e32-228a-44cc-9d62-b556576fac71",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 11:44:49.316323+00"
+  },
+  {
+    "id": "6c323531-357a-419f-aa09-35f842bca9db",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:41:35.278723+00"
+  },
+  {
+    "id": "9eb5b265-ae8e-47a3-8607-aaae4ae70bb2",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:41:36.276142+00"
+  },
+  {
+    "id": "4cd0e5a3-0d40-4fef-bc7d-9c530f2b5320",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-04-30 18:40:10.844169+00"
+  },
+  {
+    "id": "9549fdf3-79c3-47a9-8945-559740674662",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-01",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-04-30 18:40:11.740514+00"
+  },
+  {
+    "id": "d4d2cfd5-6a89-4549-a3f4-08e72e1d54b4",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:44.559982+00"
+  },
+  {
+    "id": "da75a6be-7c31-4b15-a63c-01b7d9591b90",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:33.491434+00"
+  },
+  {
+    "id": "106eba79-a84e-4951-bf14-5510da301048",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:34.541382+00"
+  },
+  {
+    "id": "7e0edb0e-9422-4229-8ff0-1b973bcef33a",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:38.378136+00"
+  },
+  {
+    "id": "45d2f210-802a-4429-b458-b5e93757d511",
+    "student_id": "03f62f53-ae8e-4462-b718-d28d41560fe9",
+    "activity_id": "ac90aa1c-34b3-4094-b283-dafa413de938",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "700.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:06:12.44919+00"
+  },
+  {
+    "id": "f78824ad-b4ce-403e-b3fe-3bbf0d6e9533",
+    "student_id": "03f62f53-ae8e-4462-b718-d28d41560fe9",
+    "activity_id": null,
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "700.00",
+    "date": "2026-05-04",
+    "description": "Дала готівкою",
+    "created_at": "2026-05-04 14:04:36.385149+00"
+  },
+  {
+    "id": "ea76e12e-21a9-474c-9490-b9fa28ae3f38",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "980.95",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:16.723812+00"
+  },
+  {
+    "id": "fceac851-8487-4fe6-8299-e039db3772c8",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:17.115427+00"
+  },
+  {
+    "id": "680f631e-7f8c-4dbd-8a11-77edb8144ee3",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:32.516701+00"
+  },
+  {
+    "id": "de2c78c9-4628-4b9f-bf52-3048cf1a8cad",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:31.536794+00"
+  },
+  {
+    "id": "be14690c-455f-46e0-883a-245de73b789c",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:51.032451+00"
+  },
+  {
+    "id": "fea88fb4-c39f-4b8a-bc22-7edfd66e29bd",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:12.142383+00"
+  },
+  {
+    "id": "6020ec99-56f8-4f74-92e8-a4c8ff3a9cb9",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:03:11.539461+00"
+  },
+  {
+    "id": "b8e4bbaa-14e2-400e-8607-92a68f277790",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:34.717192+00"
+  },
+  {
+    "id": "6e3a61f1-3c1a-4ee6-9aa0-86c91740546d",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:34.18385+00"
+  },
+  {
+    "id": "f7fd7bbb-f47b-441d-8082-f0ed32d931ca",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:30.415616+00"
+  },
+  {
+    "id": "56df0923-e273-4ac9-a550-7c56826a2841",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "18970.00",
+    "date": "2026-05-04",
+    "description": "Оплата за освiтнi послуги Собора Марiя, по договору #52/25",
+    "created_at": "2026-05-04 18:42:26.488397+00"
+  },
+  {
+    "id": "74680ba2-5f92-49ac-97a0-b97b1b0626ee",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:30.334501+00"
+  },
+  {
+    "id": "ec570744-9c3b-41c6-ab52-d4d18c055676",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:31.002098+00"
+  },
+  {
+    "id": "f1acdb96-780b-48ed-91dd-f7f78ee7987d",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:35.431125+00"
+  },
+  {
+    "id": "f375eab4-cc1a-4be8-98ce-6ccdb686c7ed",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:41.248743+00"
+  },
+  {
+    "id": "2379f5f0-81bf-47fd-bf68-0c41ea5a8607",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:42.259072+00"
+  },
+  {
+    "id": "5ff57506-6c11-4b57-8eb0-e25dfb6f2c84",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:43.268523+00"
+  },
+  {
+    "id": "4456d0cc-3df7-48b6-9ae9-6d357a3afdc0",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "18868.00",
+    "date": "2026-05-04",
+    "description": "Оплата за освiтнi послуги Архипенко Алiни Олександрiвни, номер договору 19/25",
+    "created_at": "2026-05-04 18:40:16.473774+00"
+  },
+  {
+    "id": "0bb6bc3d-84e6-457e-b080-7babeec3f5fe",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:44.568669+00"
+  },
+  {
+    "id": "b4cd428b-a8f1-4ea6-9e23-7705b7c2dffc",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:46.836314+00"
+  },
+  {
+    "id": "02d38975-465b-4920-90f2-45d257de7a37",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:44.552043+00"
+  },
+  {
+    "id": "b2ac20c8-f0e2-4427-ade4-5d705a9ac01d",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:36.76093+00"
+  },
+  {
+    "id": "1fffdf98-73e8-4681-a2e1-8733cf448d71",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:12.498541+00"
+  },
+  {
+    "id": "d04fb9d8-790b-4f7d-adeb-b7194d249651",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 13:14:13.208795+00"
+  },
+  {
+    "id": "18d3e4ab-57e5-4949-ad8d-c02eb295984b",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "666.67",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-04 05:22:56.164514+00"
+  },
+  {
+    "id": "be76ad50-d922-486c-a055-47fce69620bd",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:43.027468+00"
+  },
+  {
+    "id": "c0dc158a-321d-46fc-9e0d-e37f93ed8ac2",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "711.91",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 05:22:54.074835+00"
+  },
+  {
+    "id": "ea93b8c6-640c-4c8c-9281-83513f34bde9",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:57.43464+00"
+  },
+  {
+    "id": "c63fc806-d544-4b38-a2ff-fa71641916d6",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-04 05:22:57.185863+00"
+  },
+  {
+    "id": "f9a5d362-968b-411f-9e27-b85f68c3b398",
+    "student_id": "4452d191-97dc-4f85-bc2a-3e563f9ae509",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "300.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:59.284758+00"
+  },
+  {
+    "id": "7e2a66d7-f746-461a-a28e-f6b994fdaf66",
+    "student_id": "4452d191-97dc-4f85-bc2a-3e563f9ae509",
+    "activity_id": "ac90aa1c-34b3-4094-b283-dafa413de938",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "500.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:05:58.58585+00"
+  },
+  {
+    "id": "cb27de99-6421-4bd4-9368-1274056472f5",
+    "student_id": "51c34ed8-c65b-4a46-82dd-9521dc50cd81",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:24.741039+00"
+  },
+  {
+    "id": "7137c1b0-e247-4b7f-8a69-456ab32fb4af",
+    "student_id": "51c34ed8-c65b-4a46-82dd-9521dc50cd81",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "27240.00",
+    "date": "2026-05-04",
+    "description": "Оплата за освiтнi послуги, Канцедал Марк Олександрович, #77/25",
+    "created_at": "2026-05-04 18:41:33.18425+00"
+  },
+  {
+    "id": "dae4f7b4-cf31-498b-87f6-2e32b54753cc",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:16.404077+00"
+  },
+  {
+    "id": "ecf5deee-5628-468d-bc27-d189b65cafcd",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:59.222123+00"
+  },
+  {
+    "id": "08e629f7-71ab-4ab9-b3b8-7e7fd0f30457",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:15.41248+00"
+  },
+  {
+    "id": "2b47263c-9eaa-46e1-b158-bf638d4467a1",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 13:14:48.466511+00"
+  },
+  {
+    "id": "7a475680-74fa-400b-a406-b639888857a8",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "680.95",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:47.426503+00"
+  },
+  {
+    "id": "80efc9c1-eae4-461d-835f-865c128e1fd5",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:54.236544+00"
+  },
+  {
+    "id": "3c592f84-8996-4f11-a2e3-2c6a72fb88ae",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:52.974909+00"
+  },
+  {
+    "id": "88d48771-7118-49fe-a90b-29db4e3ef52a",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:08.772683+00"
+  },
+  {
+    "id": "acda3f0e-e4ca-48c1-9d75-2f565441e05f",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:59.223266+00"
+  },
+  {
+    "id": "f06a998e-0457-407a-bdcc-c69a86f81b4c",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:07.778604+00"
+  },
+  {
+    "id": "695579f5-c59a-43ad-b496-f3ff4868b05d",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:17.190875+00"
+  },
+  {
+    "id": "05ed163f-790c-4406-8597-a28c577e11b0",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "871.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:16.168468+00"
+  },
+  {
+    "id": "3b58cef2-c4a8-4560-9636-61fb500bb936",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:20.001292+00"
+  },
+  {
+    "id": "5b89ae29-e6ef-4553-9f6e-26acdb13f4cd",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 13:14:20.950447+00"
+  },
+  {
+    "id": "76015efc-c524-4e52-9343-732f8220ccec",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:41.523689+00"
+  },
+  {
+    "id": "fcf8cb17-0b66-4a0b-a6cf-30c4cbbc56e9",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:34.12321+00"
+  },
+  {
+    "id": "6c3a1d48-a6b5-4128-a20c-66b423156851",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:47.487787+00"
+  },
+  {
+    "id": "17a73719-ec70-4398-8a03-992a9278f2b9",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:35.020317+00"
+  },
+  {
+    "id": "07ee29a9-a420-48ec-a0f2-50317f434bdc",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:42.631637+00"
+  },
+  {
+    "id": "7d120655-fdc0-45f7-8211-a526e0d88caf",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:42.132433+00"
+  },
+  {
+    "id": "88ff59ff-10db-485e-b6e5-64774567454a",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "922.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:39.118364+00"
+  },
+  {
+    "id": "b6a7dc2f-f081-4cd2-90fe-9c7d86b2b2ab",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:39.710483+00"
+  },
+  {
+    "id": "9e8870fe-a7f7-42b2-aa56-6d2a60a478ee",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:40.050711+00"
+  },
+  {
+    "id": "f22e7464-3008-453f-bf02-952b2b942d76",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:37.252594+00"
+  },
+  {
+    "id": "4da21df7-cae5-4fc0-b1d7-cb5fa1eb33c5",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "e4d8e5f5-8852-4ead-b6f9-3507aa901271",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-08 11:31:35.860286+00"
+  },
+  {
+    "id": "aad848cf-6570-4c6c-bd97-be12e4e340c6",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:32.926867+00"
+  },
+  {
+    "id": "72aa8948-9d9a-49a4-a1ab-f2805656cc71",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:32.122615+00"
+  },
+  {
+    "id": "2e137302-0f4e-4831-99ba-5a4c9075ef15",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:57.529786+00"
+  },
+  {
+    "id": "637dbdaa-30cb-4df2-b313-ab33ca1ab46a",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1168.57",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:07.38662+00"
+  },
+  {
+    "id": "84abc204-6b8d-4f6d-acfa-d303c9512b05",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1168.57",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:06.588867+00"
+  },
+  {
+    "id": "ad8a8ef3-e4ba-4dc9-835c-0c9b1366141a",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "ac90aa1c-34b3-4094-b283-dafa413de938",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "500.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:05:51.835154+00"
+  },
+  {
+    "id": "60487361-2efa-41ef-b685-7bdf8501a9d1",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:13.101027+00"
+  },
+  {
+    "id": "bff50d31-92a4-4907-aa20-e6cb5b6394aa",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:03:12.161536+00"
+  },
+  {
+    "id": "01a7ee6a-c0bc-4884-a612-77b50f2847c4",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:53.622244+00"
+  },
+  {
+    "id": "5f8ea5f8-77b8-410d-9a79-120ee79e2689",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:42.53053+00"
+  },
+  {
+    "id": "48144b4c-a9d0-45d6-8e75-e32bea86ccf9",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:36.517608+00"
+  },
+  {
+    "id": "202d84d3-4668-4d04-9b97-acbb22ec7c16",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:37.328864+00"
+  },
+  {
+    "id": "8e9bff42-2f27-44fb-a60f-8fdb5d9fa0e7",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:38.55503+00"
+  },
+  {
+    "id": "87d41f93-6df9-405e-929f-de7c7b3571b4",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:44.545634+00"
+  },
+  {
+    "id": "37b71942-c1da-487b-a546-489f918d7345",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "ac90aa1c-34b3-4094-b283-dafa413de938",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "500.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:05:54.299343+00"
+  },
+  {
+    "id": "c6a048a5-f81e-4e8b-b95c-01354865f0eb",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:28.637063+00"
+  },
+  {
+    "id": "3703c1df-b93e-4017-80e2-2bdcb0b10aa2",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:45.475887+00"
+  },
+  {
+    "id": "c88c6044-3e45-4038-9201-d22ad400a0b3",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:43.590181+00"
+  },
+  {
+    "id": "a0d4a446-0f57-4927-8ee2-cd1854f49d5b",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:47.81415+00"
+  },
+  {
+    "id": "40e45d03-c2d5-458e-8523-d968a36a18de",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:48.865165+00"
+  },
+  {
+    "id": "9f153eb2-9d8c-4890-9029-e8d62a9437af",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "19000.00",
+    "date": "2026-05-04",
+    "description": "Мамедов Маiл #58/25 оплата за освiтнi послуги",
+    "created_at": "2026-05-04 18:39:22.700028+00"
+  },
+  {
+    "id": "d1822d38-5b60-4755-87d6-164ddcf5e012",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:37.547942+00"
+  },
+  {
+    "id": "732af918-6668-4729-b513-7b99e1191dce",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "19388.00",
+    "date": "2026-05-04",
+    "description": "Оплата за освiтнi послуги, Шемуда Лев, договiр #43/25",
+    "created_at": "2026-05-04 19:25:47.98119+00"
+  },
+  {
+    "id": "cd2d66c0-4bf0-48f1-bb63-0a0e95a6d1f1",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:37.945353+00"
+  },
+  {
+    "id": "a51863bf-7027-482b-ace9-3f0a1df297de",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:48.299476+00"
+  },
+  {
+    "id": "6a670156-dc9f-4d53-b2d4-ecd8fc09baa9",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "719.05",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:11.639158+00"
+  },
+  {
+    "id": "885bc717-e0ab-45ce-be27-93bb8f4b333c",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "719.05",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:12.461751+00"
+  },
+  {
+    "id": "7e25b11a-8ee4-4f3b-9a02-a9c14630c8a8",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:58.9945+00"
+  },
+  {
+    "id": "ea16c957-7379-4889-88ee-736062b71d6d",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:44.900189+00"
+  },
+  {
+    "id": "3e8e0068-bba4-409c-a33a-eedb2d521631",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:57.951625+00"
+  },
+  {
+    "id": "7159d8c4-fdda-48ff-8de4-699dfdc027d4",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:08.920889+00"
+  },
+  {
+    "id": "a33e9f3a-aa4e-43d8-b133-abc986d6362d",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:03:07.820085+00"
+  },
+  {
+    "id": "5d48b75d-5b9d-4dc1-9b90-f4f37308bbf2",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:08.499974+00"
+  },
+  {
+    "id": "99348beb-d8dc-4ea5-9658-d43fcfe6dffe",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:03:05.02686+00"
+  },
+  {
+    "id": "98309d27-4632-4395-bbdc-834495c2ab9c",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:03:05.452205+00"
+  },
+  {
+    "id": "720528fe-4626-4371-bc7a-92ba50b9c5ba",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "922.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:03:04.345818+00"
+  },
+  {
+    "id": "415c1b19-9491-4f3e-a058-7d6c3fb39a1e",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:59.83516+00"
+  },
+  {
+    "id": "ebcd8f07-48eb-4f5c-9b64-5d5066555dea",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:40.951765+00"
+  },
+  {
+    "id": "057569d1-3520-4b2f-9823-5f0cec843b37",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:37:18.138933+00"
+  },
+  {
+    "id": "a78f9a94-f843-4b24-b57a-019b50dc8665",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "20338.00",
+    "date": "2026-05-04",
+    "description": "Батькiвська плата за iншi освiтнi послуги, Стороженко Теодор Дмитрович ( договiр N4/25)",
+    "created_at": "2026-05-04 13:26:40.149896+00"
+  },
+  {
+    "id": "51a03526-8b54-4583-9c32-c2e40f73fce7",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:01.499843+00"
+  },
+  {
+    "id": "26197223-63af-4f00-98bb-f3f6bc9eff78",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "e2fa5e96-52e0-46bb-abd4-59dcbe0e75a5",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "125.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:39:44.35431+00"
+  },
+  {
+    "id": "d8140cf0-af21-4682-8f5a-ebf4a5ac037c",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:03:00.907731+00"
+  },
+  {
+    "id": "21d20cb5-6076-46c6-a6a4-5c53e9e63ea9",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:51.745654+00"
+  },
+  {
+    "id": "557305b3-8d37-4139-b460-a295dfbfd870",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:56.105002+00"
+  },
+  {
+    "id": "7c0dff10-c3d1-417a-94d2-34e29decee90",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:53.001826+00"
+  },
+  {
+    "id": "3be734bc-8f0b-4395-8a53-9eafe257800a",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-04 05:19:37.393778+00"
+  },
+  {
+    "id": "a8e3611f-7d4c-4368-a65e-e7dab87c2bd0",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "27240.00",
+    "date": "2026-05-04",
+    "description": "Оплата за освiтнi послуги Черноус Ян Андрiйович #54/25, Черноус Вiра Олегiвна",
+    "created_at": "2026-05-04 18:38:29.833615+00"
+  },
+  {
+    "id": "a607a8ec-10a6-49fc-83e5-ebc94e7af7ea",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 05:19:36.11224+00"
+  },
+  {
+    "id": "57d4dc59-8bfb-457e-97cd-926343433889",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:43.584972+00"
+  },
+  {
+    "id": "3575294f-116b-4945-9f9b-ee6f710b629c",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:36.164025+00"
+  },
+  {
+    "id": "de6002fc-8072-48a1-9153-566abf409561",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:43.012359+00"
+  },
+  {
+    "id": "5a849309-87da-413f-bef8-944e9ed1d9a9",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:47.052356+00"
+  },
+  {
+    "id": "79b60d8b-8265-42c6-9676-1a4dd8b04548",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:30.9044+00"
+  },
+  {
+    "id": "cadeced6-d9ed-4472-b22d-513ca1ed5360",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:38:37.155678+00"
+  },
+  {
+    "id": "a7ab6baa-3a2f-4094-8f47-c43ea10bbc49",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:47.922391+00"
+  },
+  {
+    "id": "cf36200e-63b6-4cda-b397-532b3ff3b313",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:16.646317+00"
+  },
+  {
+    "id": "26533435-f0b7-41d9-8e25-64c742b3872e",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:17.718175+00"
+  },
+  {
+    "id": "cd4df297-0d49-4c21-86fd-bdd63d226d28",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:42.632574+00"
+  },
+  {
+    "id": "d6ee4d17-4eb2-4711-9e07-ffc0359dd969",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "ac90aa1c-34b3-4094-b283-dafa413de938",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "500.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:05:46.394116+00"
+  },
+  {
+    "id": "1f4a2c00-b54d-435d-863e-2e5e60020fe3",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:14:43.409147+00"
+  },
+  {
+    "id": "81c8b992-7e0c-4e2e-9dca-e89c487b187a",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:18:43.752954+00"
+  },
+  {
+    "id": "abe07c90-6a09-44c6-ab55-9859a2048523",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "e2fa5e96-52e0-46bb-abd4-59dcbe0e75a5",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:39:43.348723+00"
+  },
+  {
+    "id": "d92c1a4d-2284-495b-bd15-dc9d6a56545b",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:43.846067+00"
+  },
+  {
+    "id": "fba1affd-ad6a-45ad-b786-e43b93cb55de",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 12:02:54.407503+00"
+  },
+  {
+    "id": "c1ab3dd8-8a4b-43e1-b26b-1eabfabd37d7",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:53.700303+00"
+  },
+  {
+    "id": "9fdf5d72-0ab3-46b2-a3a5-1a4931b536a6",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:36.33404+00"
+  },
+  {
+    "id": "ab4234fc-8c5d-4ab8-a15f-4b12f06de88d",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "25560.00",
+    "date": "2026-05-04",
+    "description": "Батькiвська плата за освiтнi послуги у дитячому садочку, Немiлостiвий Олександр Вiталiйович #25/25, Немiлостiвий Вiталiй Олександрович",
+    "created_at": "2026-05-04 18:44:12.829499+00"
+  },
+  {
+    "id": "d960a9d2-8ee4-421d-870c-33803a276226",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:41.179617+00"
+  },
+  {
+    "id": "197a751c-6e8e-4685-812f-aa6c515c6b66",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:54.404831+00"
+  },
+  {
+    "id": "8b527aac-ea6b-46e3-94ee-11e338a7d46d",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:53.697767+00"
+  },
+  {
+    "id": "67859852-09a0-4c9f-a455-f89daa0b14f5",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:19.082129+00"
+  },
+  {
+    "id": "fecfb54b-e4f9-4a44-a08b-957013f8e57b",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:21.262615+00"
+  },
+  {
+    "id": "cebb16fa-bcd7-4c4c-a9ff-9b73b2a3833b",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:48.77758+00"
+  },
+  {
+    "id": "f31b351a-9bb4-4f2c-8320-4e025361dbab",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "4244c711-299d-41a3-acfa-34b16ba89d0b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "200.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 10:16:31.741395+00"
+  },
+  {
+    "id": "3607e545-49fd-4579-b3cd-7eedea9841d5",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:40.013846+00"
+  },
+  {
+    "id": "e18df94a-fb7d-4811-b836-dff493cc4740",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:49.479301+00"
+  },
+  {
+    "id": "782676e2-055d-4160-b299-713a0040ff87",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:47.52422+00"
+  },
+  {
+    "id": "d7d262df-5686-425c-be10-ef3b948a2033",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 13:15:52.420419+00"
+  },
+  {
+    "id": "d198c5ec-1432-440f-b594-466adb37b114",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "e4d8e5f5-8852-4ead-b6f9-3507aa901271",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "400.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-08 11:31:36.749859+00"
+  },
+  {
+    "id": "0a176601-b556-436d-b179-07017039e137",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:15:51.80758+00"
+  },
+  {
+    "id": "7e501aca-44e8-4773-949e-e32d834603b0",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "22200.00",
+    "date": "2026-05-04",
+    "description": "Батькiвська плата за освiтнi послуги згiдно договору 27/25 за Думчикову Арiну Артемiвну, Думчиков Артем Васильович",
+    "created_at": "2026-05-04 18:37:58.729924+00"
+  },
+  {
+    "id": "73b4990a-95a7-470b-b92b-b8cd5179a94c",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-01 12:02:43.935571+00"
+  },
+  {
+    "id": "c07e366a-a3dd-4183-8b27-069d2a313e90",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "0d9fb433-2ff0-4d86-8592-cef62c370f8c",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 12:18:34.459378+00"
+  },
+  {
+    "id": "c2e32ac9-7f5e-4074-9b98-7c728e344a98",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 12:02:43.178998+00"
+  },
+  {
+    "id": "f8699c79-a626-4462-b4e2-40c6bcebfaa4",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "72eb2e26-b13d-43ea-a9cb-b9a6c4ab9ad4",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "150.00",
+    "date": "2026-05-04",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-04 07:42:55.056709+00"
+  },
+  {
+    "id": "9cb3f916-5c61-4e13-8bc5-003b815c6166",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:44.165344+00"
+  },
+  {
+    "id": "2f32af4a-0f6b-4c7a-b0f5-cb6a39f2c751",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:46.666805+00"
+  },
+  {
+    "id": "a77efc83-a739-43d4-8b4a-50ccac272fcf",
+    "student_id": "03673d37-a9cd-46d7-9288-9fffca94d46a",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:29.18746+00"
+  },
+  {
+    "id": "f7659c69-24fd-4860-8ce4-06107bbf1497",
+    "student_id": "03f62f53-ae8e-4462-b718-d28d41560fe9",
+    "activity_id": "1a01764d-5509-445b-a884-dfe08b008979",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:59:21.074604+00"
+  },
+  {
+    "id": "fe2cccac-9c5a-4986-ad40-9a09aab09b72",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:55.596579+00"
+  },
+  {
+    "id": "2f9658c4-a59c-48cd-9db7-6e1afa4ef171",
+    "student_id": "16567e29-998b-46cf-9dad-15df934f1755",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "980.95",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:53.690369+00"
+  },
+  {
+    "id": "4da96b51-a81c-409a-b42e-7d30fdf55340",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:29:53.118677+00"
+  },
+  {
+    "id": "acbf6094-ac2f-4934-856f-eaf58fb18148",
+    "student_id": "1a5f9da7-fbba-4191-a7c5-b2624e60e49a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:51.157576+00"
+  },
+  {
+    "id": "40d4ef2f-a31c-4d1c-a136-42e41187b049",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:38.417739+00"
+  },
+  {
+    "id": "b02f1568-40c8-4ac2-84e1-0193f65ddff8",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "18128.00",
+    "date": "2026-05-05",
+    "description": "Батькiвська плата за освiтнi послуги у дитячому садочку, Дармостук Давид Володимирович #62/25, Дармостук Володимир Володимирович",
+    "created_at": "2026-05-05 20:37:49.590141+00"
+  },
+  {
+    "id": "478779c4-4295-4d67-ab79-566906bd8ca5",
+    "student_id": "1b17173f-6adb-4d21-857b-b39d8287db6f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:39.07029+00"
+  },
+  {
+    "id": "bd2a5740-2256-4375-883e-9be9dca22b1f",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:53.024775+00"
+  },
+  {
+    "id": "2089a962-0841-4475-a5a1-1646c0bbee98",
+    "student_id": "22431252-c387-4091-8c9e-5a9304b36907",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:29:54.532155+00"
+  },
+  {
+    "id": "7eeff292-2311-40af-982f-78f5bc663fcc",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:29:53.101814+00"
+  },
+  {
+    "id": "6ade7bf2-4d4b-4fae-ac81-b51d5de4388f",
+    "student_id": "28bf5631-d682-4724-8341-c7e9f41d7345",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:50.515052+00"
+  },
+  {
+    "id": "ae4c4ec9-62f2-438c-b593-30ec472e5220",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "1a01764d-5509-445b-a884-dfe08b008979",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:59:16.284964+00"
+  },
+  {
+    "id": "15171977-b1f9-4c78-9c6d-ec354b26569b",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:07.611863+00"
+  },
+  {
+    "id": "bf2788f1-135d-46f1-8cf5-860ed83fdae3",
+    "student_id": "2b749a2d-0c0b-4034-b970-a91877d08f0d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:06.578237+00"
+  },
+  {
+    "id": "3f2760b8-200e-4acc-a0ba-0d40aaae4f85",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "17288.00",
+    "date": "2026-05-05",
+    "description": "Оплата за освiтнi послуги Клименко Єва по дог. № 66/25, Клименко Олена Миколаївна",
+    "created_at": "2026-05-06 11:13:43.564328+00"
+  },
+  {
+    "id": "e44f8151-2740-47de-aa27-7981c630b3f0",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:12.205483+00"
+  },
+  {
+    "id": "349862ba-9962-4390-a15a-89f577854e5c",
+    "student_id": "2d5ed718-f567-46dc-8eb7-50e563b9e806",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:11.374142+00"
+  },
+  {
+    "id": "bd5dbbcf-9f70-43b7-92a9-f7ea04fde07b",
+    "student_id": "2db4c9e5-93a6-4932-8ed8-0ce62789f217",
+    "activity_id": "1a01764d-5509-445b-a884-dfe08b008979",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "700.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:59:25.091593+00"
+  },
+  {
+    "id": "f6f90903-1c92-477a-8cb8-47d06f87f8ec",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:30:52.679875+00"
+  },
+  {
+    "id": "f8e416ed-3ab1-4e58-b93f-f2ce260b663d",
+    "student_id": "3df7d7cb-aa62-4359-904a-e315366e15f7",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "997.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:51.659846+00"
+  },
+  {
+    "id": "ffa00eab-f4ed-47c5-80e5-dcc524427134",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:25.803695+00"
+  },
+  {
+    "id": "6a0df0cb-1b0b-4b23-adf9-fe97b46915d5",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "666.67",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:23.568857+00"
+  },
+  {
+    "id": "9df439c7-7925-4be6-894c-d2c7208ed1d4",
+    "student_id": "4002cf44-5d03-440e-99e4-a83c9aba8d1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "711.91",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:21.789877+00"
+  },
+  {
+    "id": "68fcc453-a34a-41b6-86ea-704bb3e56bf5",
+    "student_id": "4e24691d-a9e4-40ea-b7ea-53e9b54e5c00",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "500.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:10.082793+00"
+  },
+  {
+    "id": "5738a5f9-a1e2-4a4d-a51e-b2117473efcc",
+    "student_id": "4e24691d-a9e4-40ea-b7ea-53e9b54e5c00",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-07 12:15:24.001814+00"
+  },
+  {
+    "id": "a755c023-3259-44dc-a0af-5d866a7f8c1c",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:32.106857+00"
+  },
+  {
+    "id": "08661191-a1d6-468f-ad20-d83016e505b1",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "18548.00",
+    "date": "2026-05-05",
+    "description": "Оплата за освiтнi послуги Ткачук Богдан Романович, номер договору #41/25",
+    "created_at": "2026-05-05 20:40:51.652771+00"
+  },
+  {
+    "id": "77c3d3f9-ecef-4661-b46b-7454eb692ad4",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:52.112131+00"
+  },
+  {
+    "id": "ff9b42d3-e267-49ab-8a32-359508d1d32b",
+    "student_id": "541eff18-4a53-4afe-a105-1a2740b0187f",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:53.775734+00"
+  },
+  {
+    "id": "fec90902-c7c6-4388-861d-c52fdcf0c020",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "680.95",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:47.670284+00"
+  },
+  {
+    "id": "113e4162-fd4c-47fb-8cc0-0b8abf1e32ec",
+    "student_id": "57bf9306-14fa-4c8c-952b-ebbe266e6865",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "980.95",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 13:14:49.435508+00"
+  },
+  {
+    "id": "893dac5a-4c8a-44c8-84e9-ad1676d96f61",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:14.932707+00"
+  },
+  {
+    "id": "e116f913-f3f0-4be1-978a-d6a00ab6827c",
+    "student_id": "586dcade-7193-45f6-b92b-7aa760fde5fc",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:11.650935+00"
+  },
+  {
+    "id": "49ec2e18-d84a-433b-8472-5ae76d8b74c5",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:52.685166+00"
+  },
+  {
+    "id": "80651b17-70a5-494d-b9fe-2e5e715e6aaf",
+    "student_id": "63fd53a0-71ac-4e07-b751-770ac4b59126",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:51.037204+00"
+  },
+  {
+    "id": "afd8677f-a98d-422b-82e7-a9cd8878a3db",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:29:38.989757+00"
+  },
+  {
+    "id": "1cb3d231-0249-4cdc-b6f2-f6dbd9178342",
+    "student_id": "6887a604-7141-49e2-8bea-bbfef49b6d59",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:37.955158+00"
+  },
+  {
+    "id": "ae98b2fa-1b43-4826-b858-c878feb8f2e7",
+    "student_id": "6dbfafdc-1366-4da4-82bc-a129634b6173",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:35:27.774086+00"
+  },
+  {
+    "id": "ab83bfd9-6531-4fef-9370-a0824888ed8c",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-01 13:14:23.871451+00"
+  },
+  {
+    "id": "788547b7-9015-47c1-bf51-8e1fa371b2ac",
+    "student_id": "6ee46839-9ddc-486c-8542-ac03d10f17d6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-01 13:14:23.245548+00"
+  },
+  {
+    "id": "755d7445-b1ac-48ee-8644-95d335798c80",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:48.683109+00"
+  },
+  {
+    "id": "52b59d29-d177-40c6-bb45-082ff3c58482",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "17288.00",
+    "date": "2026-05-05",
+    "description": "оплата за освiтнi послуги ДМИТРО НЕСТЕРЕНКО Договiр#34/25",
+    "created_at": "2026-05-05 20:36:27.729805+00"
+  },
+  {
+    "id": "0002ac25-037e-4dfd-8592-4efecbf2fcb4",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:47.565379+00"
+  },
+  {
+    "id": "7218507a-726a-4225-b729-87d86b987dee",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:30.547106+00"
+  },
+  {
+    "id": "96c13cdb-de6c-4b81-b11e-14d8269a0718",
+    "student_id": "7a66c83e-c1ff-4814-b92e-a4a6c563b366",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:34.001124+00"
+  },
+  {
+    "id": "007630b8-3881-427a-8197-6bf6d8e12c96",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:05.009953+00"
+  },
+  {
+    "id": "db88a7c4-904e-4f18-9007-5f63476a75d2",
+    "student_id": "810c68a2-09bb-484d-91b4-84ebc1c32826",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:04.339766+00"
+  },
+  {
+    "id": "6b683cd7-1b9d-4ade-884c-6e07dfbd50c7",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:02.134887+00"
+  },
+  {
+    "id": "df001dee-15ef-465c-9923-3bd9d1cc789c",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:00.154831+00"
+  },
+  {
+    "id": "a8050950-8bf9-4757-be54-787d241b020d",
+    "student_id": "88349dd2-0b1a-4dc3-b5b4-63b5ea619bbd",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:01.106067+00"
+  },
+  {
+    "id": "5d306667-745c-44d3-9f0f-6c51d6f9a20c",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:42.450009+00"
+  },
+  {
+    "id": "9ce63425-e593-4198-83a4-1b6624ecc99b",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "4868.00",
+    "date": "2026-05-05",
+    "description": "Оплата за освiтнi послуги за Ловецкого Артема, номер договору 22/25",
+    "created_at": "2026-05-05 20:40:08.143191+00"
+  },
+  {
+    "id": "4ebc1ab9-6289-470c-b21e-17f30d301741",
+    "student_id": "898b5b19-4911-4e32-83cd-f2838b3135e1",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:43.462436+00"
+  },
+  {
+    "id": "ed736d30-bd39-493e-81ed-0dd805c990ee",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "12068.00",
+    "date": "2026-05-05",
+    "description": "оплата за освiтнi послуги Лопушенко Iлля. номер договору #70/25",
+    "created_at": "2026-05-06 11:12:35.792605+00"
+  },
+  {
+    "id": "e6f5109f-6cc0-44f5-b532-f459132ea26a",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1168.57",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:49.507158+00"
+  },
+  {
+    "id": "41c576ea-8df9-4cee-9aeb-cda9b173f8db",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:28.588437+00"
+  },
+  {
+    "id": "7854decb-8896-44d3-b933-fa4165257e67",
+    "student_id": "89f6d288-59da-4112-a20b-6a42331f373e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1168.57",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:51.658962+00"
+  },
+  {
+    "id": "fe9dc662-1fb7-48d0-9ad9-eee6accfca5a",
+    "student_id": "8a6e3bd2-678d-4bbd-96c7-6fb8f62cba4e",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:34:20.751192+00"
+  },
+  {
+    "id": "ee971ed7-91f6-4bb7-b2f6-adfc547bec88",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:41.089394+00"
+  },
+  {
+    "id": "de9130ca-572b-4299-9583-dcb21d72ddca",
+    "student_id": "8d5f0db6-e18a-4443-a88d-62991cf81a87",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:42.736359+00"
+  },
+  {
+    "id": "2dcdc4ba-0feb-42dd-b32d-a22645f026ed",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:50.681869+00"
+  },
+  {
+    "id": "01c9ff16-5a54-4e89-9cc0-6f24ff0bc542",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "16448.00",
+    "date": "2026-05-05",
+    "description": "оплата за освiтнi послуги Стасюк Г.С. номер договору #56/25",
+    "created_at": "2026-05-05 20:35:54.70272+00"
+  },
+  {
+    "id": "5f0dadd5-a771-4127-94c8-a6c9306f303c",
+    "student_id": "8e3f845b-074b-4699-9660-0155be5ab6bb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:48.683109+00"
+  },
+  {
+    "id": "4adf1d29-6599-4b60-86cb-1101868406da",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:07.781477+00"
+  },
+  {
+    "id": "e6ec1a21-6a4c-421b-9f95-86c1046e5c59",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:12.983299+00"
+  },
+  {
+    "id": "3418c648-8086-40cd-bff4-43b5be8a97c7",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:05.777691+00"
+  },
+  {
+    "id": "75c7a33b-9ee1-4f4d-8849-159188533b61",
+    "student_id": "8e67dace-f633-4615-8162-64c23e5ca2c8",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:08.509477+00"
+  },
+  {
+    "id": "e289e042-b184-4587-8ff6-57fb5a7a878f",
+    "student_id": "908367fb-83ca-4a29-abe0-4aed2c2bc0a3",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:34:27.337016+00"
+  },
+  {
+    "id": "1cee47c8-e8b4-4040-a45e-d6abd283f3dd",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:11.618903+00"
+  },
+  {
+    "id": "f7cdd8c5-ee77-4cb0-a833-56bb345fe7fd",
+    "student_id": "9425d9d3-69e5-43f1-84a1-67768848bdac",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:09.248874+00"
+  },
+  {
+    "id": "2128f1e0-653b-4d46-b052-f81565395691",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:49.62689+00"
+  },
+  {
+    "id": "5ffef50a-dedc-4354-9cec-a6caf7b3d84b",
+    "student_id": "950a7897-4b2c-4451-8d8d-ce30678b703e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:51.744259+00"
+  },
+  {
+    "id": "3db99559-b447-4666-898f-ee736a05da90",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "719.05",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:51.014485+00"
+  },
+  {
+    "id": "e929a3f4-3bd4-4e5a-a638-54fecf59b333",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "719.05",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:52.112213+00"
+  },
+  {
+    "id": "98fce983-8c40-4109-baae-590f1e9660b5",
+    "student_id": "9b508cea-0cb8-4edc-adcf-dc9dda51aa8b",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:30.623819+00"
+  },
+  {
+    "id": "555cd963-9f47-4e82-bfe3-abbc78326fe7",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:22.449613+00"
+  },
+  {
+    "id": "8a8e7e19-953b-425b-95f5-fb857a3a4652",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:16.050859+00"
+  },
+  {
+    "id": "b062cea5-2de7-4029-8967-922a3079d791",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:25.232088+00"
+  },
+  {
+    "id": "91e9d209-5bbe-4e6c-86ec-760143994142",
+    "student_id": "a24fb638-10fe-4a91-898e-26534aeff99a",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:20.669813+00"
+  },
+  {
+    "id": "70612de4-9d07-4a02-84e4-956e6b37847c",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:22.449824+00"
+  },
+  {
+    "id": "961c9109-3039-4c8c-a494-312eb3b0b381",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:25.817294+00"
+  },
+  {
+    "id": "a554ebf9-c62c-41fc-a980-cb2c2334b419",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:24.463341+00"
+  },
+  {
+    "id": "19659728-d8b5-4263-9a53-f3b50f03713c",
+    "student_id": "a2f45ae5-a7d9-40ce-97ae-63c449f89ffb",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:34.738607+00"
+  },
+  {
+    "id": "0e910767-1e79-4bce-b91e-9c75eceddd33",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:30:23.553959+00"
+  },
+  {
+    "id": "e80c5c71-a79d-4ff4-bc5a-c04868e6b9e7",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "922.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:21.790096+00"
+  },
+  {
+    "id": "fc4e063d-e6ca-4b21-b633-107d7f2b3b26",
+    "student_id": "a52d36cb-214d-47f9-9503-6114eb172fd3",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:30:24.625819+00"
+  },
+  {
+    "id": "793b4a09-732f-42fd-ac0a-090e2073394a",
+    "student_id": "b7a034ea-84e5-4889-b49e-a1bd23911da1",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "500.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:34:17.950587+00"
+  },
+  {
+    "id": "15b02015-8f79-4c3c-94bc-a0cea38253de",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:22.446994+00"
+  },
+  {
+    "id": "588043c0-9f4e-48ee-853b-22d829f66a7d",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:21.202099+00"
+  },
+  {
+    "id": "25ee1725-ae79-4131-b326-b8e1a6702f0e",
+    "student_id": "b9412f42-b7c8-4aca-bcd4-a00080d4275c",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:23.519826+00"
+  },
+  {
+    "id": "16a5bf91-9dc4-4d86-bd4e-86ffcfcbaed1",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "17708.00",
+    "date": "2026-05-05",
+    "description": "оплата за освiтнi послуги Мельникової Емiлiї, договiр #20/25",
+    "created_at": "2026-05-05 20:39:16.634447+00"
+  },
+  {
+    "id": "a27de698-4f1f-4d98-9975-52af3cf38507",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:12.793666+00"
+  },
+  {
+    "id": "8d89288e-aa7e-4036-a39b-17666ce63009",
+    "student_id": "bd9d25ab-86aa-4f15-a4f2-c1bfee0e1f6e",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:10.065771+00"
+  },
+  {
+    "id": "3b0ee67a-8321-427a-9935-272bbc6b5ff3",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:00.162791+00"
+  },
+  {
+    "id": "7571bd39-293d-4203-85fe-00907389e5e4",
+    "student_id": "be9836cd-8b49-4ba6-9135-d662186e8845",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:59.061645+00"
+  },
+  {
+    "id": "ef5c07e5-bc64-4cde-9ecc-6dede8f4d9ce",
+    "student_id": "c3b249c4-4216-45aa-9479-283549ee4b77",
+    "activity_id": "b2d47a92-fcff-41fa-9ade-36b27ec6163c",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "200.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 13:42:33.887365+00"
+  },
+  {
+    "id": "11530dab-7809-4b64-9559-eb01dcfcd7f8",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:05.955502+00"
+  },
+  {
+    "id": "2a9d506d-9f1e-47bd-a20d-9f03759547db",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:03.798335+00"
+  },
+  {
+    "id": "51d114a4-b15f-4e0f-9253-bfce90713336",
+    "student_id": "c4f9e7b4-6800-4aad-a75e-dcc221d6c2cf",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "13508.00",
+    "date": "2026-05-05",
+    "description": "оплата за освiтнi послуги Козак Данiель #21/25, Павленко Сергей Сергеевич",
+    "created_at": "2026-05-05 20:38:47.39384+00"
+  },
+  {
+    "id": "14d2fb06-fa8f-42bc-824b-d16f5ec5c9e7",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:08.524125+00"
+  },
+  {
+    "id": "285517f0-e174-4760-bc0b-fb44564a12ba",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:05.833624+00"
+  },
+  {
+    "id": "484671fa-8a1d-4fe5-a222-45c78f01c480",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "400.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:13.424042+00"
+  },
+  {
+    "id": "59e027ae-9340-4c21-b53d-0cb2d3911fcf",
+    "student_id": "cc169f9d-3456-42ce-94b3-471110bf0de6",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "17288.00",
+    "date": "2026-05-05",
+    "description": "Рiчний внесок Батькiвська плата за освiтнi послуги у дит.садку Лопушенко Єгор Договiр 15/25",
+    "created_at": "2026-05-06 11:11:46.687169+00"
+  },
+  {
+    "id": "c477f98b-ce8c-441c-a092-11db937b08ef",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:39.108743+00"
+  },
+  {
+    "id": "8c32feff-1266-4edf-95ae-c696bf09c918",
+    "student_id": "de6a5788-5d10-4ee9-84b0-7a54db4f3092",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:29:40.143475+00"
+  },
+  {
+    "id": "bb9eb427-e5d9-4328-aae4-b7d74f16115b",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:11.523814+00"
+  },
+  {
+    "id": "16841a81-43db-4018-a9a9-0b350dda9f15",
+    "student_id": "e0267646-85c4-4020-bcae-f80a85d03b1d",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:09.997009+00"
+  },
+  {
+    "id": "af01f866-1959-494b-b60e-0b86e90e24f7",
+    "student_id": "e3bd0c94-21c7-4e12-9a66-e90c20e0f320",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "500.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-07 12:11:54.576135+00"
+  },
+  {
+    "id": "54677a5d-0d6b-4e56-8339-d3d3c20a1f39",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:30:21.212607+00"
+  },
+  {
+    "id": "67b0cd1f-e762-46da-a824-f494176b785a",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:19.497307+00"
+  },
+  {
+    "id": "ce143ee1-db75-42a9-91b6-a8f526d4ff04",
+    "student_id": "e58a60e0-d3bc-4bbc-8dad-446ef8001ee5",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "11408.00",
+    "date": "2026-05-05",
+    "description": "Оплата за освiтнi послуги, Римарчук  Веронiка, договiр 71/25, Римарчук Сергiй Анатолiйович",
+    "created_at": "2026-05-05 20:37:08.795742+00"
+  },
+  {
+    "id": "84792c5b-7f43-42fa-8fce-5df07198766f",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "877.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:16.066555+00"
+  },
+  {
+    "id": "d630ecfb-5243-48c6-a9f9-b0b7077ba3c7",
+    "student_id": "e73d03aa-f7c5-421c-9c9a-2ee7b8c3c8cb",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (відсутність)",
+    "created_at": "2026-05-05 08:30:19.47559+00"
+  },
+  {
+    "id": "cb31dfd3-69ce-4a84-b237-61f50447eb21",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "ee6dc02d-4929-4cf7-a4e3-4e1e08a4172b",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:29:47.41666+00"
+  },
+  {
+    "id": "96da80db-d252-440a-94df-9f7813a89e3c",
+    "student_id": "eea92b8c-20b2-4a3c-a7e0-4c6d30aa68a3",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1171.43",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:29:44.247102+00"
+  },
+  {
+    "id": "42539fd9-898a-47fa-98eb-8bfa01e9c787",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:09.255349+00"
+  },
+  {
+    "id": "1918d72a-8b4b-4f41-bb53-0d11ca932272",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1342.38",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:07.775836+00"
+  },
+  {
+    "id": "902cce4f-a1d0-4c5a-aba5-031281f9924e",
+    "student_id": "f4ab5557-8773-4725-94cc-61b6869e8430",
+    "activity_id": "556fd937-223c-47ea-80cf-d10ee5f0434a",
+    "account_id": "2002f749-002a-4ff5-82be-62b5c67ae396",
+    "amount": "45.24",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:10.07433+00"
+  },
+  {
+    "id": "7f8e1c9d-91bc-4c6c-a4b7-d41c823fc9c7",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:32.289646+00"
+  },
+  {
+    "id": "131ce273-afd8-4b85-a26d-97106c7b9374",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:31:50.673197+00"
+  },
+  {
+    "id": "1330aa9a-1e3c-4c5a-95a7-0958f85de424",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:31:51.895231+00"
+  },
+  {
+    "id": "22fd3ab6-623b-4322-bc84-313d9bb0b72d",
+    "student_id": "f6d4bd94-f2b0-4cce-af40-5b962c845779",
+    "activity_id": null,
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "17288.00",
+    "date": "2026-05-05",
+    "description": "Оплата за освiтнi послуги Шляхта Адрiана Станiславiвна зг.дог. N10/25",
+    "created_at": "2026-05-06 11:10:53.994987+00"
+  },
+  {
+    "id": "de1eefa8-54c9-4055-a3c2-42eebab995de",
+    "student_id": "fe28458d-b35c-4d2e-bc21-097d0dbe1139",
+    "activity_id": "3b4b5474-9b91-4545-8941-e62bf86630dd",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "500.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 11:14:01.22516+00"
+  },
+  {
+    "id": "31c66113-d1a3-40c7-9bbc-69f2497f6993",
+    "student_id": "fe28458d-b35c-4d2e-bc21-097d0dbe1139",
+    "activity_id": "b5c722f6-4b5d-4c85-9edc-2b91c679ba5d",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 15:58:17.475398+00"
+  },
+  {
+    "id": "ad90122e-3598-42c9-964c-c0c39bdc42f6",
+    "student_id": "fe28458d-b35c-4d2e-bc21-097d0dbe1139",
+    "activity_id": "f85303b2-afb3-414c-b066-9e639f141912",
+    "account_id": "0847a033-2778-4b08-8baf-3480e2812649",
+    "amount": "350.00",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:48:16.347941+00"
+  },
+  {
+    "id": "4492030f-b82e-4fb3-9f8b-fcb2c7ca2b56",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "079a2f42-a33e-4bec-8240-10e85596392c",
+    "account_id": null,
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування",
+    "created_at": "2026-05-05 08:30:00.336546+00"
+  },
+  {
+    "id": "9c413c8e-276e-49d5-a25f-9c5cf0ec1464",
+    "student_id": "ff2f46b3-89c7-437b-8ce3-dfd74002b582",
+    "activity_id": "ffe4bf7e-b470-4be9-b020-d20f7439b52a",
+    "account_id": "14ac9f2f-0749-4983-9967-0fef41582caf",
+    "amount": "1297.14",
+    "date": "2026-05-05",
+    "description": "Нарахування за відвідування (присутність)",
+    "created_at": "2026-05-05 08:30:01.991256+00"
+  }
+]
