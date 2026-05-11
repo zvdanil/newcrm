@@ -1,5 +1,5 @@
 import { db } from '../db/index.js'
-import { createTransaction } from './balanceService'
+import { createTransaction } from './balanceService.js'
 
 interface RunResult {
   billing_month: string

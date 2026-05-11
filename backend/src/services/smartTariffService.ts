@@ -1,7 +1,7 @@
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
-import { createTransaction, recalcBalance } from './balanceService'
-import { getChildIndividualTariff } from './billingRunService'
+import { createTransaction, recalcBalance } from './balanceService.js'
+import { getChildIndividualTariff } from './billingRunService.js'
 
 type SmartConfig = {
   base_lessons:          number | null
