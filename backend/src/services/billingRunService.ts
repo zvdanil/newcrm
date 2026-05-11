@@ -339,15 +339,24 @@ export async function recalcActivityAccruals(
           .where('is_deleted', '=', false)
           .execute()
 
-        // Soft-delete existing REFUNDs this month (skip smart_benefit)
+        // Soft-delete existing REFUNDs this month where metadata_json source is null
         await db.updateTable('transactions')
           .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
-          .where('transaction_date', '>=', new Date(monthStr))
-          .where('transaction_date', '<=', new Date(monthLastDay))
-          .where(sql<boolean>`(metadata_json->>'source' IS NULL OR metadata_json->>'source' != 'smart_benefit')`)
+          .where('billing_month', '=', billingDate)
+          .where(sql`metadata_json->>'source'`, 'is', null)
+          .execute()
+
+        // Soft-delete existing REFUNDs this month where source is not smart_benefit
+        await db.updateTable('transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+          .where('enrollment_id', '=', e.enrollment_id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('billing_month', '=', billingDate)
+          .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
         if (new Date(String(e.start_date)).getTime() > billingDate.getTime()) {
