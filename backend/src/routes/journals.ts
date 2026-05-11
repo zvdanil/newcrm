@@ -29,7 +29,7 @@ async function triggerRefund(
       .select('base_fee')
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', new Date(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst(),
   ])
@@ -68,20 +68,21 @@ async function triggerRefund(
 async function reverseRefund(enrollmentId: string, accountId: string, childId: string, date: string, deletedBy: string | null): Promise<void> {
   const existing = await db
     .selectFrom('transactions')
-    .select(['id', 'account_id'])
+    .select('id')
     .where('enrollment_id', '=', enrollmentId)
     .where('type', '=', 'REFUND')
     .where('transaction_date', '=', new Date(date))
     .where('is_deleted', '=', false)
-    .executeTakeFirst()
-
-  if (!existing) return
-
-  await db
-    .updateTable('transactions')
-    .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: deletedBy })
-    .where('id', '=', existing.id)
     .execute()
+
+  if (existing.length === 0) return
+
+  for (const tx of existing) {
+    await db.updateTable('transactions')
+      .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: deletedBy })
+      .where('id', '=', tx.id)
+      .execute()
+  }
 
   await recalcBalance(childId, accountId)
 }
@@ -113,7 +114,7 @@ async function triggerPerLessonAccrual(
       .select('base_fee')
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', new Date(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -126,7 +127,7 @@ async function triggerPerLessonAccrual(
       .where('child_id', '=', childId)
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', new Date(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -389,9 +390,25 @@ export async function journalsRoutes(app: FastifyInstance) {
       if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special')) {
         await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, indPrice, createdBy)
       } else if (effectiveTariffType === 'monthly' && status === 'absent_excused') {
-        await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, createdBy)
-        for (const le of log.linkedEnrollments) {
-          await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, createdBy)
+        const existingRefund = await db.selectFrom('transactions').select('id')
+          .where('enrollment_id', '=', enrollment_id)
+          .where('type', '=', 'REFUND')
+          .where('transaction_date', '=', new Date(date))
+          .where('is_deleted', '=', false)
+          .executeTakeFirst()
+        if (!existingRefund) {
+          await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, createdBy)
+          for (const le of log.linkedEnrollments) {
+            const leExistingRefund = await db.selectFrom('transactions').select('id')
+              .where('enrollment_id', '=', le.id)
+              .where('type', '=', 'REFUND')
+              .where('transaction_date', '=', new Date(date))
+              .where('is_deleted', '=', false)
+              .executeTakeFirst()
+            if (!leExistingRefund) {
+              await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, createdBy)
+            }
+          }
         }
       } else if (effectiveTariffType === 'smart') {
         const billingMonth = date.slice(0, 7) + '-01'
