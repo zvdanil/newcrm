@@ -381,7 +381,7 @@ export async function recalcActivityAccruals(
         }
 
         const ind = await getChildIndividualTariff(e.child_id, activityId, billingDate)
-        if (ind && ind.tariff_type !== 'monthly') {
+        if (ind && ind.tariff_type === 'per_lesson') {
           await recalcBalance(e.child_id, e.account_id)
           continue
         }
