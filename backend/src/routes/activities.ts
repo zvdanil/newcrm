@@ -19,7 +19,22 @@ export async function activitiesRoutes(app: FastifyInstance) {
         ])
         .orderBy('a.name', 'asc')
       if (!includeArchived) query = query.where('a.is_active', '=', true)
-      return query.execute()
+      const activities = await query.execute()
+      if (activities.length === 0) return []
+
+      const ids = activities.map(a => a.id)
+      const tariffs = await db.selectFrom('tariffs')
+        .selectAll()
+        .where('activity_id', 'in', ids)
+        .where('valid_to', 'is', null)
+        .execute()
+
+      const tariffMap = Object.fromEntries(tariffs.map(t => [t.activity_id, t]))
+
+      return activities.map(a => ({
+        ...a,
+        current_tariff: tariffMap[a.id] ?? null
+      }))
     }
   )
 
