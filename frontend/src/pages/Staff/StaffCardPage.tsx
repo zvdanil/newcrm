@@ -546,6 +546,56 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
 
 // ── Salary Transaction Popup ───────────────────────────────────────────────
 
+function PaymentGroupPopup({ txs, staffId, onClose }: {
+  txs: SalaryTransaction[]
+  staffId: string
+  onClose: () => void
+}) {
+  const qc = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => staffApi.deleteAccrual(staffId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['salary', staffId] }),
+    onError: () => setError('Помилка видалення'),
+  })
+
+  const total = txs.reduce((s, t) => s + Number(t.gross_amount), 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Виплати за {String(txs[0].transaction_date).slice(0, 10)}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <div className="space-y-2">
+          {txs.map(tx => (
+            <div key={tx.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+              <div className="space-y-0.5">
+                <p className="text-sm font-mono text-green-700">{fmt(tx.gross_amount)}</p>
+                {tx.note && <p className="text-xs text-gray-500">{tx.note}</p>}
+              </div>
+              <button
+                onClick={() => deleteMutation.mutate(tx.id)}
+                disabled={deleteMutation.isPending}
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+              >
+                Видалити
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between pt-2 border-t border-gray-100">
+          <span className="text-sm text-gray-600">Разом</span>
+          <span className="text-sm font-mono font-semibold text-green-700">{fmt(total)}</span>
+        </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+      </div>
+    </div>
+  )
+}
+
 function TxPopup({ tx, staffId, onClose }: {
   tx: SalaryTransaction
   staffId: string
@@ -918,6 +968,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const currentMonth = new Date().toISOString().slice(0, 7)
   const [month, setMonth] = useState(currentMonth)
   const [selectedTx, setSelectedTx] = useState<SalaryTransaction | null>(null)
+  const [selectedTxGroup, setSelectedTxGroup] = useState<SalaryTransaction[] | null>(null)
   const [showPay, setShowPay]             = useState(false)
   const [showManual, setShowManual]       = useState(false)
 
@@ -1074,7 +1125,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                       return (
                         <td key={d} className="px-0.5 py-1 text-center">
                           {total > 0 ? (
-                            <button onClick={() => setSelectedTx(dayPays[0])}
+                            <button
+                              onClick={() => dayPays.length === 1 ? setSelectedTx(dayPays[0]) : setSelectedTxGroup(dayPays)}
                               className="w-full rounded px-0.5 py-0.5 font-mono bg-green-100 text-green-800 hover:bg-green-200">
                               {total % 1 === 0 ? total : total.toFixed(0)}
                             </button>
@@ -1113,6 +1165,14 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
       {selectedTx && (
         <TxPopup tx={selectedTx} staffId={staffId} onClose={() => setSelectedTx(null)} />
+      )}
+
+      {selectedTxGroup && (
+        <PaymentGroupPopup
+          txs={selectedTxGroup}
+          staffId={staffId}
+          onClose={() => setSelectedTxGroup(null)}
+        />
       )}
     </div>
   )
