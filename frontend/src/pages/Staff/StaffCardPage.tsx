@@ -743,7 +743,7 @@ function TxPopup({ tx, staffId, onClose }: {
 
 // ── Pay Form ───────────────────────────────────────────────────────────────
 
-function PayForm({ staffId, onDone }: { staffId: string; onDone: () => void }) {
+export function PayForm({ staffId, onDone }: { staffId: string; onDone: () => void }) {
   const qc = useQueryClient()
   const today = todayStr()
   const [form, setForm] = useState({ gross_amount: '', transaction_date: today, billing_month: '', note: '' })
@@ -814,7 +814,7 @@ const QUANTITY_LABEL: Partial<Record<RateType, string>> = {
 }
 
 
-function ManualAccrualForm({ staffId, rates, onDone }: {
+export function ManualAccrualForm({ staffId, rates, onDone }: {
   staffId: string
   rates: StaffRate[]
   onDone: () => void

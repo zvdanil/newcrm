@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { staffApi } from '../../api/staff.api'
+import { PayForm, ManualAccrualForm } from '../Staff/StaffCardPage'
 import { localMonthStr, shiftMonth } from '../../utils/dateStr'
 
 function fmt(n: number) {
@@ -18,8 +19,40 @@ function monthLabel(m: string) {
   return `${names[Number(mo) - 1]} ${y}`
 }
 
+function AccrualModalWrapper({ staffId, onDone }: { staffId: string, onDone: () => void }) {
+  const { data: rates = [], isLoading } = useQuery({
+    queryKey: ['staff-rates', staffId],
+    queryFn: () => staffApi.getRates(staffId),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-gray-400">Завантаження...</div>
+        ) : (
+          <ManualAccrualForm staffId={staffId} rates={rates} onDone={onDone} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PayModalWrapper({ staffId, onDone }: { staffId: string, onDone: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+        <PayForm staffId={staffId} onDone={onDone} />
+      </div>
+    </div>
+  )
+}
+
 export function SalaryJournalPage() {
+  const qc = useQueryClient()
   const [month, setMonth] = useState(() => localMonthStr())
+  const [payStaffId, setPayStaffId] = useState<string | null>(null)
+  const [accrualStaffId, setAccrualStaffId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['salary-journal', month],
@@ -41,6 +74,25 @@ export function SalaryJournalPage() {
 
   return (
     <div className="space-y-6">
+      {payStaffId && (
+        <PayModalWrapper 
+          staffId={payStaffId} 
+          onDone={() => { 
+            setPayStaffId(null)
+            qc.invalidateQueries({ queryKey: ['salary-journal'] })
+          }} 
+        />
+      )}
+      {accrualStaffId && (
+        <AccrualModalWrapper 
+          staffId={accrualStaffId} 
+          onDone={() => { 
+            setAccrualStaffId(null)
+            qc.invalidateQueries({ queryKey: ['salary-journal'] })
+          }} 
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -84,11 +136,12 @@ export function SalaryJournalPage() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">До виплати (net)</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Виплачено</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Залишок</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map(r => (
-                <tr key={r.id} className="hover:bg-gray-50">
+                <tr key={r.id} className="hover:bg-gray-50 group">
                   <td className="px-4 py-3">
                     <Link
                       to={`/staff/${r.id}`}
@@ -120,6 +173,16 @@ export function SalaryJournalPage() {
                       {r.summary.balance < 0 ? `−${fmt(Math.abs(r.summary.balance))}` : fmt(r.summary.balance)}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setAccrualStaffId(r.id)} className="text-xs px-2.5 py-1.5 border border-iris-200 text-iris-600 rounded-lg hover:bg-iris-50 font-medium">
+                        + Нарахування
+                      </button>
+                      <button onClick={() => setPayStaffId(r.id)} className="text-xs px-2.5 py-1.5 bg-green-700 text-white rounded-lg hover:bg-green-800 font-medium">
+                        Виплата ЗП
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -140,6 +203,7 @@ export function SalaryJournalPage() {
                     {totals.balance < 0 ? `−${fmt(Math.abs(totals.balance))}` : fmt(totals.balance)}
                   </span>
                 </td>
+                <td className="px-4 py-3"></td>
               </tr>
             </tfoot>
           </table>
