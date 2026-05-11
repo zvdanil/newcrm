@@ -288,6 +288,7 @@ export async function recalcActivityAccruals(
   fromDate: Date,
   toDate: Date,
   triggeredBy: string | null,
+  childId?: string,
 ): Promise<{ replaced: number; refunded: number }> {
   const activity = await db
     .selectFrom('activities')
@@ -317,12 +318,13 @@ export async function recalcActivityAccruals(
       cur.setMonth(cur.getMonth() + 1)
     }
 
-    const enrollments = await db
+    let enrollmentsQ = db
       .selectFrom('enrollments as e')
       .select(['e.id as enrollment_id', 'e.child_id', 'e.account_id', 'e.start_date'])
       .where('e.activity_id', '=', activityId)
       .where('e.status', 'in', ['active', 'frozen'])
-      .execute()
+    if (childId) enrollmentsQ = enrollmentsQ.where('e.child_id', '=', childId)
+    const enrollments = await enrollmentsQ.execute()
 
     for (const monthStr of months) {
       const billingDate = new Date(monthStr)
@@ -448,12 +450,13 @@ export async function recalcActivityAccruals(
 
   } else {
     // per_lesson: soft-delete old ACCRUALs (skip custom_amount) → recreate from attendance_logs
-    const enrollments = await db
+    let enrollmentsQ2 = db
       .selectFrom('enrollments as e')
       .select(['e.id as enrollment_id', 'e.child_id', 'e.account_id'])
       .where('e.activity_id', '=', activityId)
       .where('e.status', 'in', ['active', 'frozen'])
-      .execute()
+    if (childId) enrollmentsQ2 = enrollmentsQ2.where('e.child_id', '=', childId)
+    const enrollments = await enrollmentsQ2.execute()
 
     if (enrollments.length === 0) return { replaced: 0, refunded: 0 }
     const enrollmentIds = enrollments.map((e) => e.enrollment_id)

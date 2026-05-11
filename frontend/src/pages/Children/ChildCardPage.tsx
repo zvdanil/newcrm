@@ -363,7 +363,13 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
       l2_max_refunds:         tariffForm.l2_max_refunds ? Number(tariffForm.l2_max_refunds) : null,
       l2_refund_per_absence:  tariffForm.l2_refund_per_absence ? Number(tariffForm.l2_refund_per_absence) : null,
     }),
-    onSuccess: () => { invalidateTariffs(); setTariffEnrollId(null); setTariffError(null) },
+    onSuccess: () => {
+      invalidateTariffs()
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      setTariffEnrollId(null)
+      setTariffError(null)
+    },
     onError:   () => setTariffError('Помилка збереження'),
   })
 

@@ -4,6 +4,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
+import { recalcActivityAccruals } from '../services/billingRunService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
   // GET /api/children?search=&group_id=&is_active=&limit=&offset=
@@ -324,6 +325,15 @@ export async function childrenRoutes(app: FastifyInstance) {
         .values({ child_id: id, activity_id, price: price ?? null, discount_pct: discount_pct ?? null, valid_from: from, valid_to: null })
         .returningAll().executeTakeFirstOrThrow()
 
+      // Immediately recalculate accruals for this child+activity from valid_from to current month
+      const validFromDate = new Date(from)
+      const now = new Date()
+      if (validFromDate <= now) {
+        const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
+        const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        await recalcActivityAccruals(activity_id, monthStart, curMonthStart, request.user.sub, id)
+      }
+
       return reply.status(201).send(row)
     }
   )
@@ -574,6 +584,15 @@ export async function childrenRoutes(app: FastifyInstance) {
             l2_refund_per_absence: l2_refund_per_absence ?? null,
           })
           .execute()
+      }
+
+      // Immediately recalculate accruals for this child+activity from valid_from to current month
+      const validFromDate = new Date(valid_from)
+      const now = new Date()
+      if (validFromDate <= now) {
+        const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
+        const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        await recalcActivityAccruals(activity_id, monthStart, curMonthStart, req.user.sub, req.params.id)
       }
 
       return reply.status(201).send(row)
