@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { importApi, type BankRow, type PreviewRow, type ApplyRow } from '../../api/import.api'
 import { familiesApi } from '../../api/families.api'
+import { childrenApi } from '../../api/children.api'
 
 interface Props {
   accountId: string
@@ -95,6 +96,12 @@ export function BankImportTab({ accountId }: Props) {
   const { data: allFamilies } = useQuery({
     queryKey: ['families-list'],
     queryFn: () => familiesApi.list({ limit: 500 }),
+    select: (d) => d.data,
+  })
+
+  const { data: allChildren } = useQuery({
+    queryKey: ['children-list-active'],
+    queryFn: () => childrenApi.list({ is_active: true, limit: 500 }),
     select: (d) => d.data,
   })
 
@@ -427,14 +434,13 @@ export function BankImportTab({ accountId }: Props) {
                         ))}
                       </select>
                     ) : familySearch.has(row.row_index) || (row.status === 'unmatched' && !override) ? (
-                      <FamilyCombobox
+                      <TargetCombobox
                         families={allFamilies ?? []}
-                        value={override?.family_id ?? ''}
+                        children={allChildren ?? []}
                         search={familySearch.get(row.row_index) ?? ''}
                         onSearchChange={(s) => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, s); return n })}
-                        onSelect={(id) => {
-                          const family = allFamilies?.find((f) => f.id === id)
-                          setOverride(row.row_index, { family_id: id, child_id: null, display_name: family?.name ?? id })
+                        onSelect={(target) => {
+                          setOverride(row.row_index, target)
                           setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
                         }}
                       />
@@ -463,23 +469,33 @@ export function BankImportTab({ accountId }: Props) {
   )
 }
 
-// ─── Family combobox ───────────────────────────────────────────────────────────
+// ─── Target combobox (families + children) ────────────────────────────────────
 
-interface FamilyComboboxProps {
+type TargetOption = { family_id: string | null; child_id: string | null; display_name: string }
+
+interface TargetComboboxProps {
   families: { id: string; name: string; primary_parent_name: string }[]
-  value: string
+  children: { id: string; full_name: string; family_id: string | null }[]
   search: string
   onSearchChange: (s: string) => void
-  onSelect: (id: string) => void
+  onSelect: (target: TargetOption) => void
 }
 
-function FamilyCombobox({ families, search, onSearchChange, onSelect }: FamilyComboboxProps) {
-  const filtered = search.length >= 1
+function TargetCombobox({ families, children, search, onSearchChange, onSelect }: TargetComboboxProps) {
+  const q = search.toLowerCase()
+
+  const filteredFamilies = q.length >= 1
     ? families.filter((f) =>
-        f.name.toLowerCase().includes(search.toLowerCase()) ||
-        f.primary_parent_name.toLowerCase().includes(search.toLowerCase())
-      ).slice(0, 8)
+        f.name.toLowerCase().includes(q) ||
+        f.primary_parent_name.toLowerCase().includes(q)
+      ).slice(0, 5)
     : []
+
+  const filteredChildren = q.length >= 1
+    ? children.filter((c) => c.full_name.toLowerCase().includes(q)).slice(0, 5)
+    : []
+
+  const showDropdown = filteredFamilies.length > 0 || filteredChildren.length > 0
 
   return (
     <div className="relative">
@@ -487,22 +503,42 @@ function FamilyCombobox({ families, search, onSearchChange, onSelect }: FamilyCo
         type="text"
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Пошук сімʼї..."
+        placeholder="Пошук сімʼї або дитини..."
         className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:border-iris-500 focus:ring-iris-500"
         autoFocus
       />
-      {filtered.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded shadow-md max-h-40 overflow-y-auto">
-          {filtered.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => onSelect(f.id)}
-              className="w-full text-left px-2 py-1.5 text-xs hover:bg-iris-50 hover:text-iris-700"
-            >
-              <span className="font-medium">{f.name}</span>
-              <span className="text-gray-400 ml-1">({f.primary_parent_name})</span>
-            </button>
-          ))}
+      {showDropdown && (
+        <div className="absolute z-20 top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded shadow-md max-h-52 overflow-y-auto">
+          {filteredFamilies.length > 0 && (
+            <>
+              <div className="px-2 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">Сімʼї</div>
+              {filteredFamilies.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => onSelect({ family_id: f.id, child_id: null, display_name: f.name })}
+                  className="w-full text-left px-2 py-1.5 text-xs hover:bg-iris-50 hover:text-iris-700"
+                >
+                  <span className="font-medium">{f.name}</span>
+                  <span className="text-gray-400 ml-1">({f.primary_parent_name})</span>
+                </button>
+              ))}
+            </>
+          )}
+          {filteredChildren.length > 0 && (
+            <>
+              <div className="px-2 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">Діти</div>
+              {filteredChildren.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => onSelect({ family_id: null, child_id: c.id, display_name: c.full_name })}
+                  className="w-full text-left px-2 py-1.5 text-xs hover:bg-iris-50 hover:text-iris-700"
+                >
+                  <span className="font-medium">{c.full_name}</span>
+                  <span className="text-gray-400 ml-1 text-[10px]">дитина</span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
