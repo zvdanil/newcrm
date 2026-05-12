@@ -193,6 +193,12 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys }: {
               <span>{tx.activity_name}</span>
             </div>
           )}
+          {tx.account_name && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Рахунок</span>
+              <span>{tx.account_name}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-500">Тип ставки</span>
             <span>{tx.rate_type ? RATE_TYPE_LABELS[tx.rate_type] : '—'}</span>

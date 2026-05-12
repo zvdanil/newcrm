@@ -32,6 +32,42 @@ function dayOfWeekShort(dateStr: string): string {
   return names[new Date(dateStr + 'T00:00:00').getDay()]
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+const RATE_TYPE_SHORT: Record<string, string> = {
+  per_lesson:    'за заняття',
+  per_child:     'за дитину',
+  group_lesson:  'за групу',
+  fixed_monthly: 'оклад',
+  hourly:        'год.',
+  smart:         'смарт',
+  bonus:         'бонус',
+}
+
+function accrualTooltipLine(tx: SalaryTransaction): string {
+  const g   = Number(tx.gross_amount)
+  const d   = Math.round(g * Number(tx.deduction_pct) / 100 * 100) / 100
+  const net = g - d
+  const meta = tx.metadata_json as Record<string, unknown> | null
+
+  const typePart = tx.type === 'CORRECTION' ? 'Коригування' : 'Нарахування'
+  const ratePart = tx.rate_type ? ` (${RATE_TYPE_SHORT[tx.rate_type] ?? tx.rate_type})` : ''
+
+  let qtyPart = ''
+  if (meta) {
+    if (typeof meta.quantity === 'number') {
+      qtyPart = ` × ${meta.quantity}`
+    } else if (typeof meta.present_count === 'number') {
+      qtyPart = ` × ${meta.present_count} дітей`
+    } else if (typeof meta.revenue === 'number') {
+      qtyPart = ` від виручки ${fmt(meta.revenue)}`
+    }
+  }
+
+  const actPart = tx.activity_name ? ` [${tx.activity_name}]` : ''
+  return `${typePart}${ratePart}${qtyPart}: net ${fmt(net)}${actPart}`
+}
+
 // ── Cell for accrual row ────────────────────────────────────────────────────
 
 function AccrualCell({
@@ -70,11 +106,7 @@ function AccrualCell({
           ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
           : 'bg-iris-50 text-iris-700 hover:bg-iris-100'
       }`}
-      title={txs.map(t => {
-        const g = Number(t.gross_amount)
-        const d = Math.round(g * Number(t.deduction_pct) / 100 * 100) / 100
-        return `${t.type}: ${fmt(g - d)}`
-      }).join('\n')}
+      title={txs.map(accrualTooltipLine).join('\n')}
     >
       {net % 1 === 0 ? net : net.toFixed(0)}
     </button>
@@ -261,17 +293,17 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="text-xs border-collapse" style={{ minWidth: `${180 + days * 32}px` }}>
-            <thead>
+            <thead className="sticky top-0 z-20">
               {/* day-of-week row */}
               <tr>
-                <th className="sticky left-0 z-20 bg-gray-50 border-b border-r border-gray-200 px-2 py-1 min-w-[180px]" />
-                <th className="bg-gray-50 border-b border-gray-200 px-1 py-1 text-center text-gray-400 font-normal min-w-[32px]">
+                <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1 min-w-[180px]" />
+                <th className="bg-gray-50 border-b border-r border-gray-200 px-1 py-1 text-center text-gray-400 font-normal min-w-[52px]">
                   Рядок
                 </th>
                 {dates.map(d => (
                   <th
                     key={d}
-                    className={`bg-gray-50 border-b border-gray-200 px-0.5 py-1 text-center font-normal min-w-[32px] ${
+                    className={`bg-gray-50 border-b border-r border-gray-100 px-0.5 py-1 text-center font-normal min-w-[32px] ${
                       isWeekend(d) ? 'text-rose-400' : 'text-gray-400'
                     }`}
                   >
@@ -284,14 +316,14 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
               </tr>
               {/* date numbers row */}
               <tr>
-                <th className="sticky left-0 z-20 bg-gray-50 border-b border-r border-gray-200 px-3 py-1.5 text-left text-xs font-medium text-gray-600">
+                <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-3 py-1.5 text-left text-xs font-medium text-gray-600">
                   Співробітник
                 </th>
-                <th className="bg-gray-50 border-b border-gray-200 px-1 py-1.5 text-center text-gray-500 font-medium min-w-[32px]" />
+                <th className="bg-gray-50 border-b border-r border-gray-200 px-1 py-1.5 text-center text-gray-500 font-medium min-w-[52px]" />
                 {dates.map(d => (
                   <th
                     key={d}
-                    className={`bg-gray-50 border-b border-gray-200 px-0.5 py-1.5 text-center font-medium min-w-[32px] ${
+                    className={`bg-gray-50 border-b border-r border-gray-100 px-0.5 py-1.5 text-center font-medium min-w-[32px] ${
                       isWeekend(d) ? 'text-rose-500' : 'text-gray-700'
                     }`}
                   >
@@ -345,7 +377,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                         )}
                       </div>
                     </td>
-                    <td className="px-1 py-1 text-center">
+                    <td className="px-1 py-1 text-center border-r border-gray-200">
                       <span className="inline-block text-[10px] font-medium text-iris-600 bg-iris-50 rounded px-1 py-0.5 whitespace-nowrap">
                         Нарах.
                       </span>
@@ -353,7 +385,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                     {dates.map(d => {
                       const txs = accrualsByDate.get(d) ?? []
                       return (
-                        <td key={d} className={`px-0.5 py-1 text-center ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
+                        <td key={d} className={`px-0.5 py-1 text-center border-r border-gray-100 ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
                           <AccrualCell
                             txs={txs}
                             onClickExisting={ts =>
@@ -376,7 +408,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                     key={`${row.id}-payment`}
                     className={`border-b-2 border-gray-200 ${isEven ? 'bg-white' : 'bg-gray-50/40'} hover:bg-green-50/30`}
                   >
-                    <td className="px-1 py-1 text-center">
+                    <td className="px-1 py-1 text-center border-r border-gray-200">
                       <span className="inline-block text-[10px] font-medium text-green-700 bg-green-50 rounded px-1 py-0.5 whitespace-nowrap">
                         Виплат.
                       </span>
@@ -384,7 +416,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                     {dates.map(d => {
                       const txs = paymentsByDate.get(d) ?? []
                       return (
-                        <td key={d} className={`px-0.5 py-1 text-center ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
+                        <td key={d} className={`px-0.5 py-1 text-center border-r border-gray-100 ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
                           <PaymentCell
                             txs={txs}
                             onClickExisting={ts =>

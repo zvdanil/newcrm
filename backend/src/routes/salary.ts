@@ -20,6 +20,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .selectFrom('salary_transactions as st')
         .leftJoin('staff_rates as r', 'r.id', 'st.rate_id')
         .leftJoin('activities as a', 'a.id', 'st.activity_id')
+        .leftJoin('accounts as ac', 'ac.id', 'st.account_id')
         .where('st.staff_id', '=', req.params.id)
         .where('st.transaction_date', '>=', billingStart)
         .where('st.transaction_date', '<', billingEnd)
@@ -30,6 +31,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           'st.metadata_json', 'st.created_at',
           'st.rate_id', 'r.rate_type', 'r.rate_category',
           'st.activity_id', 'a.name as activity_name',
+          'st.account_id', 'ac.name as account_name',
         ])
         .orderBy('st.transaction_date', 'asc')
         .orderBy('st.created_at', 'asc')
@@ -186,13 +188,14 @@ export async function salaryRoutes(app: FastifyInstance) {
       gross_amount: number
       transaction_date?: string
       billing_month?: string
+      account_id?: string
       note?: string
     }
   }>(
     '/staff/:id/salary/pay',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
-      const { gross_amount, transaction_date, billing_month, note } = req.body
+      const { gross_amount, transaction_date, billing_month, account_id, note } = req.body
       if (!gross_amount || gross_amount <= 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
       }
@@ -204,6 +207,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         staff_id:         req.params.id,
         rate_id:          null,
         activity_id:      null,
+        account_id:       account_id ?? null,
         type:             'PAYMENT',
         gross_amount,
         deduction_pct:    0,
@@ -269,6 +273,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .selectFrom('salary_transactions as st')
         .leftJoin('staff_rates as r', 'r.id', 'st.rate_id')
         .leftJoin('activities as a', 'a.id', 'st.activity_id')
+        .leftJoin('accounts as ac', 'ac.id', 'st.account_id')
         .where('st.transaction_date', '>=', billingStart)
         .where('st.transaction_date', '<', billingEnd)
         .where('st.is_deleted', '=', false)
@@ -278,6 +283,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           'st.metadata_json', 'st.created_at',
           'st.rate_id', 'r.rate_type', 'r.rate_category',
           'st.activity_id', 'a.name as activity_name',
+          'st.account_id', 'ac.name as account_name',
         ])
         .orderBy('st.transaction_date', 'asc')
         .orderBy('st.created_at', 'asc')

@@ -54,6 +54,8 @@ export interface SalaryTransaction {
   rate_category:    RateCategory | null
   activity_id:      string | null
   activity_name:    string | null
+  account_id:       string | null
+  account_name:     string | null
 }
 
 export interface SalarySummary {
@@ -193,6 +195,7 @@ export const staffApi = {
     gross_amount: number
     transaction_date?: string
     billing_month?: string
+    account_id?: string
     note?: string
   }): Promise<SalaryTransaction> => {
     const { data } = await apiClient.post<SalaryTransaction>(`/staff/${staffId}/salary/pay`, payload)

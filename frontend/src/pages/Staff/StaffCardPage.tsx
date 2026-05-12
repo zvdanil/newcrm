@@ -539,14 +539,20 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
 export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onDone: () => void; initialDate?: string }) {
   const qc = useQueryClient()
   const today = todayStr()
-  const [form, setForm] = useState({ gross_amount: '', transaction_date: initialDate ?? today, billing_month: '', note: '' })
+  const [form, setForm] = useState({ gross_amount: '', transaction_date: initialDate ?? today, billing_month: '', account_id: '', note: '' })
   const [error, setError] = useState<string | null>(null)
+
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => import('../../api/accounts.api').then(m => m.accountsApi.list()),
+  })
 
   const mutation = useMutation({
     mutationFn: () => staffApi.pay(staffId, {
       gross_amount:     parseFloat(form.gross_amount),
       transaction_date: form.transaction_date,
       billing_month:    form.billing_month || undefined,
+      account_id:       form.account_id || undefined,
       note:             form.note || undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); onDone() },
@@ -569,6 +575,16 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
           <input type="date" value={form.transaction_date}
             onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок списання</label>
+          <select value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+            <option value="">— не вказано —</option>
+            {accounts.filter(a => a.is_active).map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Період (місяць, необов.)</label>

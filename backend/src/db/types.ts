@@ -324,6 +324,7 @@ export interface SalaryTransactionsTable {
   staff_id:         string
   rate_id:          string | null
   activity_id:      string | null
+  account_id:       string | null
   type:             SalaryTxType
   gross_amount:     ColumnType<string, number | string, number | string>
   deduction_pct:    ColumnType<string, number | string, number | string>
