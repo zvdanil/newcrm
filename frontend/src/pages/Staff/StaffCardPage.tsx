@@ -596,6 +596,58 @@ function PaymentGroupPopup({ txs, staffId, onClose }: {
   )
 }
 
+function AccrualGroupPopup({ txs, onClose, onSelectTx }: {
+  txs: SalaryTransaction[]
+  onClose: () => void
+  onSelectTx: (tx: SalaryTransaction) => void
+}) {
+  const total = txs.reduce((s, t) => {
+    const g = Number(t.gross_amount)
+    const d = Math.round(g * Number(t.deduction_pct) / 100 * 100) / 100
+    return s + g - d
+  }, 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Нарахування за {String(txs[0].transaction_date).slice(0, 10)}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {txs.map(tx => {
+            const g = Number(tx.gross_amount)
+            const d = Math.round(g * Number(tx.deduction_pct) / 100 * 100) / 100
+            const net = g - d
+            return (
+              <div key={tx.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+                <div className="space-y-0.5 flex-1 min-w-0 pr-2">
+                  <p className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                    {TX_TYPE_LABELS[tx.type] ?? tx.type}
+                    <span className="font-mono text-iris-700">{fmt(net)}</span>
+                  </p>
+                  {tx.note && <p className="text-xs text-gray-500 truncate">{tx.note}</p>}
+                  {tx.rate_type && <p className="text-xs text-gray-400">{RATE_TYPE_LABELS[tx.rate_type]}</p>}
+                </div>
+                <button
+                  onClick={() => onSelectTx(tx)}
+                  className="text-xs text-iris-600 hover:text-iris-800 px-3 py-1.5 rounded-lg hover:bg-iris-50 font-medium"
+                >
+                  Деталі
+                </button>
+              </div>
+            )
+          })}
+        </div>
+        <div className="flex justify-between pt-2 border-t border-gray-100">
+          <span className="text-sm text-gray-600">Разом (net)</span>
+          <span className="text-sm font-mono font-semibold text-iris-700">{fmt(total)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TxPopup({ tx, staffId, onClose }: {
   tx: SalaryTransaction
   staffId: string
@@ -969,6 +1021,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const [month, setMonth] = useState(currentMonth)
   const [selectedTx, setSelectedTx] = useState<SalaryTransaction | null>(null)
   const [selectedTxGroup, setSelectedTxGroup] = useState<SalaryTransaction[] | null>(null)
+  const [selectedAccrualGroup, setSelectedAccrualGroup] = useState<SalaryTransaction[] | null>(null)
   const [showPay, setShowPay]             = useState(false)
   const [showManual, setShowManual]       = useState(false)
 
@@ -1048,6 +1101,33 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
       {showPay && <PayForm staffId={staffId} onDone={() => setShowPay(false)} />}
       {showManual && <ManualAccrualForm staffId={staffId} rates={rates} onDone={() => setShowManual(false)} />}
+      
+      {selectedTx && (
+        <TxPopup
+          tx={selectedTx}
+          staffId={staffId}
+          onClose={() => setSelectedTx(null)}
+        />
+      )}
+      
+      {selectedTxGroup && (
+        <PaymentGroupPopup
+          txs={selectedTxGroup}
+          staffId={staffId}
+          onClose={() => setSelectedTxGroup(null)}
+        />
+      )}
+      
+      {selectedAccrualGroup && (
+        <AccrualGroupPopup
+          txs={selectedAccrualGroup}
+          onClose={() => setSelectedAccrualGroup(null)}
+          onSelectTx={(tx) => {
+            setSelectedAccrualGroup(null)
+            setSelectedTx(tx)
+          }}
+        />
+      )}
 
       {isLoading ? (
         <div className="py-8 text-center text-sm text-gray-400">Завантаження...</div>
@@ -1088,7 +1168,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                           <td key={d} className="px-0.5 py-1 text-center">
                             {cellTxs.length > 0 ? (
                               <button
-                                onClick={() => setSelectedTx(cellTxs[0])}
+                                onClick={() => cellTxs.length === 1 ? setSelectedTx(cellTxs[0]) : setSelectedAccrualGroup(cellTxs)}
                                 className={`w-full rounded px-0.5 py-0.5 font-mono transition-colors ${
                                   cellTxs.some(t => t.type === 'CORRECTION')
                                     ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
@@ -1163,17 +1243,6 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
         </>
       )}
 
-      {selectedTx && (
-        <TxPopup tx={selectedTx} staffId={staffId} onClose={() => setSelectedTx(null)} />
-      )}
-
-      {selectedTxGroup && (
-        <PaymentGroupPopup
-          txs={selectedTxGroup}
-          staffId={staffId}
-          onClose={() => setSelectedTxGroup(null)}
-        />
-      )}
     </div>
   )
 }
