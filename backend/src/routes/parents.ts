@@ -72,7 +72,7 @@ export async function parentsRoutes(app: FastifyInstance) {
   // PUT /api/parents/:id
   app.put<{
     Params: { id: string }
-    Body: { full_name?: string; phone?: string; email?: string; note?: string }
+    Body: { full_name?: string; phone?: string; email?: string; note?: string; edrpou?: string | null; iban?: string | null }
   }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'manager') },

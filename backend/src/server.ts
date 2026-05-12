@@ -23,6 +23,7 @@ import { expensesRoutes } from './routes/expenses.js'
 import { staffRoutes } from './routes/staff.js'
 import { salaryRoutes } from './routes/salary.js'
 import { mergedJournalsRoutes } from './routes/mergedJournals.js'
+import { importRoutes } from './routes/import.js'
 import cron from 'node-cron'
 import { runBilling, currentBillingMonth } from './services/billingRunService.js'
 import { runSmartAccruals } from './services/smartTariffService.js'
@@ -63,6 +64,7 @@ await app.register(expensesRoutes,       { prefix: '/api/expenses' })
 await app.register(staffRoutes,          { prefix: '/api/staff' })
 await app.register(salaryRoutes,         { prefix: '/api' })
 await app.register(mergedJournalsRoutes, { prefix: '/api/merged-journals' })
+await app.register(importRoutes,         { prefix: '/api/import' })
 
 // Serve frontend in production (single-service mode)
 if (isProd) {

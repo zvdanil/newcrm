@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { familiesApi, type ChildDebt } from '../../api/families.api'
 import { accountsApi } from '../../api/accounts.api'
+import { parentsApi } from '../../api/parents.api'
 import { today } from '../../utils/dateStr'
+import type { Parent } from '../../types'
 
 // ── Debt breakdown + payment form ──────────────────────────────────────────
 
@@ -373,6 +375,92 @@ function WaterfallBlock({ familyId }: { familyId: string }) {
   )
 }
 
+// ── Member card with inline ЄДРПОУ/IBAN editing ─────────────────────────────
+
+function MemberCard({ member, familyId }: { member: Parent; familyId: string }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [edrpou, setEdrpou] = useState(member.edrpou ?? '')
+  const [iban, setIban] = useState(member.iban ?? '')
+
+  const saveMut = useMutation({
+    mutationFn: () => parentsApi.update(member.id, {
+      edrpou: edrpou.trim() || null,
+      iban: iban.trim() || null,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['family', familyId] })
+      setEditing(false)
+    },
+  })
+
+  return (
+    <li className="py-3 space-y-1">
+      <p className="text-sm font-medium text-gray-900">{member.full_name}</p>
+      <p className="text-xs text-gray-400">{member.phone ?? member.email ?? '—'}</p>
+
+      {!editing ? (
+        <div className="flex items-center gap-3 flex-wrap">
+          {member.edrpou && (
+            <span className="text-xs text-gray-500">ЄДРПОУ: <span className="font-mono">{member.edrpou}</span></span>
+          )}
+          {member.iban && (
+            <span className="text-xs text-gray-500">IBAN: <span className="font-mono text-xs">{member.iban}</span></span>
+          )}
+          <button
+            onClick={() => setEditing(true)}
+            className="text-xs text-iris-600 hover:text-iris-800"
+          >
+            {member.edrpou || member.iban ? 'Редагувати реквізити' : '+ Додати ЄДРПОУ / IBAN'}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <div className="flex gap-3 flex-wrap">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-0.5">ЄДРПОУ</label>
+              <input
+                type="text"
+                value={edrpou}
+                onChange={(e) => setEdrpou(e.target.value)}
+                placeholder="12345678"
+                maxLength={12}
+                className="text-xs border border-gray-300 rounded px-2 py-1 w-36 focus:border-iris-500 focus:ring-iris-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-0.5">IBAN</label>
+              <input
+                type="text"
+                value={iban}
+                onChange={(e) => setIban(e.target.value.toUpperCase())}
+                placeholder="UA..."
+                maxLength={34}
+                className="text-xs border border-gray-300 rounded px-2 py-1 w-64 font-mono focus:border-iris-500 focus:ring-iris-500"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+              className="text-xs px-3 py-1 bg-iris-600 hover:bg-iris-700 text-white rounded-md"
+            >
+              {saveMut.isPending ? 'Збереження...' : 'Зберегти'}
+            </button>
+            <button
+              onClick={() => { setEditing(false); setEdrpou(member.edrpou ?? ''); setIban(member.iban ?? '') }}
+              className="text-xs px-3 py-1 border border-gray-300 text-gray-600 rounded-md hover:bg-gray-50"
+            >
+              Скасувати
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  )
+}
+
 // ── Main page ───────────────────────────────────────────────────────────────
 
 export function FamilyCardPage() {
@@ -465,10 +553,7 @@ export function FamilyCardPage() {
         ) : (
           <ul className="divide-y divide-gray-100">
             {family.members.map((member) => (
-              <li key={member.id} className="py-3">
-                <p className="text-sm font-medium text-gray-900">{member.full_name}</p>
-                <p className="text-xs text-gray-400">{member.phone ?? member.email ?? '—'}</p>
-              </li>
+              <MemberCard key={member.id} member={member} familyId={family.id} />
             ))}
           </ul>
         )}

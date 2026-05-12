@@ -27,6 +27,8 @@ export interface ParentsTable {
   email: string | null
   user_id: string | null
   note: string | null
+  edrpou: string | null
+  iban: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }

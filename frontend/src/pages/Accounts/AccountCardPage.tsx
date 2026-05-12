@@ -4,6 +4,8 @@ import { localDateStr, firstOfMonth } from '../../utils/dateStr'
 import { useQuery } from '@tanstack/react-query'
 import { accountsApi } from '../../api/accounts.api'
 import type { LedgerKind, LedgerRow } from '../../api/accounts.api'
+import { useCanAccess } from '../../hooks/useCanAccess'
+import { BankImportTab } from './BankImportTab'
 
 const TYPE_LABELS = { fop: 'ФОП', cash: 'Готівка', bank: 'Банк' } as const
 
@@ -51,6 +53,8 @@ function thisMonthRange() {
 
 export function AccountCardPage() {
   const { id } = useParams<{ id: string }>()
+  const canImport = useCanAccess('owner', 'admin')
+  const [activeTab, setActiveTab] = useState<'ledger' | 'import'>('ledger')
 
   const defaultRange = thisMonthRange()
   const [from, setFrom] = useState(defaultRange.from)
@@ -105,7 +109,41 @@ export function AccountCardPage() {
         </div>
       </div>
 
+      {/* Tab switcher */}
+      <div className="flex gap-1 border-b border-gray-200 bg-white rounded-t-xl px-4 pt-3 -mb-6">
+        <button
+          onClick={() => setActiveTab('ledger')}
+          className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+            activeTab === 'ledger'
+              ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Рух коштів
+        </button>
+        {canImport && (
+          <button
+            onClick={() => setActiveTab('import')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+              activeTab === 'import'
+                ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Імпорт виписки
+          </button>
+        )}
+      </div>
+
+      {/* Import tab */}
+      {activeTab === 'import' && canImport && id && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <BankImportTab accountId={id} />
+        </div>
+      )}
+
       {/* Ledger */}
+      {activeTab === 'ledger' && (
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {/* Toolbar */}
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center gap-3">
@@ -187,6 +225,7 @@ export function AccountCardPage() {
           </table>
         )}
       </div>
+      )}
     </div>
   )
 }

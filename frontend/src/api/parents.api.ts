@@ -14,4 +14,9 @@ export const parentsApi = {
     const { data } = await apiClient.post<Parent>('/parents', payload)
     return data
   },
+
+  update: async (id: string, payload: { full_name?: string; phone?: string | null; email?: string | null; note?: string | null; edrpou?: string | null; iban?: string | null }) => {
+    const { data } = await apiClient.put<Parent>(`/parents/${id}`, payload)
+    return data
+  },
 }

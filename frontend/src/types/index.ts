@@ -37,6 +37,8 @@ export interface Parent {
   phone: string | null
   email: string | null
   note: string | null
+  edrpou: string | null
+  iban: string | null
   created_at: string
 }
 
