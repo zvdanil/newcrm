@@ -8,6 +8,7 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 //     (those are identified by having an imbalance record with to_account_id = this account)
 //   + cross-account receipts: client paid HERE but debt was on another account (always, regardless of resolution)
 //   - paid expenses
+//   - salary payments (salary_transactions.type = 'PAYMENT' with account_id set)
 //   ± account transfers
 //
 // After resolution via account_transfer:
@@ -28,7 +29,8 @@ const balanceSql = sql<string>`(
         AND i.transaction_id IS NOT NULL
         AND EXISTS (SELECT 1 FROM transactions t WHERE t.id = i.transaction_id AND t.is_deleted = false)
     ), 0)
-  - COALESCE((SELECT SUM(amount) FROM expenses          WHERE account_id      = a.id AND status = 'paid' AND is_deleted = false), 0)
+  - COALESCE((SELECT SUM(amount) FROM expenses             WHERE account_id = a.id AND status = 'paid' AND is_deleted = false), 0)
+  - COALESCE((SELECT SUM(gross_amount) FROM salary_transactions WHERE account_id = a.id AND type = 'PAYMENT' AND is_deleted = false), 0)
   + COALESCE((SELECT SUM(amount) FROM account_transfers WHERE to_account_id   = a.id), 0)
   - COALESCE((SELECT SUM(amount) FROM account_transfers WHERE from_account_id = a.id), 0)
 )`
@@ -79,11 +81,11 @@ export async function accountsRoutes(app: FastifyInstance) {
       const f = req.query.from ?? null
       const t = req.query.to   ?? null
 
-      // Unified ledger: PAYMENT + paid expenses + transfers + cross-account flows
+      // Unified ledger: PAYMENT + paid expenses + salary payments + transfers + cross-account flows
       const rows = await sql<{
         id: string
         date: string
-        kind: 'payment' | 'expense' | 'transfer_in' | 'transfer_out' | 'cross_in' | 'cross_out'
+        kind: 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in' | 'cross_out'
         amount: string
         note: string | null
         detail: string | null
@@ -151,6 +153,22 @@ export async function accountsRoutes(app: FastifyInstance) {
         WHERE at.from_account_id = ${id}
           AND (${f}::date IS NULL OR at.transfer_date::date >= ${f}::date)
           AND (${t}::date IS NULL OR at.transfer_date::date <= ${t}::date)
+
+        UNION ALL
+
+        SELECT
+          st.id,
+          st.transaction_date::date AS date,
+          'salary_payment'          AS kind,
+          st.gross_amount::numeric  AS amount,
+          st.note,
+          (SELECT full_name FROM staff WHERE id = st.staff_id) AS detail
+        FROM salary_transactions st
+        WHERE st.account_id = ${id}
+          AND st.type       = 'PAYMENT'
+          AND st.is_deleted = false
+          AND (${f}::date IS NULL OR st.transaction_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR st.transaction_date::date <= ${t}::date)
 
         UNION ALL
 

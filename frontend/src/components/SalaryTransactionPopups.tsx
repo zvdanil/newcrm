@@ -20,6 +20,66 @@ export const TX_TYPE_LABELS: Record<string, string> = {
   CORRECTION: 'Коригування',
 }
 
+// ── Metadata detail formatter ──────────────────────────────────────────────
+
+export function metaDetail(tx: SalaryTransaction): string | null {
+  const m = tx.metadata_json as Record<string, unknown> | null
+  if (!m) return null
+  const src = m.source as string | undefined
+
+  // percent_of_revenue modes
+  if (typeof m.revenue === 'number' && typeof m.rate_pct === 'number') {
+    return `${fmt(m.revenue)} грн × ${m.rate_pct}%`
+  }
+
+  if (src === 'auto_per_lesson' || src === 'auto_group_lesson') {
+    const qty = typeof m.quantity === 'number' ? m.quantity : 1
+    const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
+    return rv != null ? `${qty} заняття × ${fmt(rv)} грн` : `${qty} заняття`
+  }
+
+  if (src === 'auto_per_child') {
+    const qty = typeof m.quantity === 'number' ? m.quantity : '?'
+    const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
+    return rv != null ? `${qty} дітей × ${fmt(rv)} грн` : `${qty} дітей`
+  }
+
+  if (src === 'auto_fixed_monthly') {
+    const rv = typeof m.rate_value === 'number' ? m.rate_value : null
+    return rv != null ? `Оклад ${fmt(rv)} грн` : 'Фіксований оклад'
+  }
+
+  if (src === 'auto_smart') {
+    const br = typeof m.base_rate    === 'number' ? m.base_rate    : null
+    const bl = typeof m.base_lessons === 'number' ? m.base_lessons : null
+    return br != null && bl != null ? `${bl} занять × ${fmt(br)} грн (смарт)` : 'Смарт'
+  }
+
+  if (src === 'smart_staff') {
+    const ab = typeof m.absences  === 'number' ? m.absences  : '?'
+    const th = typeof m.threshold === 'number' ? m.threshold : '?'
+    return `Коригування: ${ab} пропусків ≥ ${th}`
+  }
+
+  if (src === 'retro_correction') {
+    const delta = typeof m.delta === 'number' ? m.delta : null
+    return delta != null ? `Ретро Δ ${delta > 0 ? '+' : ''}${fmt(delta)} грн` : 'Ретро-коригування'
+  }
+
+  if (src === 'manual') {
+    const rt = tx.rate_type
+    if (typeof m.quantity === 'number' && typeof m.rate_value === 'number') {
+      const unitLabel = rt === 'hourly' ? 'год.' : rt === 'per_child' ? 'дітей' : 'од.'
+      return `${m.quantity} ${unitLabel} × ${fmt(m.rate_value)} грн`
+    }
+    if (typeof m.revenue === 'number' && typeof m.rate_pct === 'number') {
+      return `${fmt(m.revenue)} грн × ${m.rate_pct}%`
+    }
+  }
+
+  return null
+}
+
 // ── Payment group popup ────────────────────────────────────────────────────
 
 export function PaymentGroupPopup({ txs, staffId, onClose, invalidateKeys }: {
@@ -101,6 +161,7 @@ export function AccrualGroupPopup({ txs, onClose, onSelectTx }: {
             const g = Number(tx.gross_amount)
             const d = Math.round(g * Number(tx.deduction_pct) / 100 * 100) / 100
             const net = g - d
+            const detail = metaDetail(tx)
             return (
               <div key={tx.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
                 <div className="space-y-0.5 flex-1 min-w-0 pr-2">
@@ -108,8 +169,15 @@ export function AccrualGroupPopup({ txs, onClose, onSelectTx }: {
                     {TX_TYPE_LABELS[tx.type] ?? tx.type}
                     <span className="font-mono text-iris-700">{fmt(net)}</span>
                   </p>
+                  {tx.rate_type && (
+                    <p className="text-xs text-gray-500">
+                      {RATE_TYPE_LABELS[tx.rate_type]}
+                      {detail && <span className="text-gray-400 ml-1">· {detail}</span>}
+                    </p>
+                  )}
+                  {!tx.rate_type && detail && <p className="text-xs text-gray-400">{detail}</p>}
+                  {tx.activity_name && <p className="text-xs text-gray-400">{tx.activity_name}</p>}
                   {tx.note && <p className="text-xs text-gray-500 truncate">{tx.note}</p>}
-                  {tx.rate_type && <p className="text-xs text-gray-400">{RATE_TYPE_LABELS[tx.rate_type]}</p>}
                 </div>
                 <button
                   onClick={() => onSelectTx(tx)}
@@ -203,6 +271,12 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys }: {
             <span className="text-gray-500">Тип ставки</span>
             <span>{tx.rate_type ? RATE_TYPE_LABELS[tx.rate_type] : '—'}</span>
           </div>
+          {(() => { const d = metaDetail(tx); return d ? (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Розрахунок</span>
+              <span className="font-mono text-gray-700">{d}</span>
+            </div>
+          ) : null })()}
           <div className="flex justify-between font-medium">
             <span className="text-gray-500">Gross</span>
             <span className="font-mono">{fmt(tx.gross_amount)}</span>

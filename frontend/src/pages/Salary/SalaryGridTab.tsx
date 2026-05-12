@@ -291,7 +291,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
       ) : filteredRows.length === 0 ? (
         <div className="py-12 text-center text-sm text-gray-400">Немає даних</div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="rounded-xl border border-gray-200 bg-white" style={{ overflow: 'auto', maxHeight: 'calc(100vh - 220px)' }}>
           <table className="text-xs border-collapse" style={{ minWidth: `${180 + days * 32}px` }}>
             <thead className="sticky top-0 z-20">
               {/* day-of-week row */}

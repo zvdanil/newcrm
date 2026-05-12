@@ -11,27 +11,30 @@ import { BankImportTab } from './BankImportTab'
 const TYPE_LABELS = { fop: 'ФОП', cash: 'Готівка', bank: 'Банк' } as const
 
 const KIND_LABEL: Record<LedgerKind, string> = {
-  payment:      'Оплата від клієнта',
-  expense:      'Витрата',
-  transfer_in:  'Переказ (надходження)',
-  transfer_out: 'Переказ (вибуття)',
-  cross_in:     'Оплата від клієнта',
+  payment:        'Оплата від клієнта',
+  expense:        'Витрата',
+  salary_payment: 'Виплата ЗП',
+  transfer_in:    'Переказ (надходження)',
+  transfer_out:   'Переказ (вибуття)',
+  cross_in:       'Оплата від клієнта',
 }
 
 const KIND_SIGN: Record<LedgerKind, '+' | '-'> = {
-  payment:      '+',
-  expense:      '-',
-  transfer_in:  '+',
-  transfer_out: '-',
-  cross_in:     '+',
+  payment:        '+',
+  expense:        '-',
+  salary_payment: '-',
+  transfer_in:    '+',
+  transfer_out:   '-',
+  cross_in:       '+',
 }
 
 const KIND_COLOR: Record<LedgerKind, string> = {
-  payment:      'text-green-700',
-  expense:      'text-red-600',
-  transfer_in:  'text-blue-700',
-  transfer_out: 'text-orange-600',
-  cross_in:     'text-green-700',
+  payment:        'text-green-700',
+  expense:        'text-red-600',
+  salary_payment: 'text-purple-700',
+  transfer_in:    'text-blue-700',
+  transfer_out:   'text-orange-600',
+  cross_in:       'text-green-700',
 }
 
 function fmtAmount(row: LedgerRow) {

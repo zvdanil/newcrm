@@ -6,7 +6,7 @@ export interface AccountWithBalance extends Account {
   open_imbalances?: number
 }
 
-export type LedgerKind = 'payment' | 'expense' | 'transfer_in' | 'transfer_out' | 'cross_in'
+export type LedgerKind = 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in'
 
 export interface LedgerRow {
   id:     string
