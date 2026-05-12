@@ -91,13 +91,22 @@ export function PaymentGroupPopup({ txs, staffId, onClose, invalidateKeys }: {
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
 
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['salary', staffId] })
+    invalidateKeys?.forEach(k => qc.invalidateQueries({ queryKey: k }))
+  }
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => staffApi.deleteAccrual(staffId, id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['salary', staffId] })
-      invalidateKeys?.forEach(k => qc.invalidateQueries({ queryKey: k }))
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError: (e: { response?: { status?: number } }) => {
+      if (e.response?.status === 404) {
+        invalidateAll()
+        onClose()
+      } else {
+        setError('Помилка видалення')
+      }
     },
-    onError: () => setError('Помилка видалення'),
   })
 
   const total = txs.reduce((s, t) => s + Number(t.gross_amount), 0)
@@ -237,7 +246,10 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys }: {
   const deleteMutation = useMutation({
     mutationFn: () => staffApi.deleteAccrual(staffId, tx.id),
     onSuccess: () => { invalidateAll(); onClose() },
-    onError: () => setError('Помилка видалення'),
+    onError: (e: { response?: { status?: number } }) => {
+      if (e.response?.status === 404) { invalidateAll(); onClose() }
+      else setError('Помилка видалення')
+    },
   })
 
   const canEdit = tx.type !== 'PAYMENT'
