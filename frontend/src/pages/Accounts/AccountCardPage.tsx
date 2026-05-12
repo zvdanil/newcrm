@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { localDateStr, firstOfMonth } from '../../utils/dateStr'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { accountsApi } from '../../api/accounts.api'
 import type { LedgerKind, LedgerRow } from '../../api/accounts.api'
+import { billingApi } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { BankImportTab } from './BankImportTab'
 
@@ -54,6 +55,7 @@ function thisMonthRange() {
 export function AccountCardPage() {
   const { id } = useParams<{ id: string }>()
   const canImport = useCanAccess('owner', 'admin')
+  const qc = useQueryClient()
   const [activeTab, setActiveTab] = useState<'ledger' | 'import'>('ledger')
 
   const defaultRange = thisMonthRange()
@@ -71,6 +73,16 @@ export function AccountCardPage() {
     queryKey: ['account-ledger', id, applied],
     queryFn: () => accountsApi.ledger(id!, { from: applied.from, to: applied.to, limit: 500 }),
     enabled: !!id,
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (txId: string) => billingApi.cancelTransaction(txId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['account-ledger', id] })
+      qc.invalidateQueries({ queryKey: ['account', id] })
+      qc.invalidateQueries({ queryKey: ['ledger'] })
+      qc.invalidateQueries({ queryKey: ['balance'] })
+    },
   })
 
   if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
@@ -203,7 +215,7 @@ export function AccountCardPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map((row, i) => (
-                <tr key={`${row.id}-${row.kind}-${i}`} className="hover:bg-gray-50 transition-colors">
+                <tr key={`${row.id}-${row.kind}-${i}`} className="hover:bg-gray-50 transition-colors group">
                   <td className="px-4 py-2.5 text-gray-500 tabular-nums whitespace-nowrap">
                     {new Date(row.date).toLocaleDateString('uk-UA')}
                   </td>
@@ -217,7 +229,21 @@ export function AccountCardPage() {
                     {row.note ?? ''}
                   </td>
                   <td className={`px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap ${KIND_COLOR[row.kind]}`}>
-                    {fmtAmount(row)}
+                    <div className="flex items-center justify-end gap-2">
+                      <span>{fmtAmount(row)}</span>
+                      {canImport && row.kind === 'payment' && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Скасувати оплату ${fmtAmount(row)} від ${row.detail ?? ''}?\nБаланс ребёнка буде перераховано.`)) {
+                              cancelMutation.mutate(row.id)
+                            }
+                          }}
+                          disabled={cancelMutation.isPending}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-30"
+                          title="Скасувати оплату"
+                        >✕</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

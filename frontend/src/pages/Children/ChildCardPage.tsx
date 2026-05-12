@@ -1271,6 +1271,71 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
           <p className="text-sm text-gray-400 text-center py-4">Рухів за цей місяць немає</p>
         ) : (
           <div className="space-y-4">
+            {/* Accounts without enrollment but with transactions (e.g. bank import payments) */}
+            {Object.entries(groupedByAccount)
+              .filter(([accId]) => !activeAccounts.find((b) => b.account_id === accId))
+              .map(([accId, group]) => {
+                const totalPayments = group.payments.reduce((s, t) => s + Number(t.amount), 0)
+                const totalAccruals = group.accruals.reduce((s, t) => s + Number(t.amount), 0)
+                const totalRefunds  = group.refunds.reduce((s, t) => s + Number(t.amount), 0)
+                const totalAdj      = group.adjustments.reduce((s, t) => s + Number(t.amount), 0)
+                const monthNet      = totalPayments + totalRefunds - totalAccruals + totalAdj
+                return (
+                  <div key={accId} className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{group.account_name}</span>
+                      <span className={`text-xs font-mono font-medium ${monthNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {monthNet >= 0 ? '+' : ''}{monthNet.toFixed(2)} грн
+                      </span>
+                    </div>
+                    <div className="px-4 py-3 space-y-2 text-xs">
+                      {group.payments.length > 0 && (
+                        <div>
+                          <p className="text-gray-400 mb-1">Оплати</p>
+                          {group.payments.map((tx) => {
+                            const metaPayId = (tx.metadata_json as { payment_account_id?: string } | null)?.payment_account_id
+                            const linkedImbalance = imbalances.find((im) => im.transaction_id === tx.id)
+                            const crossName = metaPayId
+                              ? (accounts.find((a) => a.id === metaPayId)?.name ?? null)
+                              : (linkedImbalance?.from_account_name ?? null)
+                            return (
+                              <div key={tx.id} className="flex items-center justify-between py-0.5">
+                                <div className="flex items-center gap-1.5 text-gray-600 min-w-0">
+                                  <span className="shrink-0">{formatDate(tx.transaction_date)}</span>
+                                  {tx.note && <span className="text-gray-400 truncate">· {tx.note}</span>}
+                                  {crossName && (
+                                    <span className="shrink-0 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                                      ← {crossName}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 ml-2 shrink-0">
+                                  <span className="font-mono text-green-600">+{Number(tx.amount).toFixed(2)}</span>
+                                  {canEdit && (
+                                    <button
+                                      onClick={() => { if (window.confirm('Скасувати цю оплату?')) cancelPayMutation.mutate({ txId: tx.id }) }}
+                                      disabled={cancelPayMutation.isPending}
+                                      className="text-gray-300 hover:text-red-500 text-xs px-1 py-0.5 rounded hover:bg-red-50 transition-colors disabled:opacity-50"
+                                      title="Скасувати оплату"
+                                    >✕</button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                          {group.payments.length > 1 && (
+                            <div className="flex justify-between py-0.5 border-t border-gray-100 mt-1 pt-1">
+                              <span className="text-gray-400">Разом оплат</span>
+                              <span className="font-mono text-green-600">+{totalPayments.toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
             {activeAccounts.map((bal) => {
               const group = groupedByAccount[bal.account_id]
               if (!group && !balances.find(b => b.account_id === bal.account_id)) return null

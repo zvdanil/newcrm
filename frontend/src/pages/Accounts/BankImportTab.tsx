@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { importApi, type BankRow, type PreviewRow, type ApplyRow } from '../../api/import.api'
 import { familiesApi } from '../../api/families.api'
 
@@ -82,6 +82,7 @@ function StatusBadge({ status }: { status: PreviewRow['status'] }) {
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function BankImportTab({ accountId }: Props) {
+  const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [previewRows, setPreviewRows] = useState<PreviewRow[] | null>(null)
@@ -120,6 +121,10 @@ export function BankImportTab({ accountId }: Props) {
     onSuccess: (resp) => {
       setResult({ imported: resp.imported, skipped: resp.skipped_duplicates, errors: resp.errors })
       setPreviewRows(null)
+      // Invalidate child ledgers and balances so the payment appears immediately on child cards
+      qc.invalidateQueries({ queryKey: ['ledger'] })
+      qc.invalidateQueries({ queryKey: ['balance'] })
+      qc.invalidateQueries({ queryKey: ['account-ledger', accountId] })
     },
   })
 
