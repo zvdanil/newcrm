@@ -18,15 +18,17 @@ interface BankRow {
 }
 
 interface CandidateFamily {
-  family_id: string
-  family_name: string
+  family_id: string | null   // null = direct child payment (no family link)
+  child_id: string | null    // set when family_id is null
+  family_name: string        // display name: family name OR child name
   parent_name: string
 }
 
 export interface PreviewRow extends BankRow {
-  status: 'matched' | 'conflict' | 'unmatched' | 'duplicate'
-  match_method: 'edrpou' | 'iban' | 'name_fuzzy' | null
+  status: 'matched' | 'conflict' | 'unmatched' | 'duplicate' | 'partial'
+  match_method: 'edrpou' | 'iban' | 'name_fuzzy' | 'name_partial' | null
   matched_family_id: string | null
+  matched_child_id: string | null
   matched_family_name: string | null
   matched_parent_name: string | null
   candidate_families: CandidateFamily[]
@@ -39,7 +41,8 @@ interface ApplyRow {
   row_index: number
   date: string
   amount: number
-  family_id: string
+  family_id: string | null
+  child_id?: string
   bank_ref: string
   counterparty_name: string
   edrpou: string | null
@@ -51,9 +54,11 @@ interface ApplyRow {
 
 function normalize(s: string): string {
   return s
+    .normalize('NFC')
+    .replace(/[­​‌‍⁠﻿]/g, '')
     .toLowerCase()
-    .replace(/[\n\r]/g, ' ')
-    .replace(/[.,\-'"]/g, '')
+    .replace(/[\n\r\t]/g, ' ')
+    .replace(/[.,\-'"():;«»!?]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -76,8 +81,16 @@ function makeBankRef(row: BankRow): string {
 // ─── Matching ─────────────────────────────────────────────────────────────────
 
 interface MatchResult {
-  method: 'edrpou' | 'iban' | 'name_fuzzy' | null
+  method: 'edrpou' | 'iban' | 'name_fuzzy' | 'name_partial' | null
   families: CandidateFamily[]
+}
+
+// Ratio of needle tokens (length ≥ 3) found in haystack. 0 = none, 1 = all.
+function partialMatchScore(haystack: string, needle: string[]): number {
+  const sig = needle.filter((t) => t.length >= 3)
+  if (sig.length === 0) return 0
+  const h = normalize(haystack)
+  return sig.filter((t) => h.includes(t)).length / sig.length
 }
 
 async function matchRow(
@@ -86,6 +99,7 @@ async function matchRow(
   parentFamilies: Map<string, CandidateFamily[]>,
   allChildren: { id: string; full_name: string; note: string | null; family_id: string | null }[],
   childFamilies: Map<string, { family_id: string; family_name: string }>,
+  allFamilies: { id: string; name: string }[],
 ): Promise<MatchResult> {
 
   // 1. ЄДРПОУ match
@@ -110,7 +124,7 @@ async function matchRow(
   const needle = tokens(row.counterparty_name)
   if (needle.length === 0) return { method: null, families: [] }
 
-  const matchedFamilyIds = new Set<string>()
+  const matchedKeys = new Set<string>()  // family_id or "child:<id>"
   const candidates: CandidateFamily[] = []
 
   // Check parents (full_name + note)
@@ -119,37 +133,96 @@ async function matchRow(
     const matchesNote = p.note ? containsAllTokens(p.note, needle) : false
     if (matchesName || matchesNote) {
       for (const fam of parentFamilies.get(p.id) ?? []) {
-        if (!matchedFamilyIds.has(fam.family_id)) {
-          matchedFamilyIds.add(fam.family_id)
+        const key = fam.family_id!
+        if (!matchedKeys.has(key)) {
+          matchedKeys.add(key)
           candidates.push(fam)
         }
       }
     }
   }
 
-  // Check children (full_name + note)
+  // Check children (full_name + note) — family_id is optional
   for (const c of allChildren) {
-    if (!c.family_id) continue
     const matchesName = containsAllTokens(c.full_name, needle)
     const matchesNote = c.note ? containsAllTokens(c.note, needle) : false
     if (matchesName || matchesNote) {
-      const fam = childFamilies.get(c.family_id)
-      if (fam && !matchedFamilyIds.has(fam.family_id)) {
-        matchedFamilyIds.add(fam.family_id)
-        candidates.push({ family_id: fam.family_id, family_name: fam.family_name, parent_name: c.full_name })
+      if (c.family_id) {
+        const fam = childFamilies.get(c.family_id)
+        if (fam && !matchedKeys.has(fam.family_id)) {
+          matchedKeys.add(fam.family_id)
+          candidates.push({ family_id: fam.family_id, child_id: null, family_name: fam.family_name, parent_name: c.full_name })
+        }
+      } else {
+        // Child without family — direct child payment target
+        const childKey = `child:${c.id}`
+        if (!matchedKeys.has(childKey)) {
+          matchedKeys.add(childKey)
+          candidates.push({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name })
+        }
+      }
+    }
+  }
+
+  // Check families by name:
+  // direction is REVERSE — family name tokens must ALL appear in the counterparty string.
+  // e.g. family "Долінце" → token ["долінце"] → contained in "Долінце Марина Сергіївна" ✓
+  for (const f of allFamilies) {
+    const familyTokens = tokens(f.name)
+    if (familyTokens.length > 0 && containsAllTokens(row.counterparty_name, familyTokens)) {
+      if (!matchedKeys.has(f.id)) {
+        matchedKeys.add(f.id)
+        candidates.push({ family_id: f.id, child_id: null, family_name: f.name, parent_name: f.name })
       }
     }
   }
 
   if (candidates.length > 0) return { method: 'name_fuzzy', families: candidates }
+
+  // 4. Partial match — some but not all tokens found (e.g. shared surname, different given name)
+  const partialMap = new Map<string, { candidate: CandidateFamily; score: number }>()
+
+  function tryPartial(candidate: CandidateFamily, score: number) {
+    const key = candidate.family_id ?? `child:${candidate.child_id}`
+    const existing = partialMap.get(key)
+    if (!existing || score > existing.score) partialMap.set(key, { candidate, score })
+  }
+
+  for (const p of allParents) {
+    const fields = [p.full_name, p.note].filter((f): f is string => f !== null)
+    const score = Math.max(0, ...fields.map((f) => partialMatchScore(f, needle)))
+    if (score > 0) {
+      for (const fam of parentFamilies.get(p.id) ?? []) tryPartial(fam, score)
+    }
+  }
+
+  for (const c of allChildren) {
+    const fields = [c.full_name, c.note].filter((f): f is string => f !== null)
+    const score = Math.max(0, ...fields.map((f) => partialMatchScore(f, needle)))
+    if (score > 0) {
+      if (c.family_id) {
+        const fam = childFamilies.get(c.family_id)
+        if (fam) tryPartial({ family_id: fam.family_id, child_id: null, family_name: fam.family_name, parent_name: c.full_name }, score)
+      } else {
+        tryPartial({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name }, score)
+      }
+    }
+  }
+
+  const partialCandidates = [...partialMap.values()]
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.candidate)
+
+  if (partialCandidates.length > 0) return { method: 'name_partial', families: partialCandidates }
   return { method: null, families: [] }
 }
 
 function deduplicateFamilies(input: CandidateFamily[]): CandidateFamily[] {
   const seen = new Set<string>()
   return input.filter((f) => {
-    if (seen.has(f.family_id)) return false
-    seen.add(f.family_id)
+    const key = f.family_id ?? `child:${f.child_id}`
+    if (seen.has(key)) return false
+    seen.add(key)
     return true
   })
 }
@@ -186,11 +259,11 @@ export async function importRoutes(app: FastifyInstance) {
       const parentFamilies = new Map<string, CandidateFamily[]>()
       for (const m of allMemberships) {
         const list = parentFamilies.get(m.parent_id) ?? []
-        list.push({ family_id: m.family_id, family_name: m.family_name, parent_name: m.parent_name })
+        list.push({ family_id: m.family_id, child_id: null, family_name: m.family_name, parent_name: m.parent_name })
         parentFamilies.set(m.parent_id, list)
       }
 
-      // Load all children
+      // Load all children (family_id is optional)
       const allChildren = await db
         .selectFrom('children')
         .select(['id', 'full_name', 'note', 'family_id'])
@@ -209,12 +282,13 @@ export async function importRoutes(app: FastifyInstance) {
 
       // Batch duplicate detection — two levels:
       // 1. bank_ref tag (re-import of same bank row)
-      // 2. family + date + amount on same account (catches manually entered payments)
+      // 2. family|child + date + amount on same account (catches manually entered payments)
       const existingTxRows = await db
         .selectFrom('transactions as t')
         .innerJoin('children as c', 'c.id', 't.child_id')
         .select([
           't.id',
+          't.child_id',
           sql<string>`t.amount::text`.as('amount'),
           sql<string>`t.transaction_date::text`.as('transaction_date'),
           'c.family_id',
@@ -226,17 +300,19 @@ export async function importRoutes(app: FastifyInstance) {
         .execute()
 
       const duplicateMap = new Map<string, string>()      // bank_ref → tx_id
-      const familyPaymentSet = new Map<string, string>()  // family|date|amount → tx_id
+      const familyPaymentSet = new Map<string, string>()  // family_id|date|amount → tx_id
+      const childPaymentSet = new Map<string, string>()   // child_id|date|amount → tx_id (non-family children)
 
       for (const tx of existingTxRows) {
         const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
         if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
           duplicateMap.set(meta['bank_ref'] as string, tx.id)
         }
+        const amt = parseFloat(tx.amount).toFixed(2)
         if (tx.family_id) {
-          const amt = parseFloat(tx.amount).toFixed(2)
-          const key = `${tx.family_id}|${tx.transaction_date}|${amt}`
-          familyPaymentSet.set(key, tx.id)
+          familyPaymentSet.set(`${tx.family_id}|${tx.transaction_date}|${amt}`, tx.id)
+        } else {
+          childPaymentSet.set(`child:${tx.child_id}|${tx.transaction_date}|${amt}`, tx.id)
         }
       }
 
@@ -253,6 +329,7 @@ export async function importRoutes(app: FastifyInstance) {
             status: 'duplicate',
             match_method: null,
             matched_family_id: null,
+            matched_child_id: null,
             matched_family_name: null,
             matched_parent_name: null,
             candidate_families: [],
@@ -263,19 +340,25 @@ export async function importRoutes(app: FastifyInstance) {
           continue
         }
 
-        const match = await matchRow(row, allParents, parentFamilies, allChildren, childFamilies)
+        const match = await matchRow(row, allParents, parentFamilies, allChildren, childFamilies, familyRows)
 
         let status: PreviewRow['status']
         let matched_family_id: string | null = null
+        let matched_child_id: string | null = null
         let matched_family_name: string | null = null
         let matched_parent_name: string | null = null
         let candidate_families: CandidateFamily[] = []
 
         if (match.families.length === 0) {
           status = 'unmatched'
+        } else if (match.method === 'name_partial') {
+          // Partial match: show all candidates, require explicit user confirmation
+          status = 'partial'
+          candidate_families = match.families
         } else if (match.families.length === 1) {
           status = 'matched'
           matched_family_id = match.families[0].family_id
+          matched_child_id = match.families[0].child_id
           matched_family_name = match.families[0].family_name
           matched_parent_name = match.families[0].parent_name
         } else {
@@ -283,7 +366,7 @@ export async function importRoutes(app: FastifyInstance) {
           candidate_families = match.families
         }
 
-        // Secondary duplicate check: same family + date + amount on this account
+        // Secondary duplicate check: same family|child + date + amount on this account
         // Catches manually entered payments that correspond to the same bank row
         let is_duplicate = false
         let duplicate_tx_id: string | null = null
@@ -296,12 +379,22 @@ export async function importRoutes(app: FastifyInstance) {
             status = 'duplicate'
           }
         }
+        if (matched_child_id && !is_duplicate) {
+          const key = `child:${matched_child_id}|${row.date}|${row.amount.toFixed(2)}`
+          const existing = childPaymentSet.get(key)
+          if (existing) {
+            is_duplicate = true
+            duplicate_tx_id = existing
+            status = 'duplicate'
+          }
+        }
 
         result.push({
           ...row,
           status,
           match_method: match.method,
           matched_family_id,
+          matched_child_id,
           matched_family_name,
           matched_parent_name,
           candidate_families,
@@ -332,6 +425,7 @@ export async function importRoutes(app: FastifyInstance) {
         .innerJoin('children as c', 'c.id', 't.child_id')
         .select([
           't.id',
+          't.child_id',
           sql<string>`t.amount::text`.as('amount'),
           sql<string>`t.transaction_date::text`.as('transaction_date'),
           'c.family_id',
@@ -342,60 +436,65 @@ export async function importRoutes(app: FastifyInstance) {
         .where('t.account_id', '=', account_id)
         .execute()
 
-      const duplicateSet = new Set<string>()          // bank_ref keys
-      const familyPaymentSet = new Set<string>()      // family|date|amount keys
+      const duplicateSet = new Set<string>()
+      const familyPaymentSet = new Set<string>()
+      const childPaymentSet = new Set<string>()
 
       for (const tx of existingTxRows) {
         const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
         if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
           duplicateSet.add(meta['bank_ref'] as string)
         }
+        const amt = parseFloat(tx.amount).toFixed(2)
         if (tx.family_id) {
-          familyPaymentSet.add(`${tx.family_id}|${tx.transaction_date}|${parseFloat(tx.amount).toFixed(2)}`)
+          familyPaymentSet.add(`${tx.family_id}|${tx.transaction_date}|${amt}`)
+        } else {
+          childPaymentSet.add(`child:${tx.child_id}|${tx.transaction_date}|${amt}`)
         }
       }
 
       const createdBy = request.user.sub
 
       type AllocationEntry = { child_id: string; child_name: string; amount: number; tx_id: string }
-      const allocationsOut: { row_index: number; family_id: string; family_name: string; allocations: AllocationEntry[] }[] = []
+      const allocationsOut: { row_index: number; family_id: string | null; family_name: string; allocations: AllocationEntry[] }[] = []
       const errors: { row_index: number; message: string }[] = []
       let imported = 0
       let skipped_duplicates = 0
 
       for (const row of rows) {
-        const familyKey = `${row.family_id}|${row.date}|${row.amount.toFixed(2)}`
-        if (!row.force && (duplicateSet.has(row.bank_ref) || familyPaymentSet.has(familyKey))) {
+        const familyKey = row.family_id ? `${row.family_id}|${row.date}|${row.amount.toFixed(2)}` : null
+        const childKey = row.child_id ? `child:${row.child_id}|${row.date}|${row.amount.toFixed(2)}` : null
+
+        const isDuplicate =
+          duplicateSet.has(row.bank_ref) ||
+          (familyKey !== null && familyPaymentSet.has(familyKey)) ||
+          (childKey !== null && childPaymentSet.has(childKey))
+
+        if (!row.force && isDuplicate) {
           skipped_duplicates++
           continue
         }
 
         try {
-          const debts = await getFamilyDebts(row.family_id, account_id)
-          const waterfall = computeWaterfall(debts, row.amount, undefined)
-          const dateStr = row.date
-
-          if (waterfall.allocations.length === 0) {
-            // No debts — create advance for first active child
-            const firstChild = await db
+          if (row.child_id && !row.family_id) {
+            // Direct child payment — no family waterfall needed
+            const child = await db
               .selectFrom('children')
               .select(['id', 'full_name'])
-              .where('family_id', '=', row.family_id)
-              .where('is_active', '=', true)
-              .orderBy('full_name', 'asc')
+              .where('id', '=', row.child_id)
               .executeTakeFirst()
 
-            if (!firstChild) {
-              errors.push({ row_index: row.row_index, message: 'У сім\'ї немає активних дітей' })
+            if (!child) {
+              errors.push({ row_index: row.row_index, message: 'Дитину не знайдено' })
               continue
             }
 
             const tx_id = await createTransaction({
               type: 'PAYMENT',
-              child_id: firstChild.id,
+              child_id: child.id,
               account_id,
               amount: row.amount,
-              transaction_date: dateStr,
+              transaction_date: row.date,
               note: row.note ?? row.counterparty_name,
               metadata_json: {
                 source: 'bank_import',
@@ -406,73 +505,123 @@ export async function importRoutes(app: FastifyInstance) {
               created_by: createdBy,
             })
 
-            const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
             allocationsOut.push({
               row_index: row.row_index,
-              family_id: row.family_id,
-              family_name: family?.name ?? '',
-              allocations: [{ child_id: firstChild.id, child_name: firstChild.full_name, amount: row.amount, tx_id }],
+              family_id: null,
+              family_name: child.full_name,
+              allocations: [{ child_id: child.id, child_name: child.full_name, amount: row.amount, tx_id }],
             })
-          } else {
-            const rowAllocations: AllocationEntry[] = []
-            for (const alloc of waterfall.allocations) {
-              const tx_id = await createTransaction({
-                type: 'PAYMENT',
-                child_id: alloc.child_id,
-                account_id,
-                amount: alloc.amount,
-                transaction_date: dateStr,
-                note: row.note ?? row.counterparty_name,
-                metadata_json: {
-                  source: 'bank_import',
-                  bank_ref: row.bank_ref,
-                  counterparty_name: row.counterparty_name,
-                  edrpou: row.edrpou,
-                },
-                created_by: createdBy,
-              })
-              rowAllocations.push({ child_id: alloc.child_id, child_name: alloc.child_name, amount: alloc.amount, tx_id })
-            }
+            duplicateSet.add(row.bank_ref)
+            imported++
 
-            // If there's a remainder (payment > total debt), allocate it as advance to first child
-            if (waterfall.remainder > 0 && waterfall.allocations.length > 0) {
-              const firstChildId = waterfall.allocations[0].child_id
-              const tx_id = await createTransaction({
-                type: 'PAYMENT',
-                child_id: firstChildId,
-                account_id,
-                amount: waterfall.remainder,
-                transaction_date: dateStr,
-                note: row.note ?? row.counterparty_name,
-                metadata_json: {
-                  source: 'bank_import',
-                  bank_ref: row.bank_ref,
-                  counterparty_name: row.counterparty_name,
-                  edrpou: row.edrpou,
-                  advance: true,
-                },
-                created_by: createdBy,
-              })
-              const existing = rowAllocations.find((a) => a.child_id === firstChildId)
-              if (existing) {
-                existing.amount += waterfall.remainder
-                existing.tx_id = tx_id
-              } else {
-                rowAllocations.push({ child_id: firstChildId, child_name: waterfall.allocations[0].child_name, amount: waterfall.remainder, tx_id })
+          } else if (row.family_id) {
+            // Family waterfall payment
+            const debts = await getFamilyDebts(row.family_id, account_id)
+            const waterfall = computeWaterfall(debts, row.amount, undefined)
+            const dateStr = row.date
+
+            if (waterfall.allocations.length === 0) {
+              // No debts — create advance for first active child
+              const firstChild = await db
+                .selectFrom('children')
+                .select(['id', 'full_name'])
+                .where('family_id', '=', row.family_id)
+                .where('is_active', '=', true)
+                .orderBy('full_name', 'asc')
+                .executeTakeFirst()
+
+              if (!firstChild) {
+                errors.push({ row_index: row.row_index, message: 'У сім\'ї немає активних дітей' })
+                continue
               }
+
+              const tx_id = await createTransaction({
+                type: 'PAYMENT',
+                child_id: firstChild.id,
+                account_id,
+                amount: row.amount,
+                transaction_date: dateStr,
+                note: row.note ?? row.counterparty_name,
+                metadata_json: {
+                  source: 'bank_import',
+                  bank_ref: row.bank_ref,
+                  counterparty_name: row.counterparty_name,
+                  edrpou: row.edrpou,
+                },
+                created_by: createdBy,
+              })
+
+              const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
+              allocationsOut.push({
+                row_index: row.row_index,
+                family_id: row.family_id,
+                family_name: family?.name ?? '',
+                allocations: [{ child_id: firstChild.id, child_name: firstChild.full_name, amount: row.amount, tx_id }],
+              })
+            } else {
+              const rowAllocations: AllocationEntry[] = []
+              for (const alloc of waterfall.allocations) {
+                const tx_id = await createTransaction({
+                  type: 'PAYMENT',
+                  child_id: alloc.child_id,
+                  account_id,
+                  amount: alloc.amount,
+                  transaction_date: dateStr,
+                  note: row.note ?? row.counterparty_name,
+                  metadata_json: {
+                    source: 'bank_import',
+                    bank_ref: row.bank_ref,
+                    counterparty_name: row.counterparty_name,
+                    edrpou: row.edrpou,
+                  },
+                  created_by: createdBy,
+                })
+                rowAllocations.push({ child_id: alloc.child_id, child_name: alloc.child_name, amount: alloc.amount, tx_id })
+              }
+
+              // If there's a remainder (payment > total debt), allocate it as advance to first child
+              if (waterfall.remainder > 0 && waterfall.allocations.length > 0) {
+                const firstChildId = waterfall.allocations[0].child_id
+                const tx_id = await createTransaction({
+                  type: 'PAYMENT',
+                  child_id: firstChildId,
+                  account_id,
+                  amount: waterfall.remainder,
+                  transaction_date: dateStr,
+                  note: row.note ?? row.counterparty_name,
+                  metadata_json: {
+                    source: 'bank_import',
+                    bank_ref: row.bank_ref,
+                    counterparty_name: row.counterparty_name,
+                    edrpou: row.edrpou,
+                    advance: true,
+                  },
+                  created_by: createdBy,
+                })
+                const existing = rowAllocations.find((a) => a.child_id === firstChildId)
+                if (existing) {
+                  existing.amount += waterfall.remainder
+                  existing.tx_id = tx_id
+                } else {
+                  rowAllocations.push({ child_id: firstChildId, child_name: waterfall.allocations[0].child_name, amount: waterfall.remainder, tx_id })
+                }
+              }
+
+              const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
+              allocationsOut.push({
+                row_index: row.row_index,
+                family_id: row.family_id,
+                family_name: family?.name ?? '',
+                allocations: rowAllocations,
+              })
             }
 
-            const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
-            allocationsOut.push({
-              row_index: row.row_index,
-              family_id: row.family_id,
-              family_name: family?.name ?? '',
-              allocations: rowAllocations,
-            })
-          }
+            duplicateSet.add(row.bank_ref)
+            imported++
 
-          duplicateSet.add(row.bank_ref)
-          imported++
+          } else {
+            errors.push({ row_index: row.row_index, message: 'Не вказано сімʼю або дитину' })
+          }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
           errors.push({ row_index: row.row_index, message: msg })

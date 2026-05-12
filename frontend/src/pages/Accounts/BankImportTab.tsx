@@ -71,6 +71,7 @@ function StatusBadge({ status }: { status: PreviewRow['status'] }) {
   const map: Record<PreviewRow['status'], { label: string; cls: string }> = {
     matched:   { label: 'Знайдено',  cls: 'bg-green-100 text-green-800' },
     conflict:  { label: 'Конфлікт', cls: 'bg-amber-100 text-amber-800' },
+    partial:   { label: 'Схоже',    cls: 'bg-orange-100 text-orange-700' },
     unmatched: { label: 'Не знайдено', cls: 'bg-gray-100 text-gray-600' },
     duplicate: { label: 'Дублікат',  cls: 'bg-blue-100 text-blue-700' },
   }
@@ -86,7 +87,7 @@ export function BankImportTab({ accountId }: Props) {
   const [previewRows, setPreviewRows] = useState<PreviewRow[] | null>(null)
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [forceImport, setForceImport] = useState<Set<number>>(new Set())
-  const [familyOverride, setFamilyOverride] = useState<Map<number, string>>(new Map())
+  const [familyOverride, setFamilyOverride] = useState<Map<number, { family_id: string | null; child_id: string | null; display_name: string }>>(new Map())
   const [familySearch, setFamilySearch] = useState<Map<number, string>>(new Map())
   const [result, setResult] = useState<{ imported: number; skipped: number; errors: { row_index: number; message: string }[] } | null>(null)
 
@@ -149,13 +150,16 @@ export function BankImportTab({ accountId }: Props) {
     const applyRows: ApplyRow[] = []
     for (const row of previewRows) {
       if (!checked.has(row.row_index)) continue
-      const family_id = familyOverride.get(row.row_index) ?? row.matched_family_id
-      if (!family_id) continue
+      const override = familyOverride.get(row.row_index)
+      const effectiveFamilyId = override?.family_id ?? row.matched_family_id
+      const effectiveChildId = override?.child_id ?? row.matched_child_id
+      if (!effectiveFamilyId && !effectiveChildId) continue
       applyRows.push({
         row_index: row.row_index,
         date: row.date,
         amount: row.amount,
-        family_id,
+        family_id: effectiveFamilyId,
+        child_id: effectiveChildId ?? undefined,
         bank_ref: row.bank_ref,
         counterparty_name: row.counterparty_name,
         edrpou: row.edrpou,
@@ -167,15 +171,15 @@ export function BankImportTab({ accountId }: Props) {
     applyMutation.mutate(applyRows)
   }
 
-  function setOverride(row_index: number, family_id: string) {
+  function setOverride(row_index: number, target: { family_id: string | null; child_id: string | null; display_name: string }) {
     setFamilyOverride((prev) => {
       const next = new Map(prev)
-      next.set(row_index, family_id)
+      next.set(row_index, target)
       return next
     })
     setChecked((prev) => {
       const next = new Set(prev)
-      if (family_id) next.add(row_index)
+      if (target.family_id || target.child_id) next.add(row_index)
       return next
     })
   }
@@ -194,11 +198,13 @@ export function BankImportTab({ accountId }: Props) {
         const r = previewRows.find((r) => r.row_index === idx)
         if (!r) return false
         if (r.is_duplicate && !forceImport.has(idx)) return false
-        return !!(familyOverride.get(idx) ?? r.matched_family_id)
+        const override = familyOverride.get(idx)
+        return !!(override?.family_id || override?.child_id || r.matched_family_id || r.matched_child_id)
       }).length
     : 0
 
   const duplicateCount = previewRows?.filter((r) => r.is_duplicate).length ?? 0
+  const partialCount = previewRows?.filter((r) => r.status === 'partial').length ?? 0
   const unmatchedCount = previewRows?.filter((r) => r.status === 'unmatched').length ?? 0
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -269,6 +275,7 @@ export function BankImportTab({ accountId }: Props) {
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-4 text-sm">
         <span className="text-gray-700 font-medium">Знайдено рядків: {previewRows.length}</span>
         {duplicateCount > 0 && <span className="text-blue-600">Дублікатів: {duplicateCount}</span>}
+        {partialCount > 0 && <span className="text-orange-600">Схожих: {partialCount}</span>}
         {unmatchedCount > 0 && <span className="text-gray-500">Не зіставлено: {unmatchedCount}</span>}
         <div className="ml-auto flex gap-2">
           <button
@@ -311,7 +318,9 @@ export function BankImportTab({ accountId }: Props) {
               const isForced = forceImport.has(row.row_index)
               const isDisabled = row.is_duplicate && !isForced
               const override = familyOverride.get(row.row_index)
-              const effectiveFamilyId = override ?? row.matched_family_id
+              const effectiveFamilyId = override?.family_id ?? row.matched_family_id
+              const effectiveChildId = override?.child_id ?? row.matched_child_id
+              const hasTarget = !!(effectiveFamilyId || effectiveChildId)
 
               return (
                 <tr
@@ -323,7 +332,7 @@ export function BankImportTab({ accountId }: Props) {
                     <input
                       type="checkbox"
                       checked={checked.has(row.row_index) && !isDisabled}
-                      disabled={isDisabled || !effectiveFamilyId}
+                      disabled={isDisabled || !hasTarget}
                       onChange={() => toggleCheck(row.row_index)}
                       className="rounded border-gray-300 text-iris-600 focus:ring-iris-500"
                     />
@@ -395,31 +404,38 @@ export function BankImportTab({ accountId }: Props) {
                           ✎
                         </button>
                       </div>
-                    ) : row.status === 'conflict' && !override ? (
+                    ) : (row.status === 'conflict' || row.status === 'partial') && !override ? (
                       <select
                         value=""
-                        onChange={(e) => { if (e.target.value) setOverride(row.row_index, e.target.value) }}
-                        className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
+                        onChange={(e) => {
+                          const i = parseInt(e.target.value)
+                          if (!isNaN(i)) {
+                            const f = row.candidate_families[i]
+                            if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
+                          }
+                        }}
+                        className={`text-xs border rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full ${row.status === 'partial' ? 'border-orange-300' : 'border-amber-300'}`}
                       >
-                        <option value="">Оберіть сімʼю...</option>
-                        {row.candidate_families.map((f) => (
-                          <option key={f.family_id} value={f.family_id}>{f.family_name} ({f.parent_name})</option>
+                        <option value="">Оберіть...</option>
+                        {row.candidate_families.map((f, i) => (
+                          <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
                         ))}
                       </select>
                     ) : familySearch.has(row.row_index) || (row.status === 'unmatched' && !override) ? (
                       <FamilyCombobox
                         families={allFamilies ?? []}
-                        value={override ?? ''}
+                        value={override?.family_id ?? ''}
                         search={familySearch.get(row.row_index) ?? ''}
                         onSearchChange={(s) => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, s); return n })}
                         onSelect={(id) => {
-                          setOverride(row.row_index, id)
+                          const family = allFamilies?.find((f) => f.id === id)
+                          setOverride(row.row_index, { family_id: id, child_id: null, display_name: family?.name ?? id })
                           setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
                         }}
                       />
                     ) : override ? (
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-iris-700">{allFamilies?.find((f) => f.id === override)?.name ?? override}</span>
+                        <span className="text-xs text-iris-700">{override.display_name}</span>
                         <button
                           onClick={() => {
                             setFamilyOverride((p) => { const n = new Map(p); n.delete(row.row_index); return n })
