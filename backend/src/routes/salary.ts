@@ -240,6 +240,82 @@ export async function salaryRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/salary/grid?month=YYYY-MM — full transaction grid for all staff
+  app.get<{ Querystring: { month?: string } }>(
+    '/salary/grid',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const month        = (req.query.month ?? new Date().toISOString().slice(0, 7)).slice(0, 7)
+      const billingStart = new Date(month + '-01')
+      const billingEnd   = new Date(billingStart)
+      billingEnd.setMonth(billingEnd.getMonth() + 1)
+
+      // All dates in the month
+      const daysCount = new Date(billingStart.getFullYear(), billingStart.getMonth() + 1, 0).getDate()
+      const dates: string[] = Array.from({ length: daysCount }, (_, i) => {
+        const d = new Date(billingStart)
+        d.setDate(i + 1)
+        return d.toISOString().slice(0, 10)
+      })
+
+      const staff = await db
+        .selectFrom('staff')
+        .where('is_active', '=', true)
+        .orderBy('full_name', 'asc')
+        .selectAll()
+        .execute()
+
+      const txs = await db
+        .selectFrom('salary_transactions as st')
+        .leftJoin('staff_rates as r', 'r.id', 'st.rate_id')
+        .leftJoin('activities as a', 'a.id', 'st.activity_id')
+        .where('st.transaction_date', '>=', billingStart)
+        .where('st.transaction_date', '<', billingEnd)
+        .where('st.is_deleted', '=', false)
+        .select([
+          'st.id', 'st.staff_id', 'st.type', 'st.gross_amount', 'st.deduction_pct',
+          'st.transaction_date', 'st.billing_month', 'st.note', 'st.edit_note',
+          'st.metadata_json', 'st.created_at',
+          'st.rate_id', 'r.rate_type', 'r.rate_category',
+          'st.activity_id', 'a.name as activity_name',
+        ])
+        .orderBy('st.transaction_date', 'asc')
+        .orderBy('st.created_at', 'asc')
+        .execute()
+
+      // Group transactions by staff_id
+      const txMap = new Map<string, typeof txs>()
+      for (const tx of txs) {
+        if (!txMap.has(tx.staff_id)) txMap.set(tx.staff_id, [])
+        txMap.get(tx.staff_id)!.push(tx)
+      }
+
+      const rows = staff.map(s => {
+        const staffTxs = txMap.get(s.id) ?? []
+        let totalGross = 0, totalDeduction = 0, totalPaid = 0
+        for (const tx of staffTxs) {
+          const gross = Number(tx.gross_amount)
+          const ded   = Math.round(gross * Number(tx.deduction_pct) / 100 * 100) / 100
+          if (tx.type === 'PAYMENT') {
+            totalPaid += gross
+          } else {
+            totalGross     += gross
+            totalDeduction += ded
+          }
+        }
+        const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
+        const balance  = Math.round((totalNet - totalPaid) * 100) / 100
+        return {
+          ...s,
+          transactions: staffTxs,
+          summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance },
+        }
+      })
+
+      return { month, dates, rows }
+    }
+  )
+
   // GET /api/salary/journal?month=YYYY-MM — all staff summary
   app.get<{ Querystring: { month?: string } }>(
     '/salary/journal',

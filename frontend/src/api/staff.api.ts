@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 export type StaffType    = 'employee' | 'partner'
 export type RateCategory = 'auto' | 'manual'
-export type RateType     = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
 export type ValueMode    = 'fixed' | 'percent_of_revenue'
 export type SalaryTxType = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
@@ -77,6 +77,17 @@ export interface SalaryJournalRow extends StaffMember {
 export interface SalaryJournalResponse {
   month: string
   rows:  SalaryJournalRow[]
+}
+
+export interface SalaryGridStaffRow extends StaffMember {
+  transactions: (SalaryTransaction & { staff_id: string })[]
+  summary:      SalarySummary
+}
+
+export interface SalaryGridResponse {
+  month: string
+  dates: string[]
+  rows:  SalaryGridStaffRow[]
 }
 
 export const staffApi = {
@@ -191,6 +202,12 @@ export const staffApi = {
   getJournal: async (month?: string): Promise<SalaryJournalResponse> => {
     const q = month ? `?month=${month}` : ''
     const { data } = await apiClient.get<SalaryJournalResponse>(`/salary/journal${q}`)
+    return data
+  },
+
+  getGrid: async (month?: string): Promise<SalaryGridResponse> => {
+    const q = month ? `?month=${month}` : ''
+    const { data } = await apiClient.get<SalaryGridResponse>(`/salary/grid${q}`)
     return data
   },
 }

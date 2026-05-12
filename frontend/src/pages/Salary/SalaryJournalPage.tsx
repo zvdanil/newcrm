@@ -4,6 +4,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { staffApi } from '../../api/staff.api'
 import { PayForm, ManualAccrualForm } from '../Staff/StaffCardPage'
 import { localMonthStr, shiftMonth } from '../../utils/dateStr'
+import { SalaryGridTab } from './SalaryGridTab'
+
+type Tab = 'summary' | 'grid'
 
 function fmt(n: number) {
   return n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -51,6 +54,7 @@ function PayModalWrapper({ staffId, onDone }: { staffId: string, onDone: () => v
 export function SalaryJournalPage() {
   const qc = useQueryClient()
   const [month, setMonth] = useState(() => localMonthStr())
+  const [tab, setTab] = useState<Tab>('summary')
   const [payStaffId, setPayStaffId] = useState<string | null>(null)
   const [accrualStaffId, setAccrualStaffId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -101,7 +105,7 @@ export function SalaryJournalPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Журнал зарплати</h1>
           <p className="text-sm text-gray-500">{filteredRows.length} співробітників</p>
@@ -126,8 +130,30 @@ export function SalaryJournalPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3">
+      {/* Tabs + Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+          <button
+            onClick={() => setTab('summary')}
+            className={`px-4 py-2 font-medium transition-colors ${
+              tab === 'summary'
+                ? 'bg-iris-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Зведення
+          </button>
+          <button
+            onClick={() => setTab('grid')}
+            className={`px-4 py-2 font-medium transition-colors border-l border-gray-200 ${
+              tab === 'grid'
+                ? 'bg-iris-600 text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Журнал
+          </button>
+        </div>
         <input
           type="text"
           value={search}
@@ -137,8 +163,13 @@ export function SalaryJournalPage() {
         />
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Grid tab */}
+      {tab === 'grid' && (
+        <SalaryGridTab month={month} search={search} />
+      )}
+
+      {/* Summary table */}
+      {tab === 'summary' && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
         ) : filteredRows.length === 0 ? (
@@ -226,7 +257,8 @@ export function SalaryJournalPage() {
             </tfoot>
           </table>
         )}
-      </div>
+      </div>}
+
     </div>
   )
 }
