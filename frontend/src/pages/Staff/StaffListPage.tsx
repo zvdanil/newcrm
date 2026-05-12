@@ -92,6 +92,7 @@ export function StaffListPage() {
   const [showAdd, setShowAdd]           = useState(false)
   const [filterType, setFilterType]     = useState<'' | StaffType>('')
   const [filterActive, setFilterActive] = useState<'true' | 'false' | ''>('true')
+  const [search, setSearch]             = useState('')
 
   const { data: staff = [], isLoading } = useQuery({
     queryKey: ['staff', filterType, filterActive],
@@ -101,12 +102,18 @@ export function StaffListPage() {
     }),
   })
 
+  const filteredStaff = staff.filter(s => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return s.full_name.toLowerCase().includes(q) || s.specialization?.toLowerCase().includes(q)
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Персонал</h1>
-          <p className="text-sm text-gray-500">{staff.length} записів</p>
+          <p className="text-sm text-gray-500">{filteredStaff.length} записів</p>
         </div>
         {!showAdd && (
           <button onClick={() => setShowAdd(true)}
@@ -117,7 +124,14 @@ export function StaffListPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Пошук за ПІБ..."
+          className="flex-1 min-w-48 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+        />
         <select value={filterType} onChange={e => setFilterType(e.target.value as '' | StaffType)}
           className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
           <option value="">Всі типи</option>
@@ -137,7 +151,7 @@ export function StaffListPage() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
-        ) : staff.length === 0 ? (
+        ) : filteredStaff.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">Персоналу не знайдено</div>
         ) : (
           <table className="w-full text-sm">
@@ -152,7 +166,7 @@ export function StaffListPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {staff.map(s => (
+              {filteredStaff.map(s => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <Link to={`/staff/${s.id}`} className="font-medium text-iris-700 hover:text-iris-900">

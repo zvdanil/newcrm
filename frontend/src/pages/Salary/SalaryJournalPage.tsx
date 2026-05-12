@@ -53,6 +53,7 @@ export function SalaryJournalPage() {
   const [month, setMonth] = useState(() => localMonthStr())
   const [payStaffId, setPayStaffId] = useState<string | null>(null)
   const [accrualStaffId, setAccrualStaffId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['salary-journal', month],
@@ -61,7 +62,13 @@ export function SalaryJournalPage() {
 
   const rows = data?.rows ?? []
 
-  const totals = rows.reduce(
+  const filteredRows = rows.filter(r => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return r.full_name.toLowerCase().includes(q) || r.specialization?.toLowerCase().includes(q)
+  })
+
+  const totals = filteredRows.reduce(
     (acc, r) => ({
       gross:     acc.gross     + r.summary.gross,
       deduction: acc.deduction + r.summary.deduction,
@@ -97,7 +104,7 @@ export function SalaryJournalPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Журнал зарплати</h1>
-          <p className="text-sm text-gray-500">{rows.length} співробітників</p>
+          <p className="text-sm text-gray-500">{filteredRows.length} співробітників</p>
         </div>
         {/* Month navigation */}
         <div className="flex items-center gap-2">
@@ -119,11 +126,22 @@ export function SalaryJournalPage() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Пошук за ПІБ..."
+          className="flex-1 min-w-48 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+        />
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">Дані відсутні</div>
         ) : (
           <table className="w-full text-sm">
@@ -140,7 +158,7 @@ export function SalaryJournalPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map(r => (
+              {filteredRows.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50 group">
                   <td className="px-4 py-3">
                     <Link
