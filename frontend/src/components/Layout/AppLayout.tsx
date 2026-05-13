@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth.store'
 import { useCanAccess } from '../../hooks/useCanAccess'
 
@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { to: '/families',        label: 'Сімʼї' },
   { to: '/activities',      label: 'Активності' },
   { to: '/journals',        label: 'Журнали' },
+  { to: '/calendar',        label: 'Календар' },
   { to: '/staff',           label: 'Персонал' },
   { to: '/salary/journal',  label: 'Журнал ЗП' },
   { to: '/accounts',        label: 'Рахунки' },
@@ -17,7 +18,20 @@ const NAV_LINKS = [
 export function AppLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const canManageGroups = useCanAccess('owner', 'admin')
+
+  // When embedded in an iframe (e.g. opened from calendar modal), hide navigation
+  const isEmbedded = new URLSearchParams(location.search).get('layout') === 'none'
+  if (isEmbedded) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <main className="max-w-screen-xl mx-auto px-4 py-4">
+          <Outlet />
+        </main>
+      </div>
+    )
+  }
 
   const handleLogout = () => {
     logout()

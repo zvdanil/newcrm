@@ -22,6 +22,7 @@ import { ExpensesPage } from './pages/Expenses/ExpensesPage'
 import { StaffListPage } from './pages/Staff/StaffListPage'
 import { StaffCardPage } from './pages/Staff/StaffCardPage'
 import { SalaryJournalPage } from './pages/Salary/SalaryJournalPage'
+import { CalendarPage } from './pages/Calendar/CalendarPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +84,9 @@ export function App() {
 
               {/* Зарплата */}
               <Route path="salary/journal" element={<SalaryJournalPage />} />
+
+              {/* Календар */}
+              <Route path="calendar" element={<CalendarPage />} />
 
               <Route path="reports"   element={<Placeholder title="Звіти" />} />
             </Route>

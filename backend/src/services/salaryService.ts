@@ -193,6 +193,18 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const dateObj = new Date(date)
   const now     = new Date().toISOString()
 
+  // Check if a substitution exists for this activity+date.
+  // If so, skip auto-accrual for the original teacher (sub's ACCRUAL already created at substitution save).
+  const substitution = await db
+    .selectFrom('substitutions as sub')
+    .innerJoin('activity_schedules as s', 's.id', 'sub.schedule_id')
+    .select(['sub.original_staff_id', 'sub.substitute_staff_id'])
+    .where('s.activity_id', '=', activityId)
+    .where('sub.occurrence_date', '=', dateObj)
+    .executeTakeFirst()
+
+  const blockedStaffId = substitution?.original_staff_id ?? null
+
   const rates = await db
     .selectFrom('staff_rates')
     .where('activity_id', '=', activityId)
@@ -233,6 +245,9 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const billing        = billingMonthOf(date)
 
   for (const rate of rates) {
+    // Skip auto-accrual for the teacher replaced by a substitution
+    if (blockedStaffId && rate.staff_id === blockedStaffId) continue
+
     const existing = await db
       .selectFrom('salary_transactions')
       .select(['id', 'gross_amount'])

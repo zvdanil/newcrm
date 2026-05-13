@@ -376,6 +376,48 @@ export interface MergedJournalActivitiesTable {
   sort_order:        Generated<number>
 }
 
+export interface ActivitySchedulesTable {
+  id:           Generated<string>
+  activity_id:  string
+  staff_id:     string | null
+  room:         string | null
+  start_time:   string           // TIME stored as string HH:MM:SS
+  duration_min: Generated<number>
+  rrule:        string
+  dtstart:      ColumnType<Date, string, string>
+  dtend:        ColumnType<Date | null, string | null, string | null>
+  color:        string | null
+  is_active:    Generated<boolean>
+  note:         string | null
+  created_at:   Generated<Date>
+  updated_at:   Generated<Date>
+}
+
+export interface ScheduleExceptionsTable {
+  id:             Generated<string>
+  schedule_id:    string
+  original_date:  ColumnType<Date, string, string>
+  exception_type: 'cancelled' | 'moved'
+  new_date:       ColumnType<Date | null, string | null, string | null>
+  new_start_time: string | null
+  note:           string | null
+  created_by:     string | null
+  created_at:     Generated<Date>
+}
+
+export interface SubstitutionsTable {
+  id:                  Generated<string>
+  schedule_id:         string
+  occurrence_date:     ColumnType<Date, string, string>
+  original_staff_id:   string | null
+  substitute_staff_id: string
+  rate_override:       ColumnType<string, number | string, number | string>
+  salary_tx_id:        string | null
+  note:                string | null
+  created_by:          string | null
+  created_at:          Generated<Date>
+}
+
 export interface Database {
   users:                 UsersTable
   groups:                GroupsTable
@@ -410,4 +452,7 @@ export interface Database {
   child_individual_tariffs:   ChildIndividualTariffsTable
   child_smart_tariff_configs: ChildSmartTariffConfigsTable
   group_lesson_logs:          GroupLessonLogsTable
+  activity_schedules:         ActivitySchedulesTable
+  schedule_exceptions:        ScheduleExceptionsTable
+  substitutions:              SubstitutionsTable
 }

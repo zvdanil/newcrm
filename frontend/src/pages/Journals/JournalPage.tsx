@@ -198,12 +198,29 @@ export function JournalPage() {
 
   const mode = (searchParams.get('mode') as Mode) ?? 'week'
   const baseDate = searchParams.get('date') ?? toStr(new Date())
+  const isEmbedded = searchParams.get('layout') === 'none'
   const [from, to] = getRange(baseDate, mode)
 
   const [specialTarget, setSpecialTarget] = useState<{ row: JournalRow; dateStr: string } | null>(null)
 
-  const setMode = (m: Mode) => setSearchParams({ mode: m, date: baseDate })
-  const setDate = (d: string) => setSearchParams({ mode, date: d })
+  // Preserve ?layout=none when navigating within the journal (iframe context)
+  const setMode = (m: Mode) => {
+    const p: Record<string, string> = { mode: m, date: baseDate }
+    if (isEmbedded) p.layout = 'none'
+    setSearchParams(p)
+  }
+  const setDate = (d: string) => {
+    const p: Record<string, string> = { mode, date: d }
+    if (isEmbedded) p.layout = 'none'
+    setSearchParams(p)
+  }
+
+  // Notify parent window (calendar) that attendance was saved
+  const notifyParent = () => {
+    if (isEmbedded && window.parent !== window) {
+      window.parent.postMessage({ type: 'JOURNAL_SAVED', activityId, date: baseDate }, window.location.origin)
+    }
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['journal', activityId, from, to],
@@ -219,7 +236,7 @@ export function JournalPage() {
       if (logId)  { await attendanceApi.update(logId, { status: status! }); return }
       await attendanceApi.mark({ enrollment_id: enrollmentId, date: dateStr, status: status! })
     },
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); notifyParent() },
   })
 
   const groupMarkMutation = useMutation({
@@ -235,7 +252,7 @@ export function JournalPage() {
       if (logId) return attendanceApi.update(logId, { status: 'special', custom_amount: amount, note: note || null })
       return attendanceApi.mark({ enrollment_id: enrollmentId, date: dateStr, status: 'special', custom_amount: amount, note: note || null })
     },
-    onSuccess: () => { invalidate(); setSpecialTarget(null) },
+    onSuccess: () => { invalidate(); notifyParent(); setSpecialTarget(null) },
   })
 
   const handleMark = useCallback((enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => {

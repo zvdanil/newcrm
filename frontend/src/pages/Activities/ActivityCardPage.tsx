@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
+import { staffApi } from '../../api/staff.api'
+import { calendarApi } from '../../api/calendar.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today } from '../../utils/dateStr'
 
@@ -771,6 +773,301 @@ export function ActivityCardPage() {
 
       {/* Linked activities */}
       {id && <LinkedActivitiesBlock activityId={id} parentActivity={activity} canEdit={canEdit} />}
+
+      {/* Schedule */}
+      {id && <ScheduleBlock activityId={id} canEdit={canEdit} />}
+    </div>
+  )
+}
+
+// ─── Schedule Block ────────────────────────────────────────────────────────────
+
+const DAY_LABELS: Record<number, string> = { 0: 'Нд', 1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб' }
+const ALL_DAYS = [1, 2, 3, 4, 5, 6, 0]
+
+function rruleToDays(rrule: string): number[] {
+  const dayCodeMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 }
+  const match = rrule.match(/BYDAY=([A-Z,]+)/)
+  if (!match) return []
+  return match[1].split(',').map(c => dayCodeMap[c] ?? -1).filter(d => d >= 0)
+}
+
+interface ScheduleBlockProps {
+  activityId: string
+  canEdit:    boolean
+}
+
+function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
+  const qc = useQueryClient()
+  const [showForm, setShowForm] = useState(false)
+  const [editId, setEditId]     = useState<string | null>(null)
+
+  const defaultForm = {
+    days:         [] as number[],
+    start_time:   '09:00',
+    duration_min: '60',
+    staff_id:     '',
+    room:         '',
+    dtstart:      today(),
+    dtend:        '',
+    color:        '',
+    note:         '',
+  }
+  const [form, setForm] = useState(defaultForm)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const { data: schedules = [] } = useQuery({
+    queryKey: ['activity-schedules', activityId],
+    queryFn:  () => calendarApi.getSchedulesByActivity(activityId),
+  })
+
+  const { data: staffList = [] } = useQuery({
+    queryKey: ['staff-list-active'],
+    queryFn:  () => staffApi.list({ is_active: true }),
+  })
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['activity-schedules', activityId] })
+
+  const createMutation = useMutation({
+    mutationFn: () => calendarApi.createSchedule({
+      activity_id:  activityId,
+      staff_id:     form.staff_id  || undefined,
+      room:         form.room      || undefined,
+      start_time:   form.start_time,
+      duration_min: Number(form.duration_min),
+      days:         form.days,
+      dtstart:      form.dtstart,
+      dtend:        form.dtend     || undefined,
+      color:        form.color     || undefined,
+      note:         form.note      || undefined,
+    }),
+    onSuccess: () => { invalidate(); setShowForm(false); setForm(defaultForm); setFormError(null) },
+    onError:   () => setFormError('Помилка при збереженні'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (id: string) => calendarApi.updateSchedule(id, {
+      staff_id:     form.staff_id  || null,
+      room:         form.room      || null,
+      start_time:   form.start_time,
+      duration_min: Number(form.duration_min),
+      days:         form.days,
+      dtend:        form.dtend     || null,
+      color:        form.color     || null,
+      note:         form.note      || null,
+    }),
+    onSuccess: () => { invalidate(); setEditId(null); setForm(defaultForm); setFormError(null) },
+    onError:   () => setFormError('Помилка при збереженні'),
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => calendarApi.deactivateSchedule(id),
+    onSuccess:  invalidate,
+  })
+
+  const toggleDay = (day: number) => {
+    setForm(f => ({ ...f, days: f.days.includes(day) ? f.days.filter(d => d !== day) : [...f.days, day] }))
+  }
+
+  const startEdit = (sched: typeof schedules[number]) => {
+    setForm({
+      days:         rruleToDays(sched.rrule),
+      start_time:   String(sched.start_time).slice(0, 5),
+      duration_min: String(sched.duration_min),
+      staff_id:     sched.staff_id ?? '',
+      room:         sched.room     ?? '',
+      dtstart:      String(sched.dtstart).slice(0, 10),
+      dtend:        sched.dtend ? String(sched.dtend).slice(0, 10) : '',
+      color:        sched.color ?? '',
+      note:         sched.note  ?? '',
+    })
+    setEditId(sched.id)
+    setShowForm(false)
+    setFormError(null)
+  }
+
+  const handleSubmit = () => {
+    if (form.days.length === 0) { setFormError('Оберіть хоча б один день тижня'); return }
+    if (!form.start_time)       { setFormError('Вкажіть час початку'); return }
+    if (!form.dtstart)          { setFormError('Вкажіть дату початку'); return }
+    if (editId) updateMutation.mutate(editId)
+    else createMutation.mutate()
+  }
+
+  const cancelForm = () => { setShowForm(false); setEditId(null); setForm(defaultForm); setFormError(null) }
+
+  const isFormOpen = showForm || editId !== null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-900">Розклад занять</h2>
+        {canEdit && !isFormOpen && (
+          <button
+            onClick={() => { setShowForm(true); setForm(defaultForm); setFormError(null) }}
+            className="text-sm text-iris-600 hover:text-iris-800 font-medium"
+          >
+            + Додати
+          </button>
+        )}
+      </div>
+
+      {/* List of active schedules */}
+      {schedules.length === 0 && !isFormOpen && (
+        <p className="text-sm text-gray-400">Розклад не налаштований</p>
+      )}
+
+      <div className="space-y-2">
+        {schedules.map(sched => (
+          <div key={sched.id} className={`flex items-start justify-between rounded-lg border p-3 ${editId === sched.id ? 'border-iris-300 bg-iris-50' : 'border-gray-100 bg-gray-50'}`}>
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium text-gray-900">
+                {rruleToDays(sched.rrule).map(d => DAY_LABELS[d]).join(', ')}
+                <span className="mx-1 text-gray-400">·</span>
+                {String(sched.start_time).slice(0, 5)}
+                <span className="mx-1 text-gray-400">·</span>
+                {sched.duration_min} хв
+              </div>
+              {sched.staff_name && <div className="text-xs text-gray-500">Педагог: {sched.staff_name}</div>}
+              {sched.room       && <div className="text-xs text-gray-500">Кімната: {sched.room}</div>}
+              <div className="text-xs text-gray-400">
+                {String(sched.dtstart).slice(0, 10)}
+                {sched.dtend && ` → ${String(sched.dtend).slice(0, 10)}`}
+              </div>
+            </div>
+            {canEdit && (
+              <div className="flex gap-2 ml-3 shrink-0">
+                <button onClick={() => startEdit(sched)} className="text-xs text-gray-400 hover:text-iris-600">Ред.</button>
+                <button
+                  onClick={() => deactivateMutation.mutate(sched.id)}
+                  disabled={deactivateMutation.isPending}
+                  className="text-xs text-gray-400 hover:text-red-500"
+                >
+                  Видалити
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add / Edit form */}
+      {isFormOpen && (
+        <div className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
+          <p className="text-sm font-medium text-gray-700">{editId ? 'Редагувати розклад' : 'Новий розклад'}</p>
+
+          {/* Days of week */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Дні тижня</label>
+            <div className="flex gap-1.5">
+              {ALL_DAYS.map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => toggleDay(d)}
+                  className={`w-9 h-9 rounded-lg text-xs font-medium border transition-colors ${
+                    form.days.includes(d)
+                      ? 'bg-iris-600 text-white border-iris-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-iris-300'
+                  }`}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Час початку</label>
+              <input
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm(f => ({ ...f, start_time: e.target.value }))}
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Тривалість (хв)</label>
+              <input
+                type="number"
+                min="15"
+                step="5"
+                value={form.duration_min}
+                onChange={(e) => setForm(f => ({ ...f, duration_min: e.target.value }))}
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Педагог</label>
+            <select
+              value={form.staff_id}
+              onChange={(e) => setForm(f => ({ ...f, staff_id: e.target.value }))}
+              className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+            >
+              <option value="">— без педагога —</option>
+              {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Кімната / кабінет</label>
+            <input
+              type="text"
+              value={form.room}
+              onChange={(e) => setForm(f => ({ ...f, room: e.target.value }))}
+              placeholder="напр. Кімната 2"
+              className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Дата початку</label>
+              <input
+                type="date"
+                value={form.dtstart}
+                onChange={(e) => setForm(f => ({ ...f, dtstart: e.target.value }))}
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Дата завершення (необов.)</label>
+              <input
+                type="date"
+                value={form.dtend}
+                onChange={(e) => setForm(f => ({ ...f, dtend: e.target.value }))}
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Примітка</label>
+            <input
+              type="text"
+              value={form.note}
+              onChange={(e) => setForm(f => ({ ...f, note: e.target.value }))}
+              className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+            />
+          </div>
+
+          {formError && <p className="text-xs text-red-500">{formError}</p>}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="px-4 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {editId ? 'Зберегти' : 'Додати розклад'}
+            </button>
+            <button onClick={cancelForm} className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Скасувати</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
