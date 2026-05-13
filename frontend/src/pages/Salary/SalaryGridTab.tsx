@@ -474,8 +474,33 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                 const orphanTxs = row.transactions.filter(
                   tx => tx.type !== 'PAYMENT' && (!tx.rate_id || !activeRateIds.has(tx.rate_id))
                 )
-                const showCatchAll = staffRates.length === 0 || orphanTxs.length > 0
-                const rowCount     = staffRates.length + (showCatchAll ? 1 : 0) + 1
+                
+                const rateGroupsMap = new Map<string, {
+                  key: string,
+                  label: string,
+                  rateIds: Set<string>,
+                  rates: typeof staffRates
+                }>()
+
+                for (const r of staffRates) {
+                  const key = `${r.rate_type}-${r.activity_id ?? 'no_act'}-${r.rate_category}`
+                  if (!rateGroupsMap.has(key)) {
+                    rateGroupsMap.set(key, {
+                      key,
+                      label: rateRowLabel(r),
+                      rateIds: new Set(),
+                      rates: []
+                    })
+                  }
+                  const group = rateGroupsMap.get(key)!
+                  group.rateIds.add(r.id)
+                  group.rates.push(r)
+                }
+
+                const rateGroups = Array.from(rateGroupsMap.values())
+
+                const showCatchAll = rateGroups.length === 0 || orphanTxs.length > 0
+                const rowCount     = rateGroups.length + (showCatchAll ? 1 : 0) + 1
 
                 const paymentTotal = row.summary.paid
 
@@ -500,10 +525,10 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                 )
 
                 // Build rate rows
-                const rateRows = staffRates.map((rate, rateIdx) => {
+                const rateRows = rateGroups.map((group, groupIdx) => {
                   const rateTxsByDate = new Map<string, SalaryTransaction[]>()
                   for (const tx of row.transactions) {
-                    if (tx.type === 'PAYMENT' || tx.rate_id !== rate.id) continue
+                    if (tx.type === 'PAYMENT' || !group.rateIds.has(tx.rate_id!)) continue
                     const date = String(tx.transaction_date).slice(0, 10)
                     if (!rateTxsByDate.has(date)) rateTxsByDate.set(date, [])
                     rateTxsByDate.get(date)!.push(tx)
@@ -517,13 +542,13 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
 
                   return (
                     <tr
-                      key={`${row.id}-rate-${rate.id}`}
+                      key={`${row.id}-group-${group.key}`}
                       className={`border-t border-gray-100 ${baseRowClass} hover:bg-iris-50/20`}
                     >
-                      {rateIdx === 0 && nameCell}
+                      {groupIdx === 0 && nameCell}
                       <td className="px-1 py-1 text-center border-r border-gray-200 whitespace-nowrap">
                         <span className="inline-block text-[10px] font-medium text-iris-600 bg-iris-50 rounded px-1 py-0.5">
-                          {rateRowLabel(rate)}
+                          {group.label}
                         </span>
                       </td>
                       {dates.map(d => {
@@ -537,7 +562,13 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                                   ? setDialog({ type: 'tx', tx: ts[0], staffId: row.id })
                                   : setDialog({ type: 'accrualGroup', txs: ts, staffId: row.id })
                               }
-                              onClickEmpty={() => setDialog({ type: 'newAccrual', staffId: row.id, date: d, rateId: rate.id })}
+                              onClickEmpty={() => {
+                                let activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to >= d))
+                                if (!activeRate) {
+                                  activeRate = group.rates.find(r => !r.valid_to) ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
+                                }
+                                setDialog({ type: 'newAccrual', staffId: row.id, date: d, rateId: activeRate.id })
+                              }}
                             />
                           </td>
                         )
@@ -568,7 +599,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                       key={`${row.id}-catchall`}
                       className={`border-t border-gray-100 ${baseRowClass} hover:bg-iris-50/20`}
                     >
-                      {staffRates.length === 0 && nameCell}
+                      {rateGroups.length === 0 && nameCell}
                       <td className="px-1 py-1 text-center border-r border-gray-200">
                         <span className="inline-block text-[10px] font-medium text-gray-400 bg-gray-100 rounded px-1 py-0.5">
                           Нарах.

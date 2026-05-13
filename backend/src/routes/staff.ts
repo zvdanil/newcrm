@@ -139,25 +139,28 @@ export async function staffRoutes(app: FastifyInstance) {
       const today    = new Date().toISOString().slice(0, 10)
       const fromDate = valid_from ?? today
 
-      // Fetch old active rate for same staff+activity before closing it (needed for retro recalc)
-      let oldRate: { id: string; rate_value: string } | undefined
-      if (activity_id) {
-        oldRate = await db
-          .selectFrom('staff_rates')
-          .select(['id', 'rate_value'])
-          .where('staff_id',    '=', req.params.id)
-          .where('activity_id', '=', activity_id)
-          .where('rate_type',   '=', rate_type)
-          .where('valid_to', 'is', null)
-          .executeTakeFirst()
+      // Fetch old active rate for same staff+activity+type before closing it (needed for retro recalc)
+      let q = db
+        .selectFrom('staff_rates')
+        .select(['id', 'rate_value'])
+        .where('staff_id',    '=', req.params.id)
+        .where('rate_type',   '=', rate_type)
+        .where('valid_to', 'is', null)
 
-        // Close it (SCD Type 2)
-        if (oldRate) {
-          await db.updateTable('staff_rates')
-            .set({ valid_to: fromDate })
-            .where('id', '=', oldRate.id)
-            .execute()
-        }
+      if (activity_id) {
+        q = q.where('activity_id', '=', activity_id)
+      } else {
+        q = q.where('activity_id', 'is', null)
+      }
+
+      const oldRate = await q.executeTakeFirst()
+
+      // Close it (SCD Type 2)
+      if (oldRate) {
+        await db.updateTable('staff_rates')
+          .set({ valid_to: fromDate })
+          .where('id', '=', oldRate.id)
+          .execute()
       }
 
       const rate = await db.insertInto('staff_rates').values({
