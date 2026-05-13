@@ -12,12 +12,14 @@ import { activitiesApi } from '../../api/activities.api'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const STATUS_COLOR: Record<string, string> = {
+const STATUS_DOT_COLOR: Record<string, string> = {
   filled:    '#16a34a',
   empty:     '#dc2626',
-  future:    '#9ca3af',
+  future:    '#e5e7eb',
   cancelled: '#374151',
 }
+
+const STATUS_COLOR: Record<string, string> = STATUS_DOT_COLOR
 
 const DAY_LABELS: Record<number, string> = { 1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб', 0: 'Нд' }
 const ALL_DAYS = [1, 2, 3, 4, 5, 6, 0]
@@ -44,7 +46,9 @@ function daysToLabel(rrule: string): string {
 // ─── Schedule Form ─────────────────────────────────────────────────────────────
 
 type ScheduleFormData = {
+  name:         string
   activity_id:  string
+  color:        string
   staff_id:     string
   room:         string
   start_time:   string
@@ -56,7 +60,9 @@ type ScheduleFormData = {
 }
 
 const EMPTY_FORM: ScheduleFormData = {
+  name:         '',
   activity_id:  '',
+  color:        '#6366f1',
   staff_id:     '',
   room:         '',
   start_time:   '09:00',
@@ -90,22 +96,54 @@ function ScheduleForm({ form, setForm, isEdit, error, isSaving, onSave, onCancel
   const toggleDay = (d: number) =>
     setForm(f => ({ ...f, days: f.days.includes(d) ? f.days.filter(x => x !== d) : [...f.days, d] }))
 
+  const handleActivityChange = async (activityId: string) => {
+    setForm(f => ({ ...f, activity_id: activityId }))
+    if (!activityId) return
+    try {
+      const staffForActivity = await calendarApi.getStaffForActivity(activityId)
+      if (staffForActivity.length > 0) {
+        setForm(f => ({ ...f, staff_id: staffForActivity[0].id }))
+      }
+    } catch { /* ignore */ }
+  }
+
   return (
     <div className="space-y-3">
-      {/* Activity */}
+      {/* Activity + color picker */}
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Активність *</label>
-        <select
-          value={form.activity_id}
-          onChange={e => setForm(f => ({ ...f, activity_id: e.target.value }))}
-          disabled={isEdit}
-          className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
-        >
-          <option value="">— оберіть активність —</option>
-          {activities.map((a: { id: string; name: string }) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={form.activity_id}
+            onChange={e => handleActivityChange(e.target.value)}
+            disabled={isEdit}
+            className="flex-1 min-w-0 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
+          >
+            <option value="">— оберіть активність —</option>
+            {activities.map((a: { id: string; name: string }) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <input
+            type="color"
+            value={form.color}
+            onChange={e => setForm(f => ({ ...f, color: e.target.value }))}
+            className="w-8 h-8 rounded border border-gray-300 cursor-pointer shrink-0 p-0.5"
+            title="Колір заняття в календарі"
+          />
+        </div>
+      </div>
+
+      {/* Schedule name */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Назва заняття</label>
+        <input
+          type="text"
+          value={form.name}
+          onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+          placeholder="залишити порожнім — буде назва активності"
+          className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+        />
       </div>
 
       {/* Days of week */}
@@ -250,7 +288,8 @@ function ScheduleItem({ sched, isEditing, onEdit, onDelete, isDeleting }: Schedu
     <div className={`rounded-lg border p-3 space-y-1 transition-colors ${isEditing ? 'border-iris-400 bg-iris-50' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">{sched.activity_name}</p>
+          <p className="text-sm font-semibold text-gray-900 truncate">{sched.name || sched.activity_name}</p>
+          {sched.name && <p className="text-xs text-gray-400 truncate">{sched.activity_name}</p>}
           <p className="text-xs text-gray-600 mt-0.5">
             {daysToLabel(sched.rrule)}
             <span className="mx-1.5 text-gray-300">·</span>
@@ -481,6 +520,7 @@ export function CalendarPage() {
   const createMutation = useMutation({
     mutationFn: () => calendarApi.createSchedule({
       activity_id:  form.activity_id,
+      name:         form.name         || undefined,
       staff_id:     form.staff_id     || undefined,
       room:         form.room         || undefined,
       start_time:   form.start_time,
@@ -488,6 +528,7 @@ export function CalendarPage() {
       days:         form.days,
       dtstart:      form.dtstart,
       dtend:        form.dtend        || undefined,
+      color:        form.color        || undefined,
       note:         form.note         || undefined,
     }),
     onSuccess: () => { refetchAll(); setPanelMode('list'); setForm(EMPTY_FORM); setFormError(null) },
@@ -496,12 +537,14 @@ export function CalendarPage() {
 
   const updateMutation = useMutation({
     mutationFn: (id: string) => calendarApi.updateSchedule(id, {
+      name:         form.name         || null,
       staff_id:     form.staff_id     || null,
       room:         form.room         || null,
       start_time:   form.start_time,
       duration_min: Number(form.duration_min),
       days:         form.days,
       dtend:        form.dtend        || null,
+      color:        form.color        || null,
       note:         form.note         || null,
     }),
     onSuccess: () => { refetchAll(); setPanelMode('list'); setEditingSched(null); setFormError(null) },
@@ -542,7 +585,9 @@ export function CalendarPage() {
 
   const startEdit = (sched: CalendarSchedule) => {
     setForm({
+      name:         sched.name         ?? '',
       activity_id:  sched.activity_id,
+      color:        sched.color        ?? '#6366f1',
       staff_id:     sched.staff_id     ?? '',
       room:         sched.room         ?? '',
       start_time:   String(sched.start_time).slice(0, 5),
@@ -570,8 +615,8 @@ export function CalendarPage() {
     const startDt = `${ev.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`
     const endMs   = new Date(startDt).getTime() + ev.durationMin * 60_000
     const endDt   = new Date(endMs).toISOString().slice(0, 19)
-    const color   = ev.color ?? STATUS_COLOR[ev.journalStatus]
-    return { id: ev.id, title: ev.activityName, start: startDt, end: endDt, backgroundColor: color, borderColor: color, textColor: '#fff', extendedProps: ev }
+    const bgColor = ev.color ?? '#6b7280'
+    return { id: ev.id, title: ev.scheduleName || ev.activityName, start: startDt, end: endDt, backgroundColor: bgColor, borderColor: bgColor, textColor: '#fff', extendedProps: ev }
   })
 
   const handleEventClick = (info: EventClickArg) => {
@@ -715,9 +760,13 @@ export function CalendarPage() {
             buttonText={{ today: 'Сьогодні' }}
             eventContent={arg => {
               const ev = arg.event.extendedProps as CalendarEvent
+              const dotColor = STATUS_DOT_COLOR[ev.journalStatus] ?? '#e5e7eb'
               return (
                 <div className="px-1 py-0.5 h-full flex flex-col gap-0.5 overflow-hidden">
-                  <div className="text-xs font-semibold truncate leading-tight">{arg.event.title}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                    <span className="text-xs font-semibold truncate leading-tight">{arg.event.title}</span>
+                  </div>
                   {ev.staffName && <div className="text-xs opacity-90 truncate">{ev.staffName}{ev.substitute ? ' (з)' : ''}</div>}
                   {ev.room      && <div className="text-xs opacity-75 truncate">{ev.room}</div>}
                 </div>

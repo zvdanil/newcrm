@@ -5,6 +5,7 @@ export interface CalendarEvent {
   scheduleId:   string
   activityId:   string
   activityName: string
+  scheduleName: string | null
   date:         string
   startTime:    string   // HH:MM
   durationMin:  number
@@ -27,6 +28,7 @@ export interface CalendarSchedule {
   id:           string
   activity_id:  string
   activity_name: string
+  name:         string | null
   staff_id:     string | null
   staff_name:   string | null
   room:         string | null
@@ -72,6 +74,7 @@ export const calendarApi = {
 
   createSchedule: async (payload: {
     activity_id:  string
+    name?:        string
     staff_id?:    string
     room?:        string
     start_time:   string
@@ -87,6 +90,7 @@ export const calendarApi = {
   },
 
   updateSchedule: async (id: string, payload: {
+    name?:         string | null
     staff_id?:     string | null
     room?:         string | null
     start_time?:   string
@@ -129,6 +133,12 @@ export const calendarApi = {
 
   deleteSubstitution: async (scheduleId: string, date: string): Promise<void> => {
     await apiClient.delete(`/calendar/schedules/${scheduleId}/substitutions/${date}`)
+  },
+
+  getStaffForActivity: async (activityId: string): Promise<{ id: string; full_name: string }[]> => {
+    const params = new URLSearchParams({ activity_id: activityId })
+    const { data } = await apiClient.get<{ id: string; full_name: string }[]>(`/calendar/staff-for-activity?${params}`)
+    return data
   },
 
   getConflicts: async (params: {

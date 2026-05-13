@@ -381,6 +381,7 @@ export interface ActivitySchedulesTable {
   activity_id:  string
   staff_id:     string | null
   room:         string | null
+  name:         string | null
   start_time:   string           // TIME stored as string HH:MM:SS
   duration_min: Generated<number>
   rrule:        string

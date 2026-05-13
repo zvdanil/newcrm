@@ -803,6 +803,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
   const [editId, setEditId]     = useState<string | null>(null)
 
   const defaultForm = {
+    name:         '',
     days:         [] as number[],
     start_time:   '09:00',
     duration_min: '60',
@@ -810,11 +811,22 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
     room:         '',
     dtstart:      today(),
     dtend:        '',
-    color:        '',
+    color:        '#6366f1',
     note:         '',
   }
   const [form, setForm] = useState(defaultForm)
   const [formError, setFormError] = useState<string | null>(null)
+
+  const openNewForm = async () => {
+    const fresh = { ...defaultForm }
+    try {
+      const staffForActivity = await calendarApi.getStaffForActivity(activityId)
+      if (staffForActivity.length > 0) fresh.staff_id = staffForActivity[0].id
+    } catch { /* ignore */ }
+    setForm(fresh)
+    setShowForm(true)
+    setFormError(null)
+  }
 
   const { data: schedules = [] } = useQuery({
     queryKey: ['activity-schedules', activityId],
@@ -831,6 +843,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
   const createMutation = useMutation({
     mutationFn: () => calendarApi.createSchedule({
       activity_id:  activityId,
+      name:         form.name      || undefined,
       staff_id:     form.staff_id  || undefined,
       room:         form.room      || undefined,
       start_time:   form.start_time,
@@ -847,6 +860,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
 
   const updateMutation = useMutation({
     mutationFn: (id: string) => calendarApi.updateSchedule(id, {
+      name:         form.name      || null,
       staff_id:     form.staff_id  || null,
       room:         form.room      || null,
       start_time:   form.start_time,
@@ -871,6 +885,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
 
   const startEdit = (sched: typeof schedules[number]) => {
     setForm({
+      name:         sched.name     ?? '',
       days:         rruleToDays(sched.rrule),
       start_time:   String(sched.start_time).slice(0, 5),
       duration_min: String(sched.duration_min),
@@ -878,7 +893,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
       room:         sched.room     ?? '',
       dtstart:      String(sched.dtstart).slice(0, 10),
       dtend:        sched.dtend ? String(sched.dtend).slice(0, 10) : '',
-      color:        sched.color ?? '',
+      color:        sched.color ?? '#6366f1',
       note:         sched.note  ?? '',
     })
     setEditId(sched.id)
@@ -904,7 +919,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
         <h2 className="text-base font-semibold text-gray-900">Розклад занять</h2>
         {canEdit && !isFormOpen && (
           <button
-            onClick={() => { setShowForm(true); setForm(defaultForm); setFormError(null) }}
+            onClick={openNewForm}
             className="text-sm text-iris-600 hover:text-iris-800 font-medium"
           >
             + Додати
@@ -921,6 +936,7 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
         {schedules.map(sched => (
           <div key={sched.id} className={`flex items-start justify-between rounded-lg border p-3 ${editId === sched.id ? 'border-iris-300 bg-iris-50' : 'border-gray-100 bg-gray-50'}`}>
             <div className="space-y-0.5">
+              {sched.name && <div className="text-sm font-semibold text-gray-900">{sched.name}</div>}
               <div className="text-sm font-medium text-gray-900">
                 {rruleToDays(sched.rrule).map(d => DAY_LABELS[d]).join(', ')}
                 <span className="mx-1 text-gray-400">·</span>
@@ -955,6 +971,27 @@ function ScheduleBlock({ activityId, canEdit }: ScheduleBlockProps) {
       {isFormOpen && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
           <p className="text-sm font-medium text-gray-700">{editId ? 'Редагувати розклад' : 'Новий розклад'}</p>
+
+          {/* Name + color */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Назва заняття</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="залишити порожнім — буде назва активності"
+                className="flex-1 rounded-lg border-gray-300 text-sm shadow-sm"
+              />
+              <input
+                type="color"
+                value={form.color}
+                onChange={(e) => setForm(f => ({ ...f, color: e.target.value }))}
+                className="w-8 h-8 rounded border border-gray-300 cursor-pointer shrink-0 p-0.5"
+                title="Колір заняття в календарі"
+              />
+            </div>
+          </div>
 
           {/* Days of week */}
           <div>

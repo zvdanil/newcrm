@@ -69,6 +69,7 @@ export async function calendarRoutes(app: FastifyInstance) {
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.name',
           's.staff_id',
           'st.full_name as staff_name',
           's.room',
@@ -230,6 +231,7 @@ export async function calendarRoutes(app: FastifyInstance) {
             scheduleId:    sched.id,
             activityId:    sched.activity_id,
             activityName:  sched.activity_name,
+            scheduleName:  sched.name ?? null,
             date:          occ.date,
             startTime:     occ.startTime.slice(0, 5),   // HH:MM
             durationMin:   sched.duration_min,
@@ -267,6 +269,7 @@ export async function calendarRoutes(app: FastifyInstance) {
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.name',
           's.staff_id',
           'st.full_name as staff_name',
           's.room',
@@ -300,6 +303,7 @@ export async function calendarRoutes(app: FastifyInstance) {
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.name',
           's.staff_id',
           'st.full_name as staff_name',
           's.room',
@@ -327,6 +331,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.post<{
     Body: {
       activity_id: string
+      name?:       string
       staff_id?:   string
       room?:       string
       start_time:  string
@@ -341,7 +346,7 @@ export async function calendarRoutes(app: FastifyInstance) {
     '/schedules',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { activity_id, staff_id, room, start_time, duration_min = 60, days, dtstart, dtend, color, note } = req.body
+      const { activity_id, name, staff_id, room, start_time, duration_min = 60, days, dtstart, dtend, color, note } = req.body
 
       if (!activity_id || !start_time || !dtstart || !days?.length) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, start_time, dtstart, days є обовʼязковими' })
@@ -353,6 +358,7 @@ export async function calendarRoutes(app: FastifyInstance) {
         .insertInto('activity_schedules')
         .values({
           activity_id,
+          name:        name        ?? null,
           staff_id:    staff_id    ?? null,
           room:        room        ?? null,
           start_time,
@@ -374,6 +380,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.put<{
     Params: { id: string }
     Body: {
+      name?:         string | null
       staff_id?:     string | null
       room?:         string | null
       start_time?:   string
@@ -388,12 +395,13 @@ export async function calendarRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
       const { id } = req.params
-      const { staff_id, room, start_time, duration_min, days, dtend, color, note } = req.body
+      const { name, staff_id, room, start_time, duration_min, days, dtend, color, note } = req.body
 
       const sched = await db.selectFrom('activity_schedules').selectAll().where('id', '=', id).executeTakeFirst()
       if (!sched) return reply.status(404).send({ error: 'NotFound' })
 
       const updates: Record<string, unknown> = {}
+      if (name       !== undefined) updates.name        = name
       if (staff_id   !== undefined) updates.staff_id    = staff_id
       if (room       !== undefined) updates.room        = room
       if (start_time !== undefined) updates.start_time  = start_time
@@ -681,6 +689,30 @@ export async function calendarRoutes(app: FastifyInstance) {
       }
 
       return conflicts
+    }
+  )
+
+  // ── GET /api/calendar/staff-for-activity ─────────────────────────────────
+  // Returns staff members who have an active rate for the given activity
+  app.get<{ Querystring: { activity_id: string } }>(
+    '/staff-for-activity',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const { activity_id } = req.query
+      if (!activity_id) return reply.status(400).send({ error: 'BadRequest', message: 'activity_id є обовʼязковим' })
+
+      const rows = await db
+        .selectFrom('staff as s')
+        .innerJoin('staff_rates as sr', 'sr.staff_id', 's.id')
+        .select(['s.id', 's.full_name'])
+        .where('sr.activity_id', '=', activity_id)
+        .where('sr.valid_to', 'is', null)
+        .where('s.is_active', '=', true)
+        .distinct()
+        .orderBy('s.full_name', 'asc')
+        .execute()
+
+      return rows
     }
   )
 }

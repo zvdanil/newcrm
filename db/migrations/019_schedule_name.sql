@@ -1,0 +1,1 @@
+ALTER TABLE activity_schedules ADD COLUMN IF NOT EXISTS name VARCHAR(200);
