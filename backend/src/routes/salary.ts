@@ -104,25 +104,23 @@ export async function salaryRoutes(app: FastifyInstance) {
 
         finalDeduction = Number(rate.deduction_pct)
 
-        if (quantity !== undefined && quantity > 0) {
+        if (quantity !== undefined) {
           if (rate.value_mode === 'percent_of_revenue') {
-            // quantity = revenue base; gross = base × rate_value%
             finalGross = Math.round(quantity * Number(rate.rate_value) / 100 * 100) / 100
             metadata = { source: 'manual', revenue: quantity, rate_pct: Number(rate.rate_value), rate_type: rate.rate_type }
           } else {
-            // fixed: quantity × rate_value (for hourly / per_lesson / per_child)
             finalGross = Math.round(quantity * Number(rate.rate_value) * 100) / 100
             metadata = { source: 'manual', quantity, rate_value: Number(rate.rate_value), rate_type: rate.rate_type }
           }
         } else {
           // No quantity: use provided gross_amount or fall back to rate_value
-          if (!finalGross) finalGross = Number(rate.rate_value)
+          if (gross_amount === undefined) finalGross = Number(rate.rate_value)
           metadata = { source: 'manual', rate_type: rate.rate_type }
         }
       }
 
-      if (!finalGross || finalGross <= 0) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Сума нарахування повинна бути більше 0' })
+      if (finalGross < 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Сума нарахування не може бути від\'ємною' })
       }
 
       const tx = await db.insertInto('salary_transactions').values({

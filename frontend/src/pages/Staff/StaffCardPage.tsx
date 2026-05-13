@@ -650,15 +650,15 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
 
   const computedGross = (() => {
     const q = parseFloat(form.quantity)
-    if (!selectedRate || !form.quantity || isNaN(q) || q <= 0) return null
+    if (!selectedRate || form.quantity === '' || isNaN(q) || q < 0) return null
     if (isPctMode)    return Math.round(q * Number(selectedRate.rate_value) / 100 * 100) / 100
     if (usesQuantity) return Math.round(q * Number(selectedRate.rate_value) * 100) / 100
     return null
   })()
 
   const isValid = (usesQuantity || isPctMode)
-    ? !!form.quantity && parseFloat(form.quantity) > 0
-    : !!form.gross_amount && parseFloat(form.gross_amount) > 0
+    ? form.quantity !== '' && !isNaN(parseFloat(form.quantity)) && parseFloat(form.quantity) >= 0
+    : form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
 
   const mutation = useMutation({
     mutationFn: () => staffApi.addManualAccrual(staffId, {
@@ -712,7 +712,7 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Виручка (база, грн) × {Number(selectedRate.rate_value).toFixed(1)}% *
             </label>
-            <input type="number" min="0.01" step="0.01" placeholder="0.00"
+            <input type="number" min="0" step="0.01" placeholder="0.00"
               value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
@@ -725,7 +725,7 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
             <label className="block text-xs font-medium text-gray-700 mb-1">
               {QUANTITY_LABEL[selectedRate.rate_type as RateType]} × {Number(selectedRate.rate_value).toFixed(2)} грн *
             </label>
-            <input type="number" min="0.01" step="0.01" placeholder="0"
+            <input type="number" min="0" step="0.01" placeholder="0"
               value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
@@ -736,7 +736,7 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
         ) : (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Сума (gross) *</label>
-            <input type="number" min="0.01" step="0.01" placeholder="0.00"
+            <input type="number" min="0" step="0.01" placeholder="0.00"
               value={form.gross_amount}
               onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
