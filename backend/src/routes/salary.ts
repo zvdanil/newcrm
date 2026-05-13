@@ -295,7 +295,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .leftJoin('activities as a', 'a.id', 'r.activity_id')
         .where(eb => eb.or([
           eb('r.valid_to', 'is', null),
-          eb('r.valid_to', '>=', billingStart),
+          eb('r.valid_to', '>', billingStart),
         ]))
         .select([
           'r.id', 'r.staff_id', 'r.rate_type', 'r.rate_category',
