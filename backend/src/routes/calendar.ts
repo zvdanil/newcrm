@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
-import { RRule } from 'rrule'
+import rruleLib from 'rrule'
+const { RRule } = rruleLib as unknown as { RRule: typeof import('rrule').RRule }
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
 
