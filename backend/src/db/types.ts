@@ -160,6 +160,7 @@ export interface GroupLessonLogsTable {
   activity_id: string
   date:        ColumnType<Date, string, string>
   status:      'conducted' | 'cancelled'
+  lessons_count: Generated<number>
   created_by:  string | null
   created_at:  Generated<Date>
   updated_at:  Generated<Date>

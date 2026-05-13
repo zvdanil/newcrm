@@ -164,6 +164,7 @@ async function computeGross(
   activityId: string,
   dateObj: Date,
   presentCount: number,
+  groupLessonCount: number = 1
 ): Promise<{ gross: number; meta: Record<string, unknown> }> {
   const rv = Number(rate.rate_value)
 
@@ -177,7 +178,7 @@ async function computeGross(
     return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv } }
   }
   if (rate.rate_type === 'group_lesson') {
-    return { gross: rv, meta: { source: 'auto_group_lesson', quantity: 1, rate_value: rv } }
+    return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv } }
   }
 
   // per_child
@@ -236,12 +237,13 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
   const groupLog = await db
     .selectFrom('group_lesson_logs')
-    .select('status')
+    .select(['status', 'lessons_count'])
     .where('activity_id', '=', activityId)
     .where('date', '=', dateObj)
     .executeTakeFirst()
 
   const groupConducted = groupLog?.status === 'conducted'
+  const groupLessonCount = groupLog?.lessons_count ?? 1
   const billing        = billingMonthOf(date)
 
   for (const rate of rates) {
@@ -259,7 +261,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       .where('is_deleted',       '=', false)
       .executeTakeFirst()
 
-    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount)
+    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount)
     let hasLesson = false
     if (rate.rate_type === 'group_lesson') {
       hasLesson = groupConducted || rate.value_mode === 'percent_of_revenue'

@@ -32,7 +32,7 @@ export const attendanceApi = {
     await apiClient.delete(`/journals/attendance/${id}`)
   },
 
-  markGroup: async (payload: { activity_id: string; date: string; status: 'conducted' | 'cancelled' }) => {
+  markGroup: async (payload: { activity_id: string; date: string; status: 'conducted' | 'cancelled'; lessons_count?: number }) => {
     const { data } = await apiClient.post<import('../types').GroupLessonLog>('/journals/group-attendance', payload)
     return data
   },

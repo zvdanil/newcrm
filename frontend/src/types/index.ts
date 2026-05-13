@@ -149,6 +149,7 @@ export interface GroupLessonLog {
   activity_id: string
   date: string
   status: 'conducted' | 'cancelled'
+  lessons_count: number
   created_by: string | null
   created_at: string
   updated_at: string

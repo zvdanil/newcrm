@@ -618,12 +618,13 @@ export async function journalsRoutes(app: FastifyInstance) {
       activity_id: string
       date: string
       status: 'conducted' | 'cancelled'
+      lessons_count?: number
     }
   }>(
     '/group-attendance',
     { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
     async (req, reply) => {
-      const { activity_id, date, status } = req.body
+      const { activity_id, date, status, lessons_count } = req.body
       if (!activity_id || !date || !status) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, date, status є обовʼязковими' })
       }
@@ -635,11 +636,13 @@ export async function journalsRoutes(app: FastifyInstance) {
           activity_id,
           date,
           status,
+          lessons_count: lessons_count ?? 1,
           created_by: createdBy,
         })
         .onConflict((oc) =>
           oc.columns(['activity_id', 'date']).doUpdateSet({
             status,
+            lessons_count: lessons_count ?? 1,
             updated_at: new Date().toISOString() as unknown as Date,
           })
         )

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
-import type { AttendanceStatus, JournalRow } from '../../types'
+import type { AttendanceStatus, JournalRow, GroupLessonLog } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -189,6 +189,48 @@ function SpecialPopup({ row, dateStr, onSave, onClose }: SpecialPopupProps) {
   )
 }
 
+// ─── Попап групового заняття ──────────────────────────────────────────────────
+
+interface GroupLessonPopupProps {
+  log: GroupLessonLog
+  dateStr: string
+  onSave: (dateStr: string, logId: string, count: number) => void
+  onDelete: (logId: string) => void
+  onClose: () => void
+}
+
+function GroupLessonPopup({ log, dateStr, onSave, onDelete, onClose }: GroupLessonPopupProps) {
+  const [count, setCount] = useState(log?.lessons_count ? String(log.lessons_count) : '1')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-5 w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div>
+          <h3 className="font-semibold text-gray-900">Групове заняття</h3>
+          <p className="text-xs text-gray-500 mt-0.5">{dateStr}</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Кількість занять</label>
+          <input type="number" min="1" step="1" value={count} onChange={(e) => setCount(e.target.value)} autoFocus
+            className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => { if (!count || Number(count) < 1) return; onSave(dateStr, log.id, Number(count)) }}
+            disabled={!count || Number(count) < 1}
+            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+            Зберегти
+          </button>
+          <button onClick={() => onDelete(log.id)}
+            className="px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-sm font-medium rounded-lg transition-colors">
+            Видалити
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm font-medium">Скасувати</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Головна сторінка журналу ─────────────────────────────────────────────────
 
 export function JournalPage() {
@@ -202,6 +244,7 @@ export function JournalPage() {
   const [from, to] = getRange(baseDate, mode)
 
   const [specialTarget, setSpecialTarget] = useState<{ row: JournalRow; dateStr: string } | null>(null)
+  const [groupPopupTarget, setGroupPopupTarget] = useState<{ log: GroupLessonLog; dateStr: string } | null>(null)
 
   // Preserve ?layout=none when navigating within the journal (iframe context)
   const setMode = (m: Mode) => {
@@ -240,11 +283,11 @@ export function JournalPage() {
   })
 
   const groupMarkMutation = useMutation({
-    mutationFn: async ({ dateStr, logId, status }: { dateStr: string; logId: string | null; status: 'conducted' | 'cancelled' | null }) => {
+    mutationFn: async ({ dateStr, logId, status, count }: { dateStr: string; logId: string | null; status: 'conducted' | 'cancelled' | null; count?: number }) => {
       if (status === null && logId) { await attendanceApi.removeGroup(logId); return }
-      if (status !== null) { await attendanceApi.markGroup({ activity_id: activityId!, date: dateStr, status }) }
+      if (status !== null) { await attendanceApi.markGroup({ activity_id: activityId!, date: dateStr, status, lessons_count: count }) }
     },
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); setGroupPopupTarget(null); },
   })
 
   const specialMutation = useMutation({
@@ -260,7 +303,7 @@ export function JournalPage() {
     if (data?.activity?.auto_group_classes && (status === 'present' || status === 'special')) {
       const gLog = data.group_logs[dateStr]
       if (!gLog || gLog.status !== 'conducted') {
-        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted' })
+        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted', count: 1 })
       }
     }
   }, [markMutation, groupMarkMutation, data])
@@ -270,7 +313,7 @@ export function JournalPage() {
     if (data?.activity?.auto_group_classes) {
       const gLog = data.group_logs[dateStr]
       if (!gLog || gLog.status !== 'conducted') {
-        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted' })
+        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted', count: 1 })
       }
     }
   }
@@ -354,7 +397,7 @@ export function JournalPage() {
 
       {/* Journal table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {rows.length === 0 ? (
+        {rows.length === 0 && !activity?.has_group_classes ? (
           <div className="py-12 text-center text-sm text-gray-400">
             Немає активних підписок для цієї активності.{' '}
             <Link to={`/activities/${activityId}`} className="text-iris-600 hover:underline">Перейти до активності</Link>
@@ -379,25 +422,22 @@ export function JournalPage() {
                   <td className="px-5 py-3">
                     {(() => {
                       const gLog = groupLogs[from]
-                      if (!gLog) {
+                      if (!gLog || gLog.status !== 'conducted') {
                         return (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: null, status: 'conducted' })}
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: null, status: 'conducted', count: 1 })}
                             className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors h-8 px-3 min-w-[2rem]`}
                             title="Відмітити проведення">
                             <span className="text-xs">+</span>
                           </button>
                         )
                       }
-                      if (gLog.status === 'conducted') {
-                        return (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: gLog.id, status: null })}
-                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 h-8 px-2 text-xs min-w-[2rem]`}
-                            title="Проведено (натисніть щоб скасувати)">
-                            <span>✔ Проведено</span>
-                          </button>
-                        )
-                      }
-                      return null
+                      return (
+                        <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: from })}
+                          className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 h-8 px-2 text-xs min-w-[2rem]`}
+                          title="Проведено (натисніть щоб змінити)">
+                          <span>✔ Проведено {gLog.lessons_count > 1 ? `(x${gLog.lessons_count})` : ''}</span>
+                        </button>
+                      )
                     })()}
                   </td>
                   <td className="px-5 py-3 text-xs text-gray-400 hidden sm:table-cell"></td>
@@ -452,19 +492,19 @@ export function JournalPage() {
                     const gLog = groupLogs[d]
                     return (
                       <td key={d} className="px-1 py-1.5 text-center">
-                        {!gLog ? (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: null, status: 'conducted' })}
+                        {!gLog || gLog.status !== 'conducted' ? (
+                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: null, status: 'conducted', count: 1 })}
                             className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors ${compact ? 'h-7 w-7' : 'h-8 w-8'}`}
                             title="Відмітити проведення">
                             <span className="text-xs">+</span>
                           </button>
-                        ) : gLog.status === 'conducted' ? (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: gLog.id, status: null })}
-                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 flex items-center justify-center mx-auto ${compact ? 'h-7 w-7 text-xs' : 'h-8 w-8 text-xs'}`}
-                            title="Проведено (натисніть щоб скасувати)">
-                            <span>✔</span>
+                        ) : (
+                          <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
+                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 flex items-center justify-center mx-auto ${compact ? 'h-7 w-7 text-xs' : 'h-8 px-2 min-w-[2rem] text-xs'}`}
+                            title="Проведено (натисніть щоб змінити)">
+                            {compact ? <span>✔{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : ''}</span> : <span>✔ {gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : ''}</span>}
                           </button>
-                        ) : null}
+                        )}
                       </td>
                     )
                   })}
@@ -502,6 +542,17 @@ export function JournalPage() {
           dateStr={specialTarget.dateStr}
           onSave={handleSpecialSave}
           onClose={() => setSpecialTarget(null)}
+        />
+      )}
+
+      {/* Group lesson popup */}
+      {groupPopupTarget && (
+        <GroupLessonPopup
+          log={groupPopupTarget.log}
+          dateStr={groupPopupTarget.dateStr}
+          onSave={(ds, id, count) => groupMarkMutation.mutate({ dateStr: ds, logId: id, status: 'conducted', count })}
+          onDelete={(id) => groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, logId: id, status: null })}
+          onClose={() => setGroupPopupTarget(null)}
         />
       )}
     </div>
