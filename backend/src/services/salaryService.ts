@@ -70,7 +70,10 @@ export async function recalcRetroAccruals(
     const delta = Math.round((newAmount - oldAmount) * 100) / 100
     if (Math.abs(delta) < 0.001) continue
 
-    const billing = String(accrual.billing_month).slice(0, 10)
+    const billingRaw = accrual.billing_month as unknown
+    const billing = billingRaw instanceof Date 
+      ? billingRaw.toISOString().slice(0, 10) 
+      : String(billingRaw).slice(0, 10)
     monthDelta.set(billing, (monthDelta.get(billing) ?? 0) + delta)
   }
 
