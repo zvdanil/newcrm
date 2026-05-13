@@ -563,7 +563,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                                   : setDialog({ type: 'accrualGroup', txs: ts, staffId: row.id })
                               }
                               onClickEmpty={() => {
-                                let activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to >= d))
+                                let activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to > d))
                                 if (!activeRate) {
                                   activeRate = group.rates.find(r => !r.valid_to) ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
                                 }

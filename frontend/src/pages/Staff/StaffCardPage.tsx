@@ -632,17 +632,33 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
 }) {
   const qc = useQueryClient()
   const today = todayStr()
-  const manualRates = rates.filter(r => r.rate_category === 'manual' && (!r.valid_to || new Date(r.valid_to) >= new Date()))
-  const defaultRateId = initialRateId && manualRates.find(r => r.id === initialRateId) ? initialRateId : (manualRates[0]?.id ?? '')
   const [form, setForm] = useState({
-    rate_id:          defaultRateId,
+    rate_id:          initialRateId ?? '',
     quantity:         '',
     gross_amount:     '',
-    deduction_pct:    (() => { const r = manualRates.find(r => r.id === defaultRateId); return r ? fmt(r.deduction_pct) : '0' })(),
+    deduction_pct:    '0',
     transaction_date: initialDate ?? today,
     note:             '',
   })
   const [error, setError] = useState<string | null>(null)
+
+  const manualRates = rates.filter(r => 
+    r.rate_category === 'manual' && 
+    r.valid_from <= form.transaction_date && 
+    (!r.valid_to || r.valid_to > form.transaction_date)
+  )
+
+  useEffect(() => {
+    if (manualRates.length > 0 && !manualRates.find(r => r.id === form.rate_id)) {
+      const fallback = initialRateId && manualRates.find(r => r.id === initialRateId) 
+        ? manualRates.find(r => r.id === initialRateId)! 
+        : manualRates[0]
+      setForm(f => ({ ...f, rate_id: fallback.id, deduction_pct: fmt(fallback.deduction_pct) }))
+    } else if (form.rate_id === '' && manualRates.length > 0) {
+      const fallback = manualRates[0]
+      setForm(f => ({ ...f, rate_id: fallback.id, deduction_pct: fmt(fallback.deduction_pct) }))
+    }
+  }, [form.transaction_date, rates])
 
   const selectedRate    = rates.find(r => r.id === form.rate_id)
   const isPctMode       = selectedRate?.value_mode === 'percent_of_revenue'
