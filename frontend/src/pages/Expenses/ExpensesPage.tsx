@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { expensesApi, type Expense, type ExpenseCategory } from '../../api/expenses.api'
+import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type SalaryPayment } from '../../api/expenses.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr } from '../../utils/dateStr'
@@ -938,6 +938,227 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   )
 }
 
+// ── Salary Withdrawal Dialog ───────────────────────────────────────────────
+
+function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
+  payment: SalaryPayment
+  accounts: { id: string; name: string }[]
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const qc = useQueryClient()
+  const amount = Number(payment.gross_amount)
+  const today  = todayStr()
+
+  const [form, setForm] = useState({
+    target_account_id: '',
+    commission: '0',
+    transfer_date: today,
+  })
+  const [error, setError] = useState<string | null>(null)
+
+  const commission   = parseFloat(form.commission) || 0
+  const returnAmount = Math.round((amount - commission) * 100) / 100
+
+  const mutation = useMutation({
+    mutationFn: () => salaryPaymentsApi.withdraw(payment.id, {
+      target_account_id: form.target_account_id,
+      commission,
+      transfer_date: form.transfer_date,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['salary-payments'] })
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      onSuccess()
+      onClose()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка виконання')
+    },
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!form.target_account_id) return setError('Оберіть рахунок зарахування')
+    if (form.target_account_id === payment.account_id) return setError('Рахунок зарахування повинен відрізнятись від рахунку списання')
+    if (commission >= amount) return setError('Комісія не може перевищувати суму')
+    mutation.mutate()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Обналичування</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Співробітник</span>
+            <span className="font-medium">{payment.staff_name}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Рахунок списання</span>
+            <span className="font-medium">{payment.account_name ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Сума</span>
+            <span className="font-mono font-medium">{fmt(payment.gross_amount)}</span>
+          </div>
+          {payment.note && (
+            <div className="flex justify-between">
+              <span className="text-gray-500">Опис</span>
+              <span className="text-gray-700">{payment.note}</span>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Рахунок зарахування (куди повертаються кошти) *
+            </label>
+            <select
+              value={form.target_account_id}
+              onChange={e => setForm(f => ({ ...f, target_account_id: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+            >
+              <option value="">— оберіть рахунок —</option>
+              {accounts
+                .filter(a => a.id !== payment.account_id)
+                .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Комісія</label>
+            <input
+              type="number" min="0" step="0.01"
+              value={form.commission}
+              onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Дата переказу</label>
+            <input
+              type="date"
+              value={form.transfer_date}
+              onChange={e => setForm(f => ({ ...f, transfer_date: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+            />
+          </div>
+
+          <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Буде зараховано на рахунок</span>
+              <span className="font-mono font-medium text-green-700">{returnAmount.toFixed(2)}</span>
+            </div>
+            {commission > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Окремий витрат «Комісія»</span>
+                <span className="font-mono text-red-600">{commission.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <div className="flex gap-2 pt-1">
+            <button type="submit" disabled={mutation.isPending}
+              className="flex-1 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+              {mutation.isPending ? '...' : 'Обналичити'}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+              Скасувати
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── SalaryPaymentRow ───────────────────────────────────────────────────────
+
+function SalaryPaymentRow({ payment, isOwner, accounts, onRefresh }: {
+  payment: SalaryPayment
+  isOwner: boolean
+  accounts: { id: string; name: string }[]
+  onRefresh: () => void
+}) {
+  const qc = useQueryClient()
+  const [withdrawing, setWithdrawing] = useState(false)
+
+  const dividendMutation = useMutation({
+    mutationFn: (val: boolean) => salaryPaymentsApi.toggleDividend(payment.id, val),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['salary-payments'] }),
+  })
+
+  const rowClass = payment.is_dividend ? 'bg-purple-50/40 hover:bg-purple-50' : 'hover:bg-gray-50'
+
+  return (
+    <tr className={rowClass}>
+      <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+        {String(payment.transaction_date).slice(0, 10)}
+      </td>
+      <td className="px-4 py-2.5 text-gray-800 font-medium">
+        {payment.staff_name}
+        {payment.is_dividend && (
+          <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">дивіденд</span>
+        )}
+      </td>
+      <td className="px-4 py-2.5 text-gray-600">{payment.account_name ?? '—'}</td>
+      <td className="px-4 py-2.5 text-right font-mono font-medium">{fmt(payment.gross_amount)}</td>
+      <td className="px-4 py-2.5 text-gray-400 text-sm">{payment.note ?? '—'}</td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-2 justify-end">
+          {isOwner && (
+            <button
+              onClick={() => dividendMutation.mutate(!payment.is_dividend)}
+              disabled={dividendMutation.isPending}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                payment.is_dividend
+                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                  : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+              }`}
+              title={payment.is_dividend ? 'Зняти позначку дивіденду' : 'Позначити як дивіденд'}
+            >
+              ₴↑
+            </button>
+          )}
+          {isOwner && (
+            payment.withdrawal_transfer_id ? (
+              <span className="text-xs text-green-600 font-medium" title="Обналичено">↗ обнал.</span>
+            ) : (
+              <button
+                onClick={() => setWithdrawing(true)}
+                disabled={!payment.account_id}
+                className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 px-1.5 py-1 rounded transition-colors disabled:opacity-30"
+                title={payment.account_id ? 'Обналичування' : 'Рахунок не вказано'}
+              >
+                ↗
+              </button>
+            )
+          )}
+        </div>
+        {withdrawing && (
+          <SalaryWithdrawalDialog
+            payment={payment}
+            accounts={accounts}
+            onClose={() => setWithdrawing(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+      </td>
+    </tr>
+  )
+}
+
 // ── Filter CategoryPicker (read-only, no add option) ──────────────────────
 
 function FilterCategoryPicker({ categories, value, onChange }: {
@@ -980,7 +1201,7 @@ function FilterCategoryPicker({ categories, value, onChange }: {
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-type Tab = 'expenses' | 'transfers' | 'categories'
+type Tab = 'expenses' | 'salary' | 'transfers' | 'categories'
 
 export function ExpensesPage() {
   const qc = useQueryClient()
@@ -1021,6 +1242,24 @@ export function ExpensesPage() {
     enabled: tab === 'expenses',
   })
 
+  const [salaryFilters, setSalaryFilters] = useState({
+    account_id:  '',
+    from:        '',
+    to:          '',
+    is_dividend: undefined as boolean | undefined,
+  })
+
+  const { data: salaryData, isLoading: salaryLoading } = useQuery({
+    queryKey: ['salary-payments', salaryFilters],
+    queryFn: () => salaryPaymentsApi.list({
+      account_id:  salaryFilters.account_id || undefined,
+      from:        salaryFilters.from || undefined,
+      to:          salaryFilters.to || undefined,
+      is_dividend: salaryFilters.is_dividend,
+    }),
+    enabled: tab === 'salary',
+  })
+
   const { data: transfers = [], isLoading: transfersLoading } = useQuery({
     queryKey: ['transfers', filters.account_id, filters.from, filters.to],
     queryFn: () => expensesApi.getTransfers({
@@ -1042,8 +1281,14 @@ export function ExpensesPage() {
 
   const hasFilters = !!(filters.account_id || filters.category_id || filters.status || filters.from || filters.to || filters.is_dividend !== undefined)
 
+  const salaryPayments   = salaryData?.data ?? []
+  const salaryTotal      = salaryData?.total_amount ?? 0
+  const salaryCount      = salaryData?.total ?? 0
+  const hasSalaryFilters = !!(salaryFilters.account_id || salaryFilters.from || salaryFilters.to || salaryFilters.is_dividend !== undefined)
+
   const TABS: { key: Tab; label: string }[] = [
     { key: 'expenses',   label: 'Журнал витрат' },
+    { key: 'salary',     label: 'Зарплата' },
     { key: 'transfers',  label: 'Перекази' },
     ...(isAdmin ? [{ key: 'categories' as Tab, label: 'Категорії' }] : []),
   ]
@@ -1056,6 +1301,9 @@ export function ExpensesPage() {
           <h1 className="text-xl font-semibold text-gray-900">Витрати</h1>
           {tab === 'expenses' && !isLoading && (
             <p className="text-sm text-gray-500">{totalCount} записів · {totalAmount.toFixed(2)} грн</p>
+          )}
+          {tab === 'salary' && !salaryLoading && (
+            <p className="text-sm text-gray-500">{salaryCount} записів · {salaryTotal.toFixed(2)} грн</p>
           )}
         </div>
         {isAdmin && (
@@ -1098,7 +1346,7 @@ export function ExpensesPage() {
       </div>
 
       {/* Filters (expenses + transfers) */}
-      {tab !== 'categories' && (
+      {tab !== 'categories' && tab !== 'salary' && (
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Рахунок</label>
@@ -1169,6 +1417,53 @@ export function ExpensesPage() {
         </div>
       )}
 
+      {/* Filters (salary) */}
+      {tab === 'salary' && (
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Рахунок</label>
+            <select value={salaryFilters.account_id}
+              onChange={e => setSalaryFilters(f => ({ ...f, account_id: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
+              <option value="">Всі рахунки</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Тип</label>
+            <select
+              value={salaryFilters.is_dividend === undefined ? '' : String(salaryFilters.is_dividend)}
+              onChange={e => setSalaryFilters(f => ({
+                ...f,
+                is_dividend: e.target.value === '' ? undefined : e.target.value === 'true',
+              }))}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
+              <option value="">Всі</option>
+              <option value="false">Звичайні</option>
+              <option value="true">Дивіденди</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">З</label>
+            <input type="date" value={salaryFilters.from}
+              onChange={e => setSalaryFilters(f => ({ ...f, from: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">По</label>
+            <input type="date" value={salaryFilters.to}
+              onChange={e => setSalaryFilters(f => ({ ...f, to: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+          </div>
+          {hasSalaryFilters && (
+            <button onClick={() => setSalaryFilters({ account_id: '', from: '', to: '', is_dividend: undefined })}
+              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2">
+              Скинути
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Add Expense Form */}
       {tab === 'expenses' && showAddForm && (
         <ExpenseForm
@@ -1225,6 +1520,48 @@ export function ExpensesPage() {
                 <tr className="bg-gray-50 text-sm font-medium text-gray-700 border-t border-gray-200">
                   <td colSpan={3} className="px-4 py-2">Разом</td>
                   <td className="px-4 py-2 text-right font-mono">{totalAmount.toFixed(2)}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Salary Payments table */}
+      {tab === 'salary' && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {salaryLoading ? (
+            <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
+          ) : salaryPayments.length === 0 ? (
+            <div className="py-12 text-center text-sm text-gray-400">Виплат зарплати не знайдено</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Дата</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Співробітник</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Рахунок</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Сума</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Нотатка</th>
+                  <th className="px-4 py-3 w-28" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {salaryPayments.map(p => (
+                  <SalaryPaymentRow
+                    key={p.id}
+                    payment={p}
+                    isOwner={isOwner}
+                    accounts={accounts}
+                    onRefresh={() => qc.invalidateQueries({ queryKey: ['salary-payments'] })}
+                  />
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-50 text-sm font-medium text-gray-700 border-t border-gray-200">
+                  <td colSpan={3} className="px-4 py-2">Разом</td>
+                  <td className="px-4 py-2 text-right font-mono">{salaryTotal.toFixed(2)}</td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>

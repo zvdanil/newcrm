@@ -169,3 +169,57 @@ export const expensesApi = {
     await apiClient.delete(`/expenses/transfers/${id}`)
   },
 }
+
+// ── Salary Payments (for Витрати / Зарплата tab) ───────────────────────────
+
+export interface SalaryPayment {
+  id: string
+  staff_id: string
+  staff_name: string
+  account_id: string | null
+  account_name: string | null
+  gross_amount: string
+  transaction_date: string
+  billing_month: string | null
+  note: string | null
+  is_dividend: boolean
+  withdrawal_transfer_id: string | null
+  created_at: string
+}
+
+export interface SalaryPaymentsResponse {
+  data: SalaryPayment[]
+  total: number
+  total_amount: number
+}
+
+export const salaryPaymentsApi = {
+  list: async (params: {
+    account_id?: string
+    from?: string
+    to?: string
+    is_dividend?: boolean
+  } = {}): Promise<SalaryPaymentsResponse> => {
+    const q = new URLSearchParams()
+    if (params.account_id)             q.set('account_id', params.account_id)
+    if (params.from)                   q.set('from', params.from)
+    if (params.to)                     q.set('to', params.to)
+    if (params.is_dividend !== undefined) q.set('is_dividend', String(params.is_dividend))
+    const { data } = await apiClient.get<SalaryPaymentsResponse>(`/salary/payments?${q}`)
+    return data
+  },
+
+  toggleDividend: async (id: string, is_dividend: boolean): Promise<SalaryPayment> => {
+    const { data } = await apiClient.put<SalaryPayment>(`/salary/payments/${id}/dividend`, { is_dividend })
+    return data
+  },
+
+  withdraw: async (id: string, payload: {
+    target_account_id: string
+    commission: number
+    transfer_date?: string
+  }) => {
+    const { data } = await apiClient.post(`/salary/payments/${id}/withdraw`, payload)
+    return data
+  },
+}

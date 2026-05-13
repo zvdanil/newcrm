@@ -398,4 +398,153 @@ export async function salaryRoutes(app: FastifyInstance) {
       }
     }
   )
+
+  // ── Salary Payments — Expenses view ────────────────────────────────────────
+
+  // GET /api/salary/payments?account_id=&from=&to=&is_dividend=
+  // Returns all PAYMENT transactions (for display in Витрати / Зарплата tab)
+  app.get<{
+    Querystring: { account_id?: string; from?: string; to?: string; is_dividend?: string }
+  }>(
+    '/salary/payments',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const { account_id, from, to, is_dividend } = req.query
+
+      let q = db
+        .selectFrom('salary_transactions as st')
+        .innerJoin('staff as s', 's.id', 'st.staff_id')
+        .leftJoin('accounts as ac', 'ac.id', 'st.account_id')
+        .where('st.type', '=', 'PAYMENT')
+        .where('st.is_deleted', '=', false)
+        .select([
+          'st.id', 'st.staff_id', 's.full_name as staff_name',
+          'st.account_id', 'ac.name as account_name',
+          'st.gross_amount', 'st.transaction_date', 'st.billing_month',
+          'st.note', 'st.is_dividend', 'st.withdrawal_transfer_id', 'st.created_at',
+        ])
+        .orderBy('st.transaction_date', 'desc')
+        .orderBy('st.created_at', 'desc')
+        .limit(500)
+
+      if (account_id)         q = q.where('st.account_id', '=', account_id)
+      if (from)               q = q.where('st.transaction_date', '>=', new Date(from))
+      if (to)                 q = q.where('st.transaction_date', '<=', new Date(to))
+      if (is_dividend === 'true')  q = q.where('st.is_dividend', '=', true)
+      if (is_dividend === 'false') q = q.where('st.is_dividend', '=', false)
+
+      const rows = await q.execute()
+
+      const total_amount = rows.reduce((s, r) => s + Number(r.gross_amount), 0)
+
+      return { data: rows, total: rows.length, total_amount }
+    }
+  )
+
+  // PUT /api/salary/payments/:txId/dividend — toggle is_dividend (Owner only)
+  app.put<{ Params: { txId: string }; Body: { is_dividend: boolean } }>(
+    '/salary/payments/:txId/dividend',
+    { preHandler: requireRole('owner') },
+    async (req, reply) => {
+      const updated = await db.updateTable('salary_transactions')
+        .set({ is_dividend: req.body.is_dividend })
+        .where('id', '=', req.params.txId)
+        .where('type', '=', 'PAYMENT')
+        .where('is_deleted', '=', false)
+        .returningAll()
+        .executeTakeFirst()
+      if (!updated) return reply.status(404).send({ error: 'NotFound' })
+      return updated
+    }
+  )
+
+  // POST /api/salary/payments/:txId/withdraw — cash-out a salary payment
+  app.post<{
+    Params: { txId: string }
+    Body: { target_account_id: string; commission: number; transfer_date?: string }
+  }>(
+    '/salary/payments/:txId/withdraw',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { target_account_id, commission, transfer_date } = req.body
+
+      if (!target_account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'target_account_id є обовʼязковим' })
+      }
+      if (commission < 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути від\'ємною' })
+      }
+
+      const tx = await db.selectFrom('salary_transactions')
+        .innerJoin('staff as s', 's.id', 'salary_transactions.staff_id')
+        .select([
+          'salary_transactions.id', 'salary_transactions.account_id',
+          'salary_transactions.gross_amount', 'salary_transactions.note',
+          'salary_transactions.is_deleted', 'salary_transactions.withdrawal_transfer_id',
+          's.full_name as staff_name',
+        ])
+        .where('salary_transactions.id', '=', req.params.txId)
+        .where('salary_transactions.type', '=', 'PAYMENT')
+        .executeTakeFirst()
+
+      if (!tx || tx.is_deleted) return reply.status(404).send({ error: 'NotFound' })
+      if (tx.withdrawal_transfer_id) {
+        return reply.status(409).send({ error: 'AlreadyWithdrawn', message: 'Обналичування вже було виконано' })
+      }
+      if (!tx.account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Виплата не прив\'язана до рахунку' })
+      }
+
+      const amount = Number(tx.gross_amount)
+      if (commission >= amount) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму транзакції' })
+      }
+
+      const dateStr      = transfer_date ?? new Date().toISOString().slice(0, 10)
+      const returnAmount = Math.round((amount - commission) * 100) / 100
+      const label        = tx.note ?? tx.staff_name ?? tx.id
+
+      // 1. Transfer: money comes back (amount - commission) to target account
+      const transfer = await db.insertInto('account_transfers')
+        .values({
+          from_account_id: tx.account_id,
+          to_account_id:   target_account_id,
+          amount:          returnAmount,
+          commission:      0,
+          transfer_date:   dateStr,
+          note: `Обналичування ЗП: ${label}`,
+          created_by: req.user.sub,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      // 2. Commission as a separate expense (if commission > 0)
+      let commissionExpense = null
+      if (commission > 0) {
+        commissionExpense = await db.insertInto('expenses')
+          .values({
+            account_id:   tx.account_id,
+            category_id:  null,
+            amount:       commission,
+            accrual_date: dateStr,
+            payment_date: dateStr,
+            status:       'paid',
+            is_instant:   true,
+            is_dividend:  false,
+            note: `Комісія за обналичування ЗП "${label}" на суму ${amount}`,
+            created_by:   req.user.sub,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      }
+
+      // 3. Mark salary transaction as withdrawn
+      await db.updateTable('salary_transactions')
+        .set({ withdrawal_transfer_id: transfer.id })
+        .where('id', '=', req.params.txId)
+        .execute()
+
+      return reply.status(201).send({ ok: true, transfer, commission_expense: commissionExpense })
+    }
+  )
 }

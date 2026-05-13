@@ -333,6 +333,8 @@ export interface SalaryTransactionsTable {
   note:             string | null
   edit_note:        string | null
   metadata_json:    ColumnType<unknown | null, object | null, object | null>
+  is_dividend:              Generated<boolean>
+  withdrawal_transfer_id:   string | null
   is_deleted:       Generated<boolean>
   deleted_at:       ColumnType<Date | null, string | null, string | null>
   deleted_by:       string | null
