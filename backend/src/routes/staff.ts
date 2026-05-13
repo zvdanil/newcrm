@@ -140,6 +140,7 @@ export async function staffRoutes(app: FastifyInstance) {
       const fromDate = valid_from ?? today
 
       // Fetch ALL overlapping rates for same staff+activity+type+category that end AFTER fromDate (or never end)
+      const fromDateObj = new Date(fromDate)
       let q = db
         .selectFrom('staff_rates')
         .select(['id', 'rate_value', 'valid_from', 'valid_to'])
@@ -148,7 +149,7 @@ export async function staffRoutes(app: FastifyInstance) {
         .where('rate_category', '=', rate_category)
         .where((eb) => eb.or([
           eb('valid_to', 'is', null),
-          eb('valid_to', '>', fromDate)
+          eb('valid_to', '>', fromDateObj)
         ]))
 
       if (activity_id) {
@@ -161,7 +162,11 @@ export async function staffRoutes(app: FastifyInstance) {
 
       // Process overlapping rates (SCD Type 2 conflict resolution)
       for (const oldRate of overlappingRates) {
-        const newValidTo = oldRate.valid_from < fromDate ? fromDate : oldRate.valid_from
+        const oldValidFromStr = oldRate.valid_from instanceof Date 
+          ? oldRate.valid_from.toISOString().slice(0, 10) 
+          : String(oldRate.valid_from).slice(0, 10)
+
+        const newValidTo = new Date(oldRate.valid_from) < fromDateObj ? fromDate : oldValidFromStr
         await db.updateTable('staff_rates')
           .set({ valid_to: newValidTo })
           .where('id', '=', oldRate.id)
@@ -173,7 +178,7 @@ export async function staffRoutes(app: FastifyInstance) {
           .where('staff_id', '=', req.params.id)
           .where('rate_id', '=', oldRate.id)
           .where('type', '=', 'CORRECTION')
-          .where('transaction_date', '>=', fromDate)
+          .where('transaction_date', '>=', fromDateObj)
           .execute()
       }
 
@@ -199,7 +204,6 @@ export async function staffRoutes(app: FastifyInstance) {
       }
 
       // Retro recalculation: if valid_from is in the past, run for all affected old rates
-      const fromDateObj = new Date(fromDate)
       const todayObj    = new Date(today)
       todayObj.setHours(0, 0, 0, 0)
 
