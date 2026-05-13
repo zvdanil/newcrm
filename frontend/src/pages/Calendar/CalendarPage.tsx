@@ -6,17 +6,21 @@ import interactionPlugin from '@fullcalendar/interaction'
 import type { EventInput, EventDropArg, EventClickArg, DatesSetArg } from '@fullcalendar/core'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { calendarApi } from '../../api/calendar.api'
-import type { CalendarEvent } from '../../api/calendar.api'
+import type { CalendarEvent, CalendarSchedule } from '../../api/calendar.api'
 import { staffApi } from '../../api/staff.api'
+import { activitiesApi } from '../../api/activities.api'
 
-// ─── Status colors ─────────────────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  filled:    '#16a34a',   // green
-  empty:     '#dc2626',   // red
-  future:    '#9ca3af',   // gray
-  cancelled: '#374151',   // dark gray
+  filled:    '#16a34a',
+  empty:     '#dc2626',
+  future:    '#9ca3af',
+  cancelled: '#374151',
 }
+
+const DAY_LABELS: Record<number, string> = { 1: 'Пн', 2: 'Вт', 3: 'Ср', 4: 'Чт', 5: 'Пт', 6: 'Сб', 0: 'Нд' }
+const ALL_DAYS = [1, 2, 3, 4, 5, 6, 0]
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,46 +28,285 @@ function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-function parseRRule(rrule: string): number[] {
+function todayStr() { return toDateStr(new Date()) }
+
+function parseRRuleDays(rrule: string): number[] {
+  const dayCodeMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 }
   const match = rrule.match(/BYDAY=([A-Z,]+)/)
   if (!match) return []
-  const dayMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 }
-  return match[1].split(',').map(d => dayMap[d] ?? -1).filter(d => d >= 0)
+  return match[1].split(',').map(c => dayCodeMap[c] ?? -1).filter(d => d >= 0)
 }
 
-
-// ─── Journal Modal ─────────────────────────────────────────────────────────────
-
-interface JournalModalProps {
-  activityId: string
-  date:       string
-  onClose:    () => void
+function daysToLabel(rrule: string): string {
+  return parseRRuleDays(rrule).map(d => DAY_LABELS[d]).join(', ') || '—'
 }
 
-function JournalModal({ activityId, date, onClose }: JournalModalProps) {
-  const url = `/journals/${activityId}?mode=day&date=${date}&layout=none`
+// ─── Schedule Form ─────────────────────────────────────────────────────────────
+
+type ScheduleFormData = {
+  activity_id:  string
+  staff_id:     string
+  room:         string
+  start_time:   string
+  duration_min: string
+  days:         number[]
+  dtstart:      string
+  dtend:        string
+  note:         string
+}
+
+const EMPTY_FORM: ScheduleFormData = {
+  activity_id:  '',
+  staff_id:     '',
+  room:         '',
+  start_time:   '09:00',
+  duration_min: '60',
+  days:         [],
+  dtstart:      todayStr(),
+  dtend:        '',
+  note:         '',
+}
+
+interface ScheduleFormProps {
+  form:       ScheduleFormData
+  setForm:    React.Dispatch<React.SetStateAction<ScheduleFormData>>
+  isEdit:     boolean
+  error:      string | null
+  isSaving:   boolean
+  onSave:     () => void
+  onCancel:   () => void
+}
+
+function ScheduleForm({ form, setForm, isEdit, error, isSaving, onSave, onCancel }: ScheduleFormProps) {
+  const { data: activities = [] } = useQuery({
+    queryKey: ['activities-list'],
+    queryFn:  () => activitiesApi.list(),
+  })
+  const { data: staffList = [] } = useQuery({
+    queryKey: ['staff-list-active'],
+    queryFn:  () => staffApi.list({ is_active: true }),
+  })
+
+  const toggleDay = (d: number) =>
+    setForm(f => ({ ...f, days: f.days.includes(d) ? f.days.filter(x => x !== d) : [...f.days, d] }))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="bg-white rounded-xl shadow-2xl flex flex-col"
-        style={{ width: '90vw', maxWidth: 1100, height: '85vh' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <span className="text-sm font-medium text-gray-700">Журнал · {date}</span>
+    <div className="space-y-3">
+      {/* Activity */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Активність *</label>
+        <select
+          value={form.activity_id}
+          onChange={e => setForm(f => ({ ...f, activity_id: e.target.value }))}
+          disabled={isEdit}
+          className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
+        >
+          <option value="">— оберіть активність —</option>
+          {activities.map((a: { id: string; name: string }) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Days of week */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1.5">Дні тижня *</label>
+        <div className="flex gap-1">
+          {ALL_DAYS.map(d => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => toggleDay(d)}
+              className={`flex-1 h-8 rounded-md text-xs font-semibold border transition-colors ${
+                form.days.includes(d)
+                  ? 'bg-iris-600 text-white border-iris-600'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-iris-300 hover:text-iris-600'
+              }`}
+            >
+              {DAY_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Time + Duration */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Час початку *</label>
+          <input
+            type="time"
+            value={form.start_time}
+            onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))}
+            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Тривалість (хв)</label>
+          <input
+            type="number"
+            min="15"
+            step="5"
+            value={form.duration_min}
+            onChange={e => setForm(f => ({ ...f, duration_min: e.target.value }))}
+            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Staff */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Педагог</label>
+        <select
+          value={form.staff_id}
+          onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))}
+          className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+        >
+          <option value="">— без педагога —</option>
+          {staffList.map((s: { id: string; full_name: string }) => (
+            <option key={s.id} value={s.id}>{s.full_name}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Room */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Кімната / кабінет</label>
+        <input
+          type="text"
+          value={form.room}
+          onChange={e => setForm(f => ({ ...f, room: e.target.value }))}
+          placeholder="напр. Кімната 1"
+          className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+        />
+      </div>
+
+      {/* Date range */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Дата початку *</label>
+          <input
+            type="date"
+            value={form.dtstart}
+            onChange={e => setForm(f => ({ ...f, dtstart: e.target.value }))}
+            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Дата завершення</label>
+          <input
+            type="date"
+            value={form.dtend}
+            onChange={e => setForm(f => ({ ...f, dtend: e.target.value }))}
+            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Note */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Примітка</label>
+        <input
+          type="text"
+          value={form.note}
+          onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+          className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
+          placeholder="необов'язково"
+        />
+      </div>
+
+      {error && <p className="text-xs text-red-500">{error}</p>}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={onSave}
+          disabled={isSaving}
+          className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          {isSaving ? 'Збереження...' : isEdit ? 'Зберегти' : 'Додати розклад'}
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
+        >
+          Скасувати
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Schedule list item ────────────────────────────────────────────────────────
+
+interface ScheduleItemProps {
+  sched:    CalendarSchedule
+  isEditing: boolean
+  onEdit:   () => void
+  onDelete: () => void
+  isDeleting: boolean
+}
+
+function ScheduleItem({ sched, isEditing, onEdit, onDelete, isDeleting }: ScheduleItemProps) {
+  return (
+    <div className={`rounded-lg border p-3 space-y-1 transition-colors ${isEditing ? 'border-iris-400 bg-iris-50' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{sched.activity_name}</p>
+          <p className="text-xs text-gray-600 mt-0.5">
+            {daysToLabel(sched.rrule)}
+            <span className="mx-1.5 text-gray-300">·</span>
+            {String(sched.start_time).slice(0, 5)}
+            <span className="mx-1.5 text-gray-300">·</span>
+            {sched.duration_min} хв
+          </p>
+          {sched.staff_name && (
+            <p className="text-xs text-gray-500 truncate">{sched.staff_name}</p>
+          )}
+          {sched.room && (
+            <p className="text-xs text-gray-400 truncate">{sched.room}</p>
+          )}
+          <p className="text-xs text-gray-400">
+            з {String(sched.dtstart).slice(0, 10)}
+            {sched.dtend ? ` по ${String(sched.dtend).slice(0, 10)}` : ''}
+          </p>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 transition-colors text-lg font-bold leading-none"
-            title="Закрити"
+            onClick={onEdit}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${isEditing ? 'bg-iris-100 border-iris-300 text-iris-700' : 'border-gray-200 text-gray-400 hover:text-iris-600 hover:border-iris-300'}`}
+          >
+            Ред.
+          </button>
+          <button
+            onClick={onDelete}
+            disabled={isDeleting}
+            className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 disabled:opacity-40 transition-colors"
           >
             ✕
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Journal Modal ─────────────────────────────────────────────────────────────
+
+function JournalModal({ activityId, date, onClose }: { activityId: string; date: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl flex flex-col"
+        style={{ width: '92vw', maxWidth: 1100, height: '88vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <span className="text-sm font-semibold text-gray-800">Журнал відвідування · {date}</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">✕</button>
+        </div>
         <iframe
-          src={url}
+          src={`/journals/${activityId}?mode=day&date=${date}&layout=none`}
           className="flex-1 w-full border-0 rounded-b-xl"
-          title="Журнал відвідування"
+          title="Журнал"
         />
       </div>
     </div>
@@ -72,38 +315,16 @@ function JournalModal({ activityId, date, onClose }: JournalModalProps) {
 
 // ─── Move Dialog ───────────────────────────────────────────────────────────────
 
-interface MoveDialogProps {
-  eventData:   { scheduleId: string; originalDate: string; newDate: string; newTime?: string }
-  onThisOnly:  () => void
-  onAllFuture: () => void
-  onCancel:    () => void
-}
-
-function MoveDialog({ onThisOnly, onAllFuture, onCancel }: MoveDialogProps) {
+function MoveDialog({ onThisOnly, onAllFuture, onCancel }: { onThisOnly: () => void; onAllFuture: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-6 w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-6 w-80 space-y-4" onClick={e => e.stopPropagation()}>
         <h3 className="font-semibold text-gray-900">Перенести заняття</h3>
         <p className="text-sm text-gray-500">Які заняття перенести?</p>
         <div className="space-y-2">
-          <button
-            onClick={onThisOnly}
-            className="w-full py-2.5 px-4 bg-iris-600 hover:bg-iris-700 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Тільки це заняття
-          </button>
-          <button
-            onClick={onAllFuture}
-            className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-          >
-            Це та всі наступні
-          </button>
-          <button
-            onClick={onCancel}
-            className="w-full py-2 text-gray-400 hover:text-gray-700 text-sm"
-          >
-            Скасувати
-          </button>
+          <button onClick={onThisOnly}  className="w-full py-2.5 px-4 bg-iris-600 hover:bg-iris-700 text-white text-sm font-medium rounded-lg transition-colors">Тільки це заняття</button>
+          <button onClick={onAllFuture} className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">Це та всі наступні</button>
+          <button onClick={onCancel}    className="w-full py-2 text-gray-400 hover:text-gray-700 text-sm">Скасувати</button>
         </div>
       </div>
     </div>
@@ -112,75 +333,37 @@ function MoveDialog({ onThisOnly, onAllFuture, onCancel }: MoveDialogProps) {
 
 // ─── Substitution Dialog ────────────────────────────────────────────────────────
 
-interface SubDialogProps {
-  scheduleId:      string
-  occurrenceDate:  string
-  originalStaffId: string | null
-  onSave:          (data: { substitute_staff_id: string; rate_override: number; note?: string }) => void
-  onClose:         () => void
-}
-
-function SubstitutionDialog({ scheduleId: _scheduleId, occurrenceDate, originalStaffId: _orig, onSave, onClose }: SubDialogProps) {
+function SubstitutionDialog({ occurrenceDate, onSave, onClose }: {
+  occurrenceDate: string
+  onSave: (d: { substitute_staff_id: string; rate_override: number; note?: string }) => void
+  onClose: () => void
+}) {
   const [staffId, setStaffId] = useState('')
   const [rate, setRate]       = useState('')
   const [note, setNote]       = useState('')
-
-  const { data: staffList = [] } = useQuery({
-    queryKey: ['staff-list-active'],
-    queryFn:  () => staffApi.list({ is_active: true }),
-  })
+  const { data: staffList = [] } = useQuery({ queryKey: ['staff-list-active'], queryFn: () => staffApi.list({ is_active: true }) })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-6 w-96 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-6 w-96 space-y-4" onClick={e => e.stopPropagation()}>
         <h3 className="font-semibold text-gray-900">Замена педагога · {occurrenceDate}</h3>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Педагог-замена</label>
-          <select
-            value={staffId}
-            onChange={(e) => setStaffId(e.target.value)}
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
-          >
+          <select value={staffId} onChange={e => setStaffId(e.target.value)} className="w-full rounded-lg border-gray-300 text-sm shadow-sm">
             <option value="">— оберіть педагога —</option>
-            {staffList.map((s: { id: string; full_name: string }) => (
-              <option key={s.id} value={s.id}>{s.full_name}</option>
-            ))}
+            {staffList.map((s: { id: string; full_name: string }) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
           </select>
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Ставка за заняття (грн)</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={rate}
-            onChange={(e) => setRate(e.target.value)}
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
-            placeholder="напр. 350"
-          />
+          <input type="number" min="0" step="0.01" value={rate} onChange={e => setRate(e.target.value)} className="w-full rounded-lg border-gray-300 text-sm shadow-sm" placeholder="напр. 350" />
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Примітка</label>
-          <input
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm"
-            placeholder="необов'язково"
-          />
+          <input type="text" value={note} onChange={e => setNote(e.target.value)} className="w-full rounded-lg border-gray-300 text-sm shadow-sm" placeholder="необов'язково" />
         </div>
-
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={() => { if (!staffId || !rate) return; onSave({ substitute_staff_id: staffId, rate_override: Number(rate), note: note || undefined }) }}
-            disabled={!staffId || !rate}
-            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Зберегти
-          </button>
+        <div className="flex gap-3">
+          <button onClick={() => { if (!staffId || !rate) return; onSave({ substitute_staff_id: staffId, rate_override: Number(rate), note: note || undefined }) }} disabled={!staffId || !rate} className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">Зберегти</button>
           <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm">Скасувати</button>
         </div>
       </div>
@@ -188,95 +371,52 @@ function SubstitutionDialog({ scheduleId: _scheduleId, occurrenceDate, originalS
   )
 }
 
-// ─── Event popup (click on event) ──────────────────────────────────────────────
+// ─── Event popup ───────────────────────────────────────────────────────────────
 
-interface EventPopupProps {
-  event:   CalendarEvent
-  pos:     { x: number; y: number }
-  onOpenJournal:     () => void
-  onAddSubstitution: () => void
-  onCancel:          () => void
-  onRestore:         () => void
-  onClose:           () => void
-}
-
-function EventPopup({ event, pos, onOpenJournal, onAddSubstitution, onCancel, onRestore, onClose }: EventPopupProps) {
-  const statusLabel: Record<string, string> = {
-    filled:    'Журнал заповнено',
-    empty:     'Журнал не заповнено',
-    future:    'Майбутнє заняття',
-    cancelled: 'Скасовано',
-  }
+function EventPopup({ event, pos, onOpenJournal, onAddSubstitution, onCancelOccurrence, onRestore, onClose }: {
+  event: CalendarEvent
+  pos:   { x: number; y: number }
+  onOpenJournal:       () => void
+  onAddSubstitution:   () => void
+  onCancelOccurrence:  () => void
+  onRestore:           () => void
+  onClose:             () => void
+}) {
+  const statusLabel: Record<string, string> = { filled: 'Журнал заповнено', empty: 'Журнал не заповнено', future: 'Майбутнє заняття', cancelled: 'Скасовано' }
+  const left = Math.min(pos.x, window.innerWidth  - 290)
+  const top  = Math.min(pos.y, window.innerHeight - 300)
 
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
-      <div
-        className="absolute bg-white rounded-xl border border-gray-200 shadow-xl p-4 w-72 space-y-3 z-50"
-        style={{ left: Math.min(pos.x, window.innerWidth - 300), top: Math.min(pos.y, window.innerHeight - 320) }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <div className="flex items-start justify-between">
-            <h3 className="font-semibold text-gray-900 text-sm leading-tight">{event.activityName}</h3>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 ml-2">✕</button>
+      <div className="absolute bg-white rounded-xl border border-gray-200 shadow-xl p-4 w-68 space-y-3 z-50" style={{ left, top, width: 272 }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-semibold text-gray-900 text-sm leading-tight">{event.activityName}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{event.date} · {event.startTime} · {event.durationMin} хв</p>
+            {event.room      && <p className="text-xs text-gray-500">Кімната: {event.room}</p>}
+            {event.staffName && <p className="text-xs text-gray-500">Педагог: {event.staffName}{event.substitute ? <span className="ml-1 text-amber-600 font-medium">(замена)</span> : null}</p>}
+            <p className="text-xs mt-1 font-medium" style={{ color: STATUS_COLOR[event.journalStatus] }}>{statusLabel[event.journalStatus]}</p>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            {event.date} · {event.startTime} · {event.durationMin} хв
-          </p>
-          {event.room && <p className="text-xs text-gray-500">Кімната: {event.room}</p>}
-          {event.staffName && (
-            <p className="text-xs text-gray-500">
-              Педагог: {event.staffName}
-              {event.substitute && <span className="ml-1 text-amber-600 font-medium">(замена)</span>}
-            </p>
-          )}
-          <p className="text-xs mt-1" style={{ color: STATUS_COLOR[event.journalStatus] }}>
-            {statusLabel[event.journalStatus]}
-          </p>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 ml-2 text-base leading-none shrink-0">✕</button>
         </div>
-
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 pt-1">
           {event.journalStatus !== 'cancelled' && (
-            <button
-              onClick={onOpenJournal}
-              className="w-full py-2 px-3 bg-iris-600 hover:bg-iris-700 text-white text-xs font-medium rounded-lg transition-colors text-left"
-            >
+            <button onClick={onOpenJournal} className="w-full py-2 px-3 bg-iris-600 hover:bg-iris-700 text-white text-xs font-medium rounded-lg text-left transition-colors">
               Відкрити журнал
             </button>
           )}
-
-          {event.journalStatus !== 'cancelled' && !event.substitute && (
-            <button
-              onClick={onAddSubstitution}
-              className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg transition-colors text-left border border-amber-200"
-            >
-              Призначити заміну
-            </button>
-          )}
-
-          {event.substitute && (
-            <button
-              onClick={onAddSubstitution}
-              className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg transition-colors text-left border border-amber-200"
-            >
-              Змінити заміну
-            </button>
-          )}
-
           {event.journalStatus !== 'cancelled' && (
-            <button
-              onClick={onCancel}
-              className="w-full py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg transition-colors text-left border border-red-200"
-            >
-              Скасувати заняття
+            <button onClick={onAddSubstitution} className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium rounded-lg text-left border border-amber-200 transition-colors">
+              {event.substitute ? 'Змінити заміну' : 'Призначити заміну'}
             </button>
           )}
-
+          {event.journalStatus !== 'cancelled' && (
+            <button onClick={onCancelOccurrence} className="w-full py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium rounded-lg text-left border border-red-200 transition-colors">
+              Скасувати це заняття
+            </button>
+          )}
           {event.journalStatus === 'cancelled' && event.isException && (
-            <button
-              onClick={onRestore}
-              className="w-full py-2 px-3 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-medium rounded-lg transition-colors text-left border border-green-200"
-            >
+            <button onClick={onRestore} className="w-full py-2 px-3 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-medium rounded-lg text-left border border-green-200 transition-colors">
               Відновити заняття
             </button>
           )}
@@ -286,7 +426,7 @@ function EventPopup({ event, pos, onOpenJournal, onAddSubstitution, onCancel, on
   )
 }
 
-// ─── Main Calendar Page ─────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────────────
 
 export function CalendarPage() {
   const qc = useQueryClient()
@@ -294,298 +434,355 @@ export function CalendarPage() {
 
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() => {
     const today = new Date()
-    const from  = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
-    const to    = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0))
-    return { from, to }
+    return {
+      from: toDateStr(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to:   toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    }
   })
 
-  // Modal states
-  const [journalModal, setJournalModal]   = useState<{ activityId: string; date: string } | null>(null)
-  const [moveDialog, setMoveDialog]       = useState<{ scheduleId: string; originalDate: string; newDate: string; newTime?: string } | null>(null)
-  const [subDialog, setSubDialog]         = useState<{ scheduleId: string; date: string; originalStaffId: string | null } | null>(null)
-  const [eventPopup, setEventPopup]       = useState<{ event: CalendarEvent; pos: { x: number; y: number } } | null>(null)
+  const [calView, setCalView] = useState<'timeGridWeek' | 'timeGridDay' | 'dayGridMonth'>('timeGridWeek')
 
-  // Fetch events
-  const { data: events = [] } = useQuery({
-    queryKey: ['calendar-events', dateRange.from, dateRange.to],
-    queryFn:  () => calendarApi.getEvents(dateRange.from, dateRange.to),
-  })
+  // Panel state
+  const [panelMode, setPanelMode]   = useState<'list' | 'new' | 'edit'>('list')
+  const [editingSched, setEditingSched] = useState<CalendarSchedule | null>(null)
+  const [form, setForm]             = useState<ScheduleFormData>(EMPTY_FORM)
+  const [formError, setFormError]   = useState<string | null>(null)
 
-  const refetch = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['calendar-events', dateRange.from, dateRange.to] })
+  // Modals
+  const [journalModal,  setJournalModal]  = useState<{ activityId: string; date: string } | null>(null)
+  const [moveDialog,    setMoveDialog]    = useState<{ scheduleId: string; origDate: string; newDate: string; newTime?: string } | null>(null)
+  const [subDialog,     setSubDialog]     = useState<{ scheduleId: string; date: string; origStaffId: string | null } | null>(null)
+  const [eventPopup,    setEventPopup]    = useState<{ event: CalendarEvent; pos: { x: number; y: number } } | null>(null)
+
+  // Queries
+  const { data: events    = [] } = useQuery({ queryKey: ['cal-events', dateRange.from, dateRange.to], queryFn: () => calendarApi.getEvents(dateRange.from, dateRange.to) })
+  const { data: schedules = [] } = useQuery({ queryKey: ['cal-schedules'], queryFn: calendarApi.getSchedules })
+
+  const refetchEvents = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['cal-events', dateRange.from, dateRange.to] })
   }, [qc, dateRange])
 
-  // Listen for postMessage from journal iframe
+  const refetchAll = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['cal-events'] })
+    qc.invalidateQueries({ queryKey: ['cal-schedules'] })
+  }, [qc])
+
+  // postMessage from journal iframe
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return
-      if (e.data?.type === 'JOURNAL_SAVED') {
-        setJournalModal(null)
-        refetch()
-      }
+      if (e.data?.type === 'JOURNAL_SAVED') { setJournalModal(null); refetchEvents() }
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
-  }, [refetch])
+  }, [refetchEvents])
 
-  // Mutation: create exception (cancel or move)
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: () => calendarApi.createSchedule({
+      activity_id:  form.activity_id,
+      staff_id:     form.staff_id     || undefined,
+      room:         form.room         || undefined,
+      start_time:   form.start_time,
+      duration_min: Number(form.duration_min),
+      days:         form.days,
+      dtstart:      form.dtstart,
+      dtend:        form.dtend        || undefined,
+      note:         form.note         || undefined,
+    }),
+    onSuccess: () => { refetchAll(); setPanelMode('list'); setForm(EMPTY_FORM); setFormError(null) },
+    onError:   () => setFormError('Помилка при збереженні'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (id: string) => calendarApi.updateSchedule(id, {
+      staff_id:     form.staff_id     || null,
+      room:         form.room         || null,
+      start_time:   form.start_time,
+      duration_min: Number(form.duration_min),
+      days:         form.days,
+      dtend:        form.dtend        || null,
+      note:         form.note         || null,
+    }),
+    onSuccess: () => { refetchAll(); setPanelMode('list'); setEditingSched(null); setFormError(null) },
+    onError:   () => setFormError('Помилка при збереженні'),
+  })
+
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => calendarApi.deactivateSchedule(id),
+    onSuccess:  refetchAll,
+  })
+
   const exceptionMutation = useMutation({
     mutationFn: ({ scheduleId, payload }: { scheduleId: string; payload: Parameters<typeof calendarApi.createException>[1] }) =>
       calendarApi.createException(scheduleId, payload),
-    onSuccess: refetch,
+    onSuccess: refetchEvents,
   })
 
   const deleteExceptionMutation = useMutation({
-    mutationFn: ({ scheduleId, date }: { scheduleId: string; date: string }) =>
-      calendarApi.deleteException(scheduleId, date),
-    onSuccess: refetch,
+    mutationFn: ({ scheduleId, date }: { scheduleId: string; date: string }) => calendarApi.deleteException(scheduleId, date),
+    onSuccess: refetchEvents,
   })
 
   const subMutation = useMutation({
     mutationFn: ({ scheduleId, payload }: { scheduleId: string; payload: Parameters<typeof calendarApi.createSubstitution>[1] }) =>
       calendarApi.createSubstitution(scheduleId, payload),
-    onSuccess: () => { setSubDialog(null); refetch() },
+    onSuccess: () => { setSubDialog(null); refetchEvents() },
   })
 
-  // Build FullCalendar events
+  // Form validation & submit
+  const handleSave = () => {
+    if (!form.activity_id) { setFormError('Оберіть активність'); return }
+    if (form.days.length === 0) { setFormError('Оберіть хоча б один день тижня'); return }
+    if (!form.start_time)       { setFormError('Вкажіть час початку'); return }
+    if (!form.dtstart)          { setFormError('Вкажіть дату початку'); return }
+    if (panelMode === 'edit' && editingSched) updateMutation.mutate(editingSched.id)
+    else createMutation.mutate()
+  }
+
+  const startEdit = (sched: CalendarSchedule) => {
+    setForm({
+      activity_id:  sched.activity_id,
+      staff_id:     sched.staff_id     ?? '',
+      room:         sched.room         ?? '',
+      start_time:   String(sched.start_time).slice(0, 5),
+      duration_min: String(sched.duration_min),
+      days:         parseRRuleDays(sched.rrule),
+      dtstart:      String(sched.dtstart).slice(0, 10),
+      dtend:        sched.dtend ? String(sched.dtend).slice(0, 10) : '',
+      note:         sched.note         ?? '',
+    })
+    setEditingSched(sched)
+    setPanelMode('edit')
+    setFormError(null)
+  }
+
+  const cancelForm = () => {
+    setPanelMode('list')
+    setEditingSched(null)
+    setForm(EMPTY_FORM)
+    setFormError(null)
+  }
+
+  // FullCalendar events
   const fcEvents: EventInput[] = events.map(ev => {
     const [h, m] = ev.startTime.split(':').map(Number)
     const startDt = `${ev.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`
     const endMs   = new Date(startDt).getTime() + ev.durationMin * 60_000
     const endDt   = new Date(endMs).toISOString().slice(0, 19)
-
-    const baseColor = ev.color ?? STATUS_COLOR[ev.journalStatus]
-
-    return {
-      id:              ev.id,
-      title:           ev.activityName,
-      start:           startDt,
-      end:             endDt,
-      backgroundColor: baseColor,
-      borderColor:     baseColor,
-      textColor:       '#ffffff',
-      extendedProps:   ev,
-    }
+    const color   = ev.color ?? STATUS_COLOR[ev.journalStatus]
+    return { id: ev.id, title: ev.activityName, start: startDt, end: endDt, backgroundColor: color, borderColor: color, textColor: '#fff', extendedProps: ev }
   })
 
-  // Handle event click — show popup
   const handleEventClick = (info: EventClickArg) => {
-    const ev = info.event.extendedProps as CalendarEvent
+    const ev   = info.event.extendedProps as CalendarEvent
     const rect = info.el.getBoundingClientRect()
-    setEventPopup({ event: ev, pos: { x: rect.left, y: rect.bottom + 4 } })
+    setEventPopup({ event: ev, pos: { x: rect.left, y: rect.bottom + 6 } })
   }
 
-  // Handle drag-drop
   const handleEventDrop = (info: EventDropArg) => {
-    const ev = info.event.extendedProps as CalendarEvent
+    const ev      = info.event.extendedProps as CalendarEvent
     const newDate = toDateStr(info.event.start!)
     const newTime = info.event.start!.toTimeString().slice(0, 5)
-
     if (newDate === ev.date) { info.revert(); return }
-
-    setMoveDialog({
-      scheduleId:   ev.scheduleId,
-      originalDate: ev.date,
-      newDate,
-      newTime,
-    })
-    info.revert() // revert visually — we'll re-fetch after mutation
+    setMoveDialog({ scheduleId: ev.scheduleId, origDate: ev.date, newDate, newTime })
+    info.revert()
   }
 
   const handleDatesSet = (arg: DatesSetArg) => {
-    const from = toDateStr(arg.start)
-    const to   = toDateStr(new Date(arg.end.getTime() - 1)) // FC end is exclusive
-    setDateRange({ from, to })
+    setDateRange({ from: toDateStr(arg.start), to: toDateStr(new Date(arg.end.getTime() - 1)) })
   }
 
-  // Current view state (for toolbar label)
-  const [currentView, setCurrentView] = useState<'timeGridWeek' | 'timeGridDay' | 'dayGridMonth'>('timeGridWeek')
-
-  const goToView = (view: typeof currentView) => {
-    setCurrentView(view)
-    calendarRef.current?.getApi().changeView(view)
-  }
+  const goView = (v: typeof calView) => { setCalView(v); calendarRef.current?.getApi().changeView(v) }
 
   const closePopup = () => setEventPopup(null)
 
+  const isFormOpen = panelMode === 'new' || panelMode === 'edit'
+  const isSaving   = createMutation.isPending || updateMutation.isPending
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Календар занять</h1>
-        <div className="flex items-center gap-2">
+    <div className="flex gap-4 items-start">
+
+      {/* ── Left panel: schedule management ── */}
+      <div className="w-72 shrink-0 space-y-3">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+
+          {/* Panel header */}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Розклади занять</h2>
+            {panelMode === 'list' && (
+              <button
+                onClick={() => { setForm(EMPTY_FORM); setFormError(null); setPanelMode('new') }}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-iris-600 hover:bg-iris-700 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                + Новий
+              </button>
+            )}
+          </div>
+
+          {/* Form (new or edit) */}
+          {isFormOpen && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-iris-700 mb-3 uppercase tracking-wide">
+                {panelMode === 'new' ? 'Новий розклад' : `Редагування: ${editingSched?.activity_name}`}
+              </p>
+              <ScheduleForm
+                form={form}
+                setForm={setForm}
+                isEdit={panelMode === 'edit'}
+                error={formError}
+                isSaving={isSaving}
+                onSave={handleSave}
+                onCancel={cancelForm}
+              />
+            </div>
+          )}
+
+          {/* Schedule list */}
+          {panelMode === 'list' && (
+            <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto">
+              {schedules.length === 0 && (
+                <div className="text-center py-8 text-gray-400">
+                  <p className="text-sm">Розклад порожній</p>
+                  <p className="text-xs mt-1">Натисніть «+ Новий» щоб додати заняття</p>
+                </div>
+              )}
+              {schedules.map(sched => (
+                <ScheduleItem
+                  key={sched.id}
+                  sched={sched}
+                  isEditing={editingSched?.id === sched.id}
+                  onEdit={() => startEdit(sched)}
+                  onDelete={() => deactivateMutation.mutate(sched.id)}
+                  isDeleting={deactivateMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Legend */}
+        <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Статуси</p>
+          {Object.entries({ filled: 'Журнал заповнено', empty: 'Не заповнено', future: 'Майбутнє', cancelled: 'Скасовано' }).map(([k, label]) => (
+            <div key={k} className="flex items-center gap-2 text-xs text-gray-600">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: STATUS_COLOR[k] }} />
+              {label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Right: calendar ── */}
+      <div className="flex-1 min-w-0 space-y-3">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold text-gray-900">Календар занять</h1>
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
             {([
               { key: 'dayGridMonth',  label: 'Місяць' },
               { key: 'timeGridWeek',  label: 'Тиждень' },
               { key: 'timeGridDay',   label: 'День' },
-            ] as { key: typeof currentView; label: string }[]).map(v => (
+            ] as { key: typeof calView; label: string }[]).map(v => (
               <button
                 key={v.key}
-                onClick={() => goToView(v.key)}
-                className={`px-3 py-1.5 font-medium transition-colors ${currentView === v.key ? 'bg-iris-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => goView(v.key)}
+                className={`px-3 py-1.5 font-medium transition-colors ${calView === v.key ? 'bg-iris-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
               >
                 {v.label}
               </button>
             ))}
           </div>
         </div>
+
+        {/* Calendar */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            locale="uk"
+            firstDay={1}
+            slotMinTime="07:00:00"
+            slotMaxTime="22:00:00"
+            allDaySlot={false}
+            editable={true}
+            events={fcEvents}
+            datesSet={handleDatesSet}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+            headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
+            buttonText={{ today: 'Сьогодні' }}
+            eventContent={arg => {
+              const ev = arg.event.extendedProps as CalendarEvent
+              return (
+                <div className="px-1 py-0.5 h-full flex flex-col gap-0.5 overflow-hidden">
+                  <div className="text-xs font-semibold truncate leading-tight">{arg.event.title}</div>
+                  {ev.staffName && <div className="text-xs opacity-90 truncate">{ev.staffName}{ev.substitute ? ' (з)' : ''}</div>}
+                  {ev.room      && <div className="text-xs opacity-75 truncate">{ev.room}</div>}
+                </div>
+              )
+            }}
+            height="auto"
+          />
+        </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
-        {Object.entries({ filled: 'Заповнено', empty: 'Не заповнено', future: 'Майбутнє', cancelled: 'Скасовано' }).map(([k, label]) => (
-          <span key={k} className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: STATUS_COLOR[k] }} />
-            {label}
-          </span>
-        ))}
-      </div>
+      {/* ── Modals ── */}
 
-      {/* FullCalendar */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <FullCalendar
-          ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-          initialView="timeGridWeek"
-          locale="uk"
-          firstDay={1}            // Monday first
-          slotMinTime="07:00:00"
-          slotMaxTime="22:00:00"
-          allDaySlot={false}
-          editable={true}
-          events={fcEvents}
-          datesSet={handleDatesSet}
-          eventClick={handleEventClick}
-          eventDrop={handleEventDrop}
-          headerToolbar={{
-            left:   'prev,next today',
-            center: 'title',
-            right:  '',           // we use our own view switcher
-          }}
-          buttonText={{ today: 'Сьогодні', prev: '‹', next: '›' }}
-          eventContent={(arg) => {
-            const ev = arg.event.extendedProps as CalendarEvent
-            return (
-              <div className="px-1 py-0.5 overflow-hidden h-full flex flex-col gap-0.5">
-                <div className="text-xs font-semibold leading-tight truncate">{arg.event.title}</div>
-                {ev.staffName && (
-                  <div className="text-xs opacity-90 truncate">
-                    {ev.staffName}
-                    {ev.substitute && <span className="ml-1 text-yellow-200">(з)</span>}
-                  </div>
-                )}
-                {ev.room && <div className="text-xs opacity-75 truncate">{ev.room}</div>}
-              </div>
-            )
-          }}
-          height="auto"
-        />
-      </div>
-
-      {/* Journal modal */}
       {journalModal && (
-        <JournalModal
-          activityId={journalModal.activityId}
-          date={journalModal.date}
-          onClose={() => setJournalModal(null)}
-        />
+        <JournalModal activityId={journalModal.activityId} date={journalModal.date} onClose={() => setJournalModal(null)} />
       )}
 
-      {/* Move dialog */}
       {moveDialog && (
         <MoveDialog
-          eventData={moveDialog}
           onThisOnly={() => {
-            exceptionMutation.mutate({
-              scheduleId: moveDialog.scheduleId,
-              payload: {
-                original_date:  moveDialog.originalDate,
-                exception_type: 'moved',
-                new_date:       moveDialog.newDate,
-                new_start_time: moveDialog.newTime,
-              },
-            })
+            exceptionMutation.mutate({ scheduleId: moveDialog.scheduleId, payload: { original_date: moveDialog.origDate, exception_type: 'moved', new_date: moveDialog.newDate, new_start_time: moveDialog.newTime } })
             setMoveDialog(null)
           }}
           onAllFuture={async () => {
-            // Close current schedule at originalDate - 1 day, create new one starting from newDate
-            const orig = new Date(moveDialog.originalDate)
-            const prevDay = toDateStr(new Date(orig.getTime() - 86_400_000))
-
-            // Get schedule details to fork
+            const prevDay = toDateStr(new Date(new Date(moveDialog.origDate).getTime() - 86_400_000))
             try {
-              const schedules = await calendarApi.getSchedules()
               const sched = schedules.find(s => s.id === moveDialog.scheduleId)
               if (sched) {
-                // Close existing at prevDay
                 await calendarApi.updateSchedule(moveDialog.scheduleId, { dtend: prevDay })
-                // Parse days from rrule
-                const days = parseRRule(sched.rrule)
-                // Create new schedule from newDate
                 await calendarApi.createSchedule({
                   activity_id:  sched.activity_id,
-                  staff_id:     sched.staff_id ?? undefined,
-                  room:         sched.room ?? undefined,
-                  start_time:   moveDialog.newTime ?? sched.start_time,
+                  staff_id:     sched.staff_id    ?? undefined,
+                  room:         sched.room        ?? undefined,
+                  start_time:   moveDialog.newTime ?? String(sched.start_time).slice(0, 5),
                   duration_min: sched.duration_min,
-                  days,
+                  days:         parseRRuleDays(sched.rrule),
                   dtstart:      moveDialog.newDate,
-                  color:        sched.color ?? undefined,
-                  note:         sched.note ?? undefined,
                 })
               }
-            } finally {
-              setMoveDialog(null)
-              refetch()
-            }
+            } finally { setMoveDialog(null); refetchAll() }
           }}
           onCancel={() => setMoveDialog(null)}
         />
       )}
 
-      {/* Substitution dialog */}
       {subDialog && (
         <SubstitutionDialog
-          scheduleId={subDialog.scheduleId}
           occurrenceDate={subDialog.date}
-          originalStaffId={subDialog.originalStaffId}
-          onSave={(payload) => subMutation.mutate({ scheduleId: subDialog.scheduleId, payload: { ...payload, occurrence_date: subDialog.date } })}
+          onSave={payload => subMutation.mutate({ scheduleId: subDialog.scheduleId, payload: { ...payload, occurrence_date: subDialog.date } })}
           onClose={() => setSubDialog(null)}
         />
       )}
 
-      {/* Event popup */}
       {eventPopup && (
         <EventPopup
           event={eventPopup.event}
           pos={eventPopup.pos}
           onClose={closePopup}
-          onOpenJournal={() => {
-            setJournalModal({ activityId: eventPopup.event.activityId, date: eventPopup.event.date })
-            closePopup()
-          }}
-          onAddSubstitution={() => {
-            setSubDialog({
-              scheduleId:      eventPopup.event.scheduleId,
-              date:            eventPopup.event.date,
-              originalStaffId: eventPopup.event.staffId,
-            })
-            closePopup()
-          }}
-          onCancel={() => {
-            exceptionMutation.mutate({
-              scheduleId: eventPopup.event.scheduleId,
-              payload: {
-                original_date:  eventPopup.event.originalDate ?? eventPopup.event.date,
-                exception_type: 'cancelled',
-              },
-            })
+          onOpenJournal={() => { setJournalModal({ activityId: eventPopup.event.activityId, date: eventPopup.event.date }); closePopup() }}
+          onAddSubstitution={() => { setSubDialog({ scheduleId: eventPopup.event.scheduleId, date: eventPopup.event.date, origStaffId: eventPopup.event.staffId }); closePopup() }}
+          onCancelOccurrence={() => {
+            exceptionMutation.mutate({ scheduleId: eventPopup.event.scheduleId, payload: { original_date: eventPopup.event.originalDate ?? eventPopup.event.date, exception_type: 'cancelled' } })
             closePopup()
           }}
           onRestore={() => {
-            if (eventPopup.event.originalDate) {
-              deleteExceptionMutation.mutate({ scheduleId: eventPopup.event.scheduleId, date: eventPopup.event.originalDate })
-            }
+            if (eventPopup.event.originalDate) deleteExceptionMutation.mutate({ scheduleId: eventPopup.event.scheduleId, date: eventPopup.event.originalDate })
             closePopup()
           }}
         />
