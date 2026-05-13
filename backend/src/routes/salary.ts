@@ -289,15 +289,39 @@ export async function salaryRoutes(app: FastifyInstance) {
         .orderBy('st.created_at', 'asc')
         .execute()
 
-      // Group transactions by staff_id
+      // Load active rates for all staff (active in this billing month or later)
+      const rates = await db
+        .selectFrom('staff_rates as r')
+        .leftJoin('activities as a', 'a.id', 'r.activity_id')
+        .where(eb => eb.or([
+          eb('r.valid_to', 'is', null),
+          eb('r.valid_to', '>=', billingStart),
+        ]))
+        .select([
+          'r.id', 'r.staff_id', 'r.rate_type', 'r.rate_category',
+          'r.value_mode', 'r.rate_value', 'r.deduction_pct',
+          'r.valid_from', 'r.valid_to', 'r.note',
+          'r.activity_id', 'a.name as activity_name',
+        ])
+        .orderBy('r.valid_from', 'asc')
+        .execute()
+
+      // Group transactions and rates by staff_id
       const txMap = new Map<string, typeof txs>()
       for (const tx of txs) {
         if (!txMap.has(tx.staff_id)) txMap.set(tx.staff_id, [])
         txMap.get(tx.staff_id)!.push(tx)
       }
 
+      const rateMap = new Map<string, typeof rates>()
+      for (const rate of rates) {
+        if (!rateMap.has(rate.staff_id)) rateMap.set(rate.staff_id, [])
+        rateMap.get(rate.staff_id)!.push(rate)
+      }
+
       const rows = staff.map(s => {
-        const staffTxs = txMap.get(s.id) ?? []
+        const staffTxs   = txMap.get(s.id) ?? []
+        const staffRates = rateMap.get(s.id) ?? []
         let totalGross = 0, totalDeduction = 0, totalPaid = 0
         for (const tx of staffTxs) {
           const gross = Number(tx.gross_amount)
@@ -313,6 +337,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         const balance  = Math.round((totalNet - totalPaid) * 100) / 100
         return {
           ...s,
+          rates: staffRates,
           transactions: staffTxs,
           summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance },
         }

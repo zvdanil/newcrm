@@ -81,7 +81,22 @@ export interface SalaryJournalResponse {
   rows:  SalaryJournalRow[]
 }
 
+export interface SalaryGridRate {
+  id:            string
+  rate_type:     RateType
+  rate_category: 'auto' | 'manual'
+  value_mode:    'fixed' | 'percent_of_revenue'
+  rate_value:    string
+  deduction_pct: string
+  valid_from:    string
+  valid_to:      string | null
+  activity_id:   string | null
+  activity_name: string | null
+  note:          string | null
+}
+
 export interface SalaryGridStaffRow extends StaffMember {
+  rates:        SalaryGridRate[]
   transactions: (SalaryTransaction & { staff_id: string })[]
   summary:      SalarySummary
 }

@@ -623,20 +623,22 @@ const QUANTITY_LABEL: Partial<Record<RateType, string>> = {
 }
 
 
-export function ManualAccrualForm({ staffId, rates, onDone, initialDate }: {
+export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initialRateId }: {
   staffId: string
   rates: StaffRate[]
   onDone: () => void
   initialDate?: string
+  initialRateId?: string
 }) {
   const qc = useQueryClient()
   const today = todayStr()
   const manualRates = rates.filter(r => r.rate_category === 'manual' && (!r.valid_to || new Date(r.valid_to) >= new Date()))
+  const defaultRateId = initialRateId && manualRates.find(r => r.id === initialRateId) ? initialRateId : (manualRates[0]?.id ?? '')
   const [form, setForm] = useState({
-    rate_id:          manualRates[0]?.id ?? '',
+    rate_id:          defaultRateId,
     quantity:         '',
     gross_amount:     '',
-    deduction_pct:    manualRates[0] ? fmt(manualRates[0].deduction_pct) : '0',
+    deduction_pct:    (() => { const r = manualRates.find(r => r.id === defaultRateId); return r ? fmt(r.deduction_pct) : '0' })(),
     transaction_date: initialDate ?? today,
     note:             '',
   })
