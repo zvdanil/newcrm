@@ -139,14 +139,17 @@ export async function staffRoutes(app: FastifyInstance) {
       const today    = new Date().toISOString().slice(0, 10)
       const fromDate = valid_from ?? today
 
-      // Fetch old active rate for same staff+activity+type before closing it (needed for retro recalc)
+      // Fetch ALL overlapping rates for same staff+activity+type+category that end AFTER fromDate (or never end)
       let q = db
         .selectFrom('staff_rates')
-        .select(['id', 'rate_value'])
+        .select(['id', 'rate_value', 'valid_from', 'valid_to'])
         .where('staff_id',    '=', req.params.id)
         .where('rate_type',   '=', rate_type)
         .where('rate_category', '=', rate_category)
-        .where('valid_to', 'is', null)
+        .where((eb) => eb.or([
+          eb('valid_to', 'is', null),
+          eb('valid_to', '>', fromDate)
+        ]))
 
       if (activity_id) {
         q = q.where('activity_id', '=', activity_id)
@@ -154,13 +157,23 @@ export async function staffRoutes(app: FastifyInstance) {
         q = q.where('activity_id', 'is', null)
       }
 
-      const oldRate = await q.executeTakeFirst()
+      const overlappingRates = await q.execute()
 
-      // Close it (SCD Type 2)
-      if (oldRate) {
+      // Process overlapping rates (SCD Type 2 conflict resolution)
+      for (const oldRate of overlappingRates) {
+        const newValidTo = oldRate.valid_from < fromDate ? fromDate : oldRate.valid_from
         await db.updateTable('staff_rates')
-          .set({ valid_to: fromDate })
+          .set({ valid_to: newValidTo })
           .where('id', '=', oldRate.id)
+          .execute()
+
+        // Delete any CORRECTION transactions attached to this rate that are now superseded
+        await db.updateTable('salary_transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .where('staff_id', '=', req.params.id)
+          .where('rate_id', '=', oldRate.id)
+          .where('type', '=', 'CORRECTION')
+          .where('transaction_date', '>=', fromDate)
           .execute()
       }
 
@@ -170,36 +183,36 @@ export async function staffRoutes(app: FastifyInstance) {
         rate_category,
         rate_type,
         value_mode,
-        rate_value,
-        deduction_pct,
+        rate_value:    String(rate_value),
+        deduction_pct: String(deduction_pct),
         valid_from:    fromDate,
-        valid_to:      valid_to ?? null,
         note:          note ?? null,
       }).returningAll().executeTakeFirstOrThrow()
 
-      // Smart config
-      if (rate_type === 'smart' && smart_config) {
+      if (smart_config && rate_type === 'smart') {
         await db.insertInto('staff_smart_configs').values({
           rate_id:           rate.id,
           base_lessons:      smart_config.base_lessons,
           absence_threshold: smart_config.absence_threshold,
-          threshold_rate:    smart_config.threshold_rate,
+          threshold_rate:    String(smart_config.threshold_rate),
         }).execute()
       }
 
-      // Retro recalculation: if valid_from is in the past and we closed an old rate
+      // Retro recalculation: if valid_from is in the past, run for all affected old rates
       const fromDateObj = new Date(fromDate)
       const todayObj    = new Date(today)
       todayObj.setHours(0, 0, 0, 0)
 
-      if (oldRate && fromDateObj < todayObj) {
-        await recalcRetroAccruals(
-          req.params.id,
-          oldRate.id,
-          rate.id,
-          Number(rate_value),
-          fromDateObj,
-        )
+      if (overlappingRates.length > 0 && fromDateObj < todayObj) {
+        for (const oldRate of overlappingRates) {
+          await recalcRetroAccruals(
+            req.params.id,
+            oldRate.id,
+            rate.id,
+            Number(rate_value),
+            fromDateObj,
+          )
+        }
       }
 
       return reply.status(201).send(rate)
