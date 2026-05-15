@@ -213,7 +213,7 @@ export async function journalsRoutes(app: FastifyInstance) {
       const [activity, refundConfig, enrollments, logs, groupLogs] = await Promise.all([
         db.selectFrom('activities as a')
           .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
-          .select(['a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.has_group_classes', 'a.auto_group_classes', 'ac.name as account_name'])
+          .select(['a.id', 'a.name', 'a.account_id', 'a.tariff_type', 'a.is_rigid', 'a.has_group_classes', 'a.auto_group_classes', 'ac.name as account_name'])
           .where('a.id', '=', activity_id)
           .executeTakeFirst(),
 

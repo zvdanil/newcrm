@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mergedJournalsApi } from '../../api/mergedJournals.api'
 import { attendanceApi } from '../../api/attendance.api'
-import type { AttendanceStatus } from '../../types'
+import type { AttendanceStatus, JournalRow, AttendanceLog } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -56,7 +56,6 @@ function formatDayCol(dateStr: string) {
 
 // ─── Attendance cell ───────────────────────────────────────────────────────────
 
-const STATUS_CYCLE: (AttendanceStatus | null)[] = ['present', 'absent_excused', 'absent_unexcused', null]
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
   present:          'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
   absent_excused:   'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200',
@@ -67,7 +66,7 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present:          'П',
   absent_excused:   'В',
   absent_unexcused: 'Н',
-  special:          '★',
+  special:          '',
 }
 
 function isFrozen(status: string, frozenFrom: string | null, frozenTo: string | null, dateStr: string): boolean {
@@ -79,36 +78,40 @@ function isFrozen(status: string, frozenFrom: string | null, frozenTo: string | 
 interface CellProps {
   enrollmentId: string
   dateStr:      string
-  logId:        string | null
-  currentStatus: AttendanceStatus | null
+  log:          AttendanceLog | null
   frozen:        boolean
-  onMark:        (enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => void
+  isHighlighted: boolean
+  onMark:        (enrollmentId: string, dateStr: string) => void
+  onOpenDialog:  (enrollmentId: string, dateStr: string) => void
+  onHover:       (enrollmentId: string | null, dateStr: string | null) => void
   pending:       boolean
 }
 
-function AttendanceCell({ enrollmentId, dateStr, logId, currentStatus, frozen, onMark, pending }: CellProps) {
+function AttendanceCell({ enrollmentId, dateStr, log, frozen, isHighlighted, onMark, onOpenDialog, onHover, pending }: CellProps) {
+  const baseClasses = `w-7 h-7 rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-xs ${
+    isHighlighted ? 'journal-cell-highlighted ring-1 ring-iris-200' : ''
+  }`
+
   if (frozen) {
     return (
       <td className="px-0.5 py-1 text-center">
-        <span className="inline-block w-7 h-7 rounded border border-gray-200 bg-gray-50 text-gray-300 text-xs leading-7">—</span>
+        <div className={`${baseClasses} border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed`} title="Заморожено">—</div>
       </td>
     )
   }
 
-  const handleClick = () => {
-    const idx   = STATUS_CYCLE.indexOf(currentStatus)
-    const next  = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]
-    onMark(enrollmentId, dateStr, logId, next)
-  }
-
-  if (!currentStatus) {
+  if (!log) {
     return (
       <td className="px-0.5 py-1 text-center">
         <button
-          onClick={handleClick}
+          onClick={() => onMark(enrollmentId, dateStr)}
+          onMouseEnter={() => onHover(enrollmentId, dateStr)}
+          onMouseLeave={() => onHover(null, null)}
           disabled={pending}
-          className="w-7 h-7 rounded border border-dashed border-gray-300 text-gray-300 text-xs hover:border-green-400 hover:text-green-500 transition-colors disabled:opacity-40"
-        />
+          className={`${baseClasses} border-dashed border-gray-300 text-gray-300 hover:border-gray-400 hover:text-gray-400 disabled:opacity-40`}
+        >
+          <span className="opacity-0 group-hover:opacity-100">+</span>
+        </button>
       </td>
     )
   }
@@ -116,12 +119,17 @@ function AttendanceCell({ enrollmentId, dateStr, logId, currentStatus, frozen, o
   return (
     <td className="px-0.5 py-1 text-center">
       <button
-        onClick={handleClick}
+        onClick={() => onOpenDialog(enrollmentId, dateStr)}
+        onMouseEnter={() => onHover(enrollmentId, dateStr)}
+        onMouseLeave={() => onHover(null, null)}
         disabled={pending}
-        className={`w-7 h-7 rounded border text-xs font-medium transition-colors disabled:opacity-40 ${STATUS_STYLE[currentStatus]}`}
-        title={currentStatus}
+        className={`${baseClasses} font-bold transition-all disabled:opacity-40 ${STATUS_STYLE[log.status as AttendanceStatus]}`}
+        title={log.status}
       >
-        {STATUS_LABEL[currentStatus]}
+        {log.status === 'special' ? Number(log.custom_amount).toFixed(0) : STATUS_LABEL[log.status as AttendanceStatus]}
+        {log.note && (
+          <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
+        )}
       </button>
     </td>
   )
@@ -138,6 +146,75 @@ const ACTIVITY_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ]
 
+// ─── Dialog Placeholder ────────────────────────────────────────────────────────
+// In a real app we'd share the AttendanceDialog component. 
+// For this single-file replacement, I'll copy a simplified version.
+
+function MergedAttendanceDialog({ enrollmentId, dateStr, log, onSave, onDelete, onClose }: any) {
+  const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
+  const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
+  const [note, setNote]     = useState(log?.note ?? '')
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-[340px] space-y-5 animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-bold text-gray-900 text-lg">Відмітка</h3>
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{dateStr}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {(['present', 'absent_excused', 'absent_unexcused', 'special'] as AttendanceStatus[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all ${
+                status === s 
+                  ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' 
+                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
+              }`}
+            >
+              {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : '$$$'}
+            </button>
+          ))}
+        </div>
+
+        {status === 'special' && (
+          <div className="animate-in slide-in-from-top-2 duration-200">
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума (грн)</label>
+            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
+              className="w-full rounded-xl border-gray-200 text-sm font-medium shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка</label>
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          {log && (
+            <button onClick={() => onDelete(log.id)}
+              className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">
+              Видалити
+            </button>
+          )}
+          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: status === 'special' ? Number(amount) : null, note })}
+            className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all transform active:scale-95">
+            Зберегти
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export function MergedJournalPage() {
@@ -149,11 +226,14 @@ export function MergedJournalPage() {
   const baseDate = searchParams.get('date') ?? toStr(new Date())
   const [from, to] = getRange(baseDate, mode)
 
+  const [hoveredEnrollmentId, setHoveredEnrollmentId] = useState<string | null>(null)
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null)
+  const [dialogTarget, setDialogTarget] = useState<any | null>(null)
+
   const setMode = (m: Mode) => setSearchParams({ mode: m, date: baseDate })
   const setDate = (d: string) => setSearchParams({ mode, date: d })
 
-  // Filters
-  const [activeActivityIds, setActiveActivityIds] = useState<Set<string> | null>(null) // null = all
+  const [activeActivityIds, setActiveActivityIds] = useState<Set<string> | null>(null)
   const [groupFilter, setGroupFilter] = useState<string>('')
 
   const { data, isLoading } = useQuery({
@@ -165,18 +245,20 @@ export function MergedJournalPage() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['merged-journal', id, from, to] })
 
   const markMutation = useMutation({
-    mutationFn: async ({ enrollmentId, dateStr, logId, status }: {
-      enrollmentId: string; dateStr: string; logId: string | null; status: AttendanceStatus | null
-    }) => {
-      if (status === null && logId) { await attendanceApi.remove(logId); return }
-      if (logId)  { await attendanceApi.update(logId, { status: status! }); return }
-      await attendanceApi.mark({ enrollment_id: enrollmentId, date: dateStr, status: status! })
+    mutationFn: async (p: any) => {
+      if (p.logId) return attendanceApi.update(p.logId, { status: p.status, custom_amount: p.amount, note: p.note })
+      return attendanceApi.mark({ enrollment_id: p.enrollmentId, date: p.dateStr, status: p.status, custom_amount: p.amount, note: p.note })
     },
-    onSuccess: invalidate,
+    onSuccess: () => { invalidate(); setDialogTarget(null) },
   })
 
-  const handleMark = useCallback((enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => {
-    markMutation.mutate({ enrollmentId, dateStr, logId, status })
+  const removeMutation = useMutation({
+    mutationFn: attendanceApi.remove,
+    onSuccess: () => { invalidate(); setDialogTarget(null) },
+  })
+
+  const handleQuickMark = useCallback((enrollmentId: string, dateStr: string) => {
+    markMutation.mutate({ enrollmentId, dateStr, status: 'present' })
   }, [markMutation])
 
   const mj         = data?.merged_journal
@@ -184,14 +266,12 @@ export function MergedJournalPage() {
   const dates       = data?.dates ?? []
   const allRows     = data?.rows ?? []
 
-  // Activity color map
   const activityColorMap = useMemo(() => {
     const map = new Map<string, string>()
     activities.forEach((a, i) => map.set(a.id, ACTIVITY_COLORS[i % ACTIVITY_COLORS.length]))
     return map
   }, [activities])
 
-  // Unique groups for filter
   const groups = useMemo(() => {
     const seen = new Map<string, string>()
     for (const r of allRows) {
@@ -200,13 +280,12 @@ export function MergedJournalPage() {
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
   }, [allRows])
 
-  // Filtered rows
   const rows = useMemo(() => {
     return allRows.filter(r => {
       if (groupFilter && r.group_id !== groupFilter) return false
       if (activeActivityIds !== null && !activeActivityIds.has(r.activity_id)) return false
       return true
-    })
+    }).sort((a, b) => a.child_name.localeCompare(b.child_name))
   }, [allRows, groupFilter, activeActivityIds])
 
   const toggleActivity = (actId: string) => {
@@ -216,7 +295,7 @@ export function MergedJournalPage() {
       const next = new Set(current)
       if (next.has(actId)) next.delete(actId)
       else next.add(actId)
-      if (next.size === all.size) return null // all = no filter
+      if (next.size === all.size) return null
       return next
     })
   }
@@ -230,45 +309,40 @@ export function MergedJournalPage() {
       <div className="flex items-center gap-2 text-sm text-gray-500">
         <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
         <span>/</span>
-        <span className="text-gray-900 font-medium">{mj.name}</span>
+        <span className="text-gray-900 font-bold">{mj.name}</span>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Mode switcher */}
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-4">
+        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`px-3 py-1.5 transition-colors ${mode === m ? 'bg-iris-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-              {m === 'day' ? 'День' : m === 'week' ? 'Тиждень' : 'Місяць'}
+              className={`px-4 py-2 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              {m === 'day' ? 'ДЕНЬ' : m === 'week' ? 'ТИЖДЕНЬ' : 'МІСЯЦЬ'}
             </button>
           ))}
         </div>
 
-        {/* Navigation */}
         <div className="flex items-center gap-2">
-          <button onClick={() => setDate(navigate(baseDate, mode, -1))}
-            className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">←</button>
-          <span className="text-sm font-medium text-gray-800 min-w-[180px] text-center">
-            {formatHeader(from, to, mode)}
-          </span>
-          <button onClick={() => setDate(navigate(baseDate, mode, 1))}
-            className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">→</button>
+          <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <span className="text-sm font-bold text-gray-800 min-w-[180px] text-center">{formatHeader(from, to, mode)}</span>
+          <button onClick={() => setDate(navigate(baseDate, mode, 1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+          </button>
         </div>
 
-        {/* Group filter */}
         {groups.length > 0 && (
           <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-iris-500">
-            <option value="">Усі групи</option>
+            className="text-xs font-bold border border-gray-100 rounded-xl px-3 py-2 text-gray-600 focus:ring-iris-500 focus:border-iris-500">
+            <option value="">УСІ ГРУПИ</option>
             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         )}
-
-        <span className="text-sm text-gray-400">{rows.length} дітей</span>
       </div>
 
-      {/* Activity filter chips */}
+      {/* Activity Chips */}
       {activities.length > 1 && (
         <div className="flex flex-wrap gap-2">
           {activities.map(a => {
@@ -276,10 +350,8 @@ export function MergedJournalPage() {
             const isOn  = activeActivityIds === null || activeActivityIds.has(a.id)
             return (
               <button key={a.id} onClick={() => toggleActivity(a.id)}
-                className={`text-xs px-3 py-1 rounded-full border transition-all ${
-                  isOn ? color + ' border-transparent' : 'bg-gray-100 text-gray-400 border-gray-200'
-                }`}>
-                {a.name}
+                className={`text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all ${isOn ? color + ' border-transparent shadow-sm' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                {a.name.toUpperCase()}
               </button>
             )
           })}
@@ -287,89 +359,74 @@ export function MergedJournalPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {rows.length === 0 ? (
-          <div className="py-12 text-center text-sm text-gray-400">
-            {activities.length === 0
-              ? 'У цьому журналі ще немає активностей'
-              : 'Немає записаних дітей для вибраних фільтрів'}
-          </div>
-        ) : (
-          <table className="text-sm border-collapse min-w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-2.5 font-medium text-gray-600 whitespace-nowrap min-w-[180px]">
-                  Дитина
-                </th>
-                {activities.length > 1 && (
-                  <th className="text-left px-2 py-2.5 font-medium text-gray-600 whitespace-nowrap min-w-[120px]">
-                    Журнал
-                  </th>
-                )}
-                {dates.map(d => {
-                  const { day, num } = formatDayCol(d)
-                  return (
-                    <th key={d} className="px-0.5 py-2 text-center font-medium text-gray-400 min-w-[32px]">
-                      <div className="text-xs leading-tight">{day}</div>
-                      <div className="text-xs leading-tight">{num}</div>
-                    </th>
-                  )
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map(row => {
-                const frozen_check = (dateStr: string) => isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)
-                const actColor = activityColorMap.get(row.activity_id) ?? ACTIVITY_COLORS[0]
-                const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
-
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto relative max-h-[700px]">
+        <table className="w-full text-sm border-separate border-spacing-0">
+          <thead className="journal-header-sticky">
+            <tr className="bg-gray-50">
+              <th className="journal-col-sticky-1 z-30 bg-gray-50 text-left px-5 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100 min-w-[200px]">Дитина</th>
+              {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
+              {dates.map(d => {
+                const { day, num } = formatDayCol(d)
+                const isHovered = hoveredDate === d
                 return (
-                  <tr key={row.enrollment_id} className="hover:bg-gray-50">
-                    {/* Child name */}
-                    <td className="px-4 py-2 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{row.child_name}</div>
-                      {row.group_name && (
-                        <div className="text-xs text-gray-400">{row.group_name}</div>
-                      )}
-                      {row.status === 'frozen' && (
-                        <span className="text-xs text-blue-500">❄ Заморожено</span>
-                      )}
-                    </td>
-
-                    {/* Source activity badge */}
-                    {activities.length > 1 && (
-                      <td className="px-2 py-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${actColor}`}>
-                          {actName}
-                        </span>
-                      </td>
-                    )}
-
-                    {/* Attendance cells */}
-                    {dates.map(dateStr => {
-                      const log    = row.logs[dateStr]
-                      const logId  = log?.id ?? null
-                      const status = (log?.status ?? null) as AttendanceStatus | null
-                      return (
-                        <AttendanceCell
-                          key={dateStr}
-                          enrollmentId={row.enrollment_id}
-                          dateStr={dateStr}
-                          logId={logId}
-                          currentStatus={status}
-                          frozen={frozen_check(dateStr)}
-                          onMark={handleMark}
-                          pending={markMutation.isPending}
-                        />
-                      )
-                    })}
-                  </tr>
+                  <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
+                    className={`px-0.5 py-2 text-center font-bold border-b border-gray-100 transition-colors ${isHovered ? 'bg-iris-50' : 'bg-gray-50'}`}>
+                    <div className="text-[10px] text-gray-400 leading-tight">{day}</div>
+                    <div className={`text-sm leading-tight ${isHovered ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                  </th>
                 )
               })}
-            </tbody>
-          </table>
-        )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.map(row => {
+              const isRowHovered = hoveredEnrollmentId === row.enrollment_id
+              const actColor = activityColorMap.get(row.activity_id) ?? ACTIVITY_COLORS[0]
+              const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
+
+              return (
+                <tr key={row.enrollment_id} className={`transition-colors ${isRowHovered ? 'journal-row-highlighted' : ''}`}>
+                  <td className="journal-col-sticky-1 z-10 px-5 py-3 whitespace-nowrap border-r border-gray-50 font-bold text-gray-900"
+                      onMouseEnter={() => setHoveredEnrollmentId(row.enrollment_id)} onMouseLeave={() => setHoveredEnrollmentId(null)}>
+                    {row.child_name}
+                    {row.group_name && <div className="text-[9px] text-gray-400 uppercase">{row.group_name}</div>}
+                  </td>
+                  {activities.length > 1 && (
+                    <td className="px-2 py-2">
+                      <span className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
+                    </td>
+                  )}
+                  {dates.map(dateStr => (
+                    <AttendanceCell
+                      key={dateStr}
+                      enrollmentId={row.enrollment_id}
+                      dateStr={dateStr}
+                      log={row.logs[dateStr]}
+                      frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
+                      isHighlighted={hoveredDate === dateStr && isRowHovered}
+                      onMark={handleQuickMark}
+                      onOpenDialog={(eId, dStr) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr] })}
+                      onHover={(eId, dStr) => { setHoveredEnrollmentId(eId); setHoveredDate(dStr) }}
+                      pending={markMutation.isPending}
+                    />
+                  ))}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
+
+      {dialogTarget && (
+        <MergedAttendanceDialog
+          enrollmentId={dialogTarget.enrollmentId}
+          dateStr={dialogTarget.dateStr}
+          log={dialogTarget.log}
+          onSave={markMutation.mutate}
+          onDelete={removeMutation.mutate}
+          onClose={() => setDialogTarget(null)}
+        />
+      )}
     </div>
   )
 }

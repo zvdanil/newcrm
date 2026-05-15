@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
-import type { AttendanceStatus, JournalRow, GroupLessonLog } from '../../types'
+import { childrenApi } from '../../api/children.api'
+import type { AttendanceStatus, JournalRow, GroupLessonLog, Child } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -29,7 +30,6 @@ function getRange(base: string, mode: Mode): [string, string] {
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
     return [toStr(mon), toStr(sun)]
   }
-  // month
   const first = new Date(d.getFullYear(), d.getMonth(), 1)
   const last  = new Date(d.getFullYear(), d.getMonth() + 1, 0)
   return [toStr(first), toStr(last)]
@@ -62,8 +62,6 @@ function isFrozenOn(row: JournalRow, dateStr: string): boolean {
 
 // ─── Клітинка відмітки ────────────────────────────────────────────────────────
 
-const STATUS_CYCLE: (AttendanceStatus | null)[] = ['present', 'absent_excused', 'absent_unexcused', null]
-
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
   present:           'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
   absent_excused:    'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200',
@@ -74,31 +72,36 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present:          'П',
   absent_excused:   'В',
   absent_unexcused: 'Н',
-  special:          '★',
-}
-const STATUS_FULL: Record<AttendanceStatus, string> = {
-  present:          'Присутній',
-  absent_excused:   'Відсутній (поважна)',
-  absent_unexcused: 'Відсутній (неповажна)',
-  special:          'Спец. тариф',
+  special:          '', // No label needed if amount is shown
 }
 
 interface CellProps {
   row: JournalRow
   dateStr: string
-  onMark: (enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => void
-  onSpecial: (row: JournalRow, dateStr: string) => void
+  isHighlighted: boolean
+  isRowHighlighted: boolean
+  onMarkQuick: (enrollmentId: string, dateStr: string) => void
+  onOpenDialog: (row: JournalRow, dateStr: string) => void
+  onHover: (enrollmentId: string | null, dateStr: string | null) => void
   compact?: boolean
 }
 
-function AttendanceCell({ row, dateStr, onMark, onSpecial, compact }: CellProps) {
+function AttendanceCell({ row, dateStr, isHighlighted, isRowHighlighted, onMarkQuick, onOpenDialog, onHover, compact }: CellProps) {
   const frozen = isFrozenOn(row, dateStr)
   const log = row.logs[dateStr]
 
+  const baseClasses = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
+    compact ? 'h-7 w-7' : 'h-8 px-2 min-w-[2rem]'
+  } ${isHighlighted ? 'journal-cell-highlighted ring-1 ring-iris-200' : ''}`
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    onOpenDialog(row, dateStr)
+  }
+
   if (frozen) {
     return (
-      <div className={`flex items-center justify-center rounded border border-gray-100 bg-gray-50 text-gray-300 select-none ${compact ? 'h-7 w-7' : 'h-8 px-2 min-w-[2rem]'}`}
-        title="Заморожено">
+      <div className={`${baseClasses} border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed`} title="Заморожено">
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
@@ -108,81 +111,128 @@ function AttendanceCell({ row, dateStr, onMark, onSpecial, compact }: CellProps)
 
   if (!log) {
     return (
-      <button
-        onClick={() => onMark(row.enrollment_id, dateStr, null, 'present')}
-        className={`rounded border border-dashed border-gray-200 bg-white text-gray-300 hover:border-gray-400 hover:text-gray-400 transition-colors ${compact ? 'h-7 w-7' : 'h-8 px-3 min-w-[2rem]'}`}
-        title="Поставити відмітку"
+      <div
+        onClick={() => onMarkQuick(row.enrollment_id, dateStr)}
+        onContextMenu={handleContextMenu}
+        onMouseEnter={() => onHover(row.enrollment_id, dateStr)}
+        onMouseLeave={() => onHover(null, null)}
+        className={`${baseClasses} border-dashed border-gray-200 bg-white text-gray-300 hover:border-gray-400 hover:text-gray-400`}
       >
-        <span className="text-xs">+</span>
-      </button>
+        <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity">+</span>
+      </div>
     )
   }
 
-  const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(log.status) + 1) % STATUS_CYCLE.length]
-
   return (
-    <div className="flex items-center gap-0.5">
-      <button
-        onClick={() => {
-          if (log.status === 'special') { onSpecial(row, dateStr); return }
-          onMark(row.enrollment_id, dateStr, log.id, next)
-        }}
-        className={`rounded border font-medium transition-colors ${STATUS_STYLE[log.status]} ${compact ? 'h-7 w-7 text-xs' : 'h-8 px-2 text-xs min-w-[2rem]'}`}
-        title={STATUS_FULL[log.status] + (log.custom_amount ? ` · ${Number(log.custom_amount).toFixed(0)} грн` : '')}
-      >
-        {compact ? STATUS_LABEL[log.status] : (
-          <span>{STATUS_LABEL[log.status]}{log.custom_amount ? ` ${Number(log.custom_amount).toFixed(0)}` : ''}</span>
-        )}
-      </button>
-      {!compact && log.status !== 'special' && (
-        <button
-          onClick={() => onSpecial(row, dateStr)}
-          className="h-8 w-6 text-gray-300 hover:text-iris-500 transition-colors text-xs"
-          title="Спец. тариф"
-        >★</button>
+    <div
+      onClick={() => onOpenDialog(row, dateStr)}
+      onContextMenu={handleContextMenu}
+      onMouseEnter={() => onHover(row.enrollment_id, dateStr)}
+      onMouseLeave={() => onHover(null, null)}
+      className={`${baseClasses} font-semibold ${STATUS_STYLE[log.status]}`}
+    >
+      {log.status === 'special' ? (
+        <span className="text-[10px] leading-tight">
+          {Number(log.custom_amount).toFixed(0)}
+        </span>
+      ) : (
+        <span className="text-xs">{STATUS_LABEL[log.status]}</span>
+      )}
+      
+      {/* Red dot for notes */}
+      {log.note && (
+        <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
     </div>
   )
 }
 
-// ─── Попап спец-тарифу ────────────────────────────────────────────────────────
+// ─── Єдиний діалог відмітки ──────────────────────────────────────────────────
 
-interface SpecialPopupProps {
+interface AttendanceDialogProps {
   row: JournalRow
   dateStr: string
-  onSave: (enrollmentId: string, dateStr: string, logId: string | null, amount: number, note: string) => void
+  onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null }) => void
+  onDelete: (logId: string) => void
   onClose: () => void
 }
 
-function SpecialPopup({ row, dateStr, onSave, onClose }: SpecialPopupProps) {
+function AttendanceDialog({ row, dateStr, onSave, onDelete, onClose }: AttendanceDialogProps) {
   const log = row.logs[dateStr]
-  const [amount, setAmount] = useState(log?.custom_amount ? String(Number(log.custom_amount)) : '')
-  const [note, setNote]   = useState(log?.note ?? '')
+  const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
+  const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
+  const [note, setNote]     = useState(log?.note ?? '')
+
+  const handleSave = () => {
+    onSave({
+      enrollmentId: row.enrollment_id,
+      dateStr,
+      logId: log?.id ?? null,
+      status,
+      amount: status === 'special' ? (amount === '' ? 0 : Number(amount)) : null,
+      note: note.trim() || null
+    })
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-5 w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div>
-          <h3 className="font-semibold text-gray-900">Спец. тариф</h3>
-          <p className="text-xs text-gray-500 mt-0.5">{row.child_name} · {dateStr}</p>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-[340px] space-y-5 animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-bold text-gray-900 text-lg">Відмітка</h3>
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">{row.child_name} · {dateStr}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Сума (грн)</label>
-          <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+
+        <div className="grid grid-cols-4 gap-2">
+          {(['present', 'absent_excused', 'absent_unexcused', 'special'] as AttendanceStatus[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatus(s)}
+              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all ${
+                status === s 
+                  ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' 
+                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
+              }`}
+            >
+              {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : '$$$'}
+              <div className="text-[8px] opacity-60 mt-0.5 leading-none">
+                {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : 'Спец'}
+              </div>
+            </button>
+          ))}
         </div>
+
+        {status === 'special' && (
+          <div className="animate-in slide-in-from-top-2 duration-200">
+            <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума спец. тарифу (грн)</label>
+            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
+              placeholder="0.00"
+              className="w-full rounded-xl border-gray-200 text-sm font-medium shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          </div>
+        )}
+
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Примітка</label>
-          <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка (бачить адмін)</label>
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Введіть коментар..."
+            className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
         </div>
-        <div className="flex gap-3">
-          <button onClick={() => { if (!amount) return; onSave(row.enrollment_id, dateStr, log?.id ?? null, Number(amount), note) }}
-            disabled={!amount}
-            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+
+        <div className="flex gap-3 pt-2">
+          {log && (
+            <button onClick={() => onDelete(log.id)}
+              className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">
+              Видалити
+            </button>
+          )}
+          <button onClick={handleSave}
+            className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-iris-200 transition-all transform active:scale-95">
             Зберегти
           </button>
-          <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm font-medium">Скасувати</button>
         </div>
       </div>
     </div>
@@ -200,70 +250,125 @@ interface GroupLessonPopupProps {
 }
 
 function GroupLessonPopup({ log, dateStr, onSave, onDelete, onClose }: GroupLessonPopupProps) {
-  const [count, setCount] = useState(log?.lessons_count ? String(log.lessons_count) : '1')
-
+  const [count, setCount] = useState(log.lessons_count)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
-      <div className="bg-white rounded-xl border border-gray-200 shadow-xl p-5 w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl p-6 w-80 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div>
-          <h3 className="font-semibold text-gray-900">Групове заняття</h3>
+          <h3 className="font-bold text-gray-900">Групове заняття</h3>
           <p className="text-xs text-gray-500 mt-0.5">{dateStr}</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Кількість занять</label>
-          <input type="number" min="1" step="1" value={count} onChange={(e) => setCount(e.target.value)} autoFocus
-            className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Кількість занять (множник)</label>
+          <input type="number" min="1" max="10" value={count} onChange={(e) => setCount(Number(e.target.value))}
+            className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
         </div>
         <div className="flex gap-3">
-          <button onClick={() => { if (!count || Number(count) < 1) return; onSave(dateStr, log.id, Number(count)) }}
-            disabled={!count || Number(count) < 1}
-            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
-            Зберегти
-          </button>
-          <button onClick={() => onDelete(log.id)}
-            className="px-4 py-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-sm font-medium rounded-lg transition-colors">
-            Видалити
-          </button>
-          <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-900 text-sm font-medium">Скасувати</button>
+          <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-600 hover:text-red-700 text-sm font-medium">Видалити</button>
+          <button onClick={() => onSave(dateStr, log.id, count)}
+            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-colors">Зберегти</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Головна сторінка журналу ─────────────────────────────────────────────────
+// ─── Модалка запису на активність ──────────────────────────────────────────────
+
+interface EnrollModalProps {
+  activityId: string
+  onClose: () => void
+}
+
+function EnrollModal({ activityId, accountId, onClose }: { activityId: string, accountId: string, onClose: () => void }) {
+  const [search, setSearch] = useState('')
+  const queryClient = useQueryClient()
+
+  const { data: resp, isLoading } = useQuery({
+    queryKey: ['children-search', search],
+    queryFn: () => childrenApi.list({ search }),
+    enabled: search.length >= 2
+  })
+  const children = resp?.data
+
+  const enrollMutation = useMutation({
+    mutationFn: async (childId: string) => {
+      const today = new Date().toISOString().slice(0, 10)
+      await childrenApi.createEnrollment(childId, {
+        activity_id: activityId,
+        account_id: accountId,
+        start_date: today
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal'] })
+      onClose()
+    }
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 w-[400px] space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold text-gray-900 text-lg">Записати дитину</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <input 
+          type="text" 
+          placeholder="Прізвище або ім'я дитини..." 
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoFocus
+          className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+        />
+        <div className="max-h-60 overflow-y-auto divide-y divide-gray-50 border border-gray-50 rounded-xl">
+          {isLoading && <div className="p-4 text-center text-xs text-gray-400">Пошук...</div>}
+          {children?.map(child => (
+            <button 
+              key={child.id}
+              onClick={() => enrollMutation.mutate(child.id)}
+              disabled={enrollMutation.isPending}
+              className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between group transition-colors"
+            >
+              <div>
+                <div className="text-sm font-semibold text-gray-900 group-hover:text-iris-600">{child.full_name}</div>
+                <div className="text-[10px] text-gray-400">ID: {child.id.slice(0, 8)}</div>
+              </div>
+              <span className="text-xs font-bold text-iris-500 opacity-0 group-hover:opacity-100 transition-opacity">Записати →</span>
+            </button>
+          ))}
+          {!isLoading && children?.length === 0 && search.length >= 2 && (
+            <div className="p-4 text-center text-xs text-gray-400">Нікого не знайдено</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Головна сторінка ─────────────────────────────────────────────────────────
 
 export function JournalPage() {
   const { activityId } = useParams<{ activityId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const qc = useQueryClient()
+  const queryClient = useQueryClient()
 
   const mode = (searchParams.get('mode') as Mode) ?? 'week'
   const baseDate = searchParams.get('date') ?? toStr(new Date())
-  const isEmbedded = searchParams.get('layout') === 'none'
   const [from, to] = getRange(baseDate, mode)
 
-  const [specialTarget, setSpecialTarget] = useState<{ row: JournalRow; dateStr: string } | null>(null)
-  const [groupPopupTarget, setGroupPopupTarget] = useState<{ log: GroupLessonLog; dateStr: string } | null>(null)
+  // Нові стани
+  const [groupMode, setGroupMode] = useState<'group' | 'alphabetical'>('group')
+  const [hoveredEnrollmentId, setHoveredEnrollmentId] = useState<string | null>(null)
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null)
+  const [dialogTarget, setDialogTarget] = useState<{ row: JournalRow, dateStr: string } | null>(null)
+  const [groupPopupTarget, setGroupPopupTarget] = useState<{ log: GroupLessonLog, dateStr: string } | null>(null)
+  const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false)
 
-  // Preserve ?layout=none when navigating within the journal (iframe context)
-  const setMode = (m: Mode) => {
-    const p: Record<string, string> = { mode: m, date: baseDate }
-    if (isEmbedded) p.layout = 'none'
-    setSearchParams(p)
-  }
-  const setDate = (d: string) => {
-    const p: Record<string, string> = { mode, date: d }
-    if (isEmbedded) p.layout = 'none'
-    setSearchParams(p)
-  }
-
-  // Notify parent window (calendar) that attendance was saved
-  const notifyParent = () => {
-    if (isEmbedded && window.parent !== window) {
-      window.parent.postMessage({ type: 'JOURNAL_SAVED', activityId, date: baseDate }, window.location.origin)
-    }
-  }
+  const setMode = (m: Mode) => setSearchParams({ mode: m, date: baseDate })
+  const setDate = (d: string) => setSearchParams({ mode, date: d })
 
   const { data, isLoading } = useQuery({
     queryKey: ['journal', activityId, from, to],
@@ -271,36 +376,35 @@ export function JournalPage() {
     enabled: !!activityId,
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['journal', activityId, from, to] })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['journal', activityId, from, to] })
 
   const markMutation = useMutation({
-    mutationFn: async ({ enrollmentId, dateStr, logId, status }: { enrollmentId: string; dateStr: string; logId: string | null; status: AttendanceStatus | null }) => {
-      if (status === null && logId) { await attendanceApi.remove(logId); return }
-      if (logId)  { await attendanceApi.update(logId, { status: status! }); return }
-      await attendanceApi.mark({ enrollment_id: enrollmentId, date: dateStr, status: status! })
-    },
-    onSuccess: () => { invalidate(); notifyParent() },
+    mutationFn: attendanceApi.mark,
+    onSuccess: invalidate,
   })
-
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string, payload: any }) => attendanceApi.update(id, payload),
+    onSuccess: invalidate,
+  })
+  const removeMutation = useMutation({
+    mutationFn: attendanceApi.remove,
+    onSuccess: invalidate,
+  })
   const groupMarkMutation = useMutation({
-    mutationFn: async ({ dateStr, logId, status, count }: { dateStr: string; logId: string | null; status: 'conducted' | 'cancelled' | null; count?: number }) => {
-      if (status === null && logId) { await attendanceApi.removeGroup(logId); return }
-      if (status !== null) { await attendanceApi.markGroup({ activity_id: activityId!, date: dateStr, status, lessons_count: count }) }
+    mutationFn: (p: { dateStr: string, logId: string | null, status: 'conducted' | 'cancelled', count: number }) => {
+      if (p.logId) return attendanceApi.markGroup({ activity_id: activityId!, date: p.dateStr, status: p.status, lessons_count: p.count })
+      return attendanceApi.markGroup({ activity_id: activityId!, date: p.dateStr, status: p.status, lessons_count: p.count })
     },
-    onSuccess: () => { invalidate(); setGroupPopupTarget(null); },
+    onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
+  })
+  const groupRemoveMutation = useMutation({
+    mutationFn: attendanceApi.removeGroup,
+    onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
   })
 
-  const specialMutation = useMutation({
-    mutationFn: ({ enrollmentId, dateStr, logId, amount, note }: { enrollmentId: string; dateStr: string; logId: string | null; amount: number; note: string }) => {
-      if (logId) return attendanceApi.update(logId, { status: 'special', custom_amount: amount, note: note || null })
-      return attendanceApi.mark({ enrollment_id: enrollmentId, date: dateStr, status: 'special', custom_amount: amount, note: note || null })
-    },
-    onSuccess: () => { invalidate(); notifyParent(); setSpecialTarget(null) },
-  })
-
-  const handleMark = useCallback((enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus | null) => {
-    markMutation.mutate({ enrollmentId, dateStr, logId, status })
-    if (data?.activity?.auto_group_classes && (status === 'present' || status === 'special')) {
+  const handleMarkQuick = useCallback((enrollmentId: string, dateStr: string) => {
+    markMutation.mutate({ enrollment_id: enrollmentId, date: dateStr, status: 'present' })
+    if (data?.activity?.auto_group_classes) {
       const gLog = data.group_logs[dateStr]
       if (!gLog || gLog.status !== 'conducted') {
         groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted', count: 1 })
@@ -308,18 +412,61 @@ export function JournalPage() {
     }
   }, [markMutation, groupMarkMutation, data])
 
-  const handleSpecialSave = (enrollmentId: string, dateStr: string, logId: string | null, amount: number, note: string) => {
-    specialMutation.mutate({ enrollmentId, dateStr, logId, amount, note })
-    if (data?.activity?.auto_group_classes) {
-      const gLog = data.group_logs[dateStr]
+  const handleDialogSave = (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null }) => {
+    if (payload.logId) {
+      updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note } })
+    } else {
+      markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note })
+    }
+    
+    if (data?.activity?.auto_group_classes && (payload.status === 'present' || payload.status === 'special')) {
+      const gLog = data.group_logs[payload.dateStr]
       if (!gLog || gLog.status !== 'conducted') {
-        groupMarkMutation.mutate({ dateStr, logId: gLog?.id ?? null, status: 'conducted', count: 1 })
+        groupMarkMutation.mutate({ dateStr: payload.dateStr, logId: gLog?.id ?? null, status: 'conducted', count: 1 })
       }
     }
+    setDialogTarget(null)
   }
 
+  const handleDialogDelete = (logId: string) => {
+    removeMutation.mutate(logId)
+    setDialogTarget(null)
+  }
+
+  // Розрахунок ітогів
+  const columnTotals = useMemo(() => {
+    if (!data?.rows || !data?.dates) return {}
+    const totals: Record<string, { present: number, excused: number, unexcused: number }> = {}
+    data.dates.forEach(d => {
+      totals[d] = { present: 0, excused: 0, unexcused: 0 }
+      data.rows.forEach(r => {
+        const log = r.logs[d]
+        if (log?.status === 'present' || log?.status === 'special') totals[d].present++
+        else if (log?.status === 'absent_excused') totals[d].excused++
+        else if (log?.status === 'absent_unexcused') totals[d].unexcused++
+      })
+    })
+    return totals
+  }, [data])
+
   const activity = data?.activity
-  const rows = data?.rows ?? []
+  const rawRows = data?.rows ?? []
+  
+  // Групування та сортування
+  const rows = useMemo(() => {
+    const sorted = [...rawRows]
+    if (groupMode === 'alphabetical') {
+      return sorted.sort((a, b) => a.child_name.localeCompare(b.child_name))
+    }
+    // Group mode: first by group name, then by child name
+    return sorted.sort((a, b) => {
+      const grA = a.group_name || 'Без групи'
+      const grB = b.group_name || 'Без групи'
+      if (grA !== grB) return grA.localeCompare(grB)
+      return a.child_name.localeCompare(b.child_name)
+    })
+  }, [rawRows, groupMode])
+
   const groupLogs = data?.group_logs ?? {}
   const dates = data?.dates ?? []
   const compact = mode === 'month'
@@ -329,20 +476,29 @@ export function JournalPage() {
   return (
     <div className="space-y-4">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
-        <span>/</span>
-        <span className="text-gray-900 font-medium">{activity?.name ?? '...'}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
+          <span>/</span>
+          <span className="text-gray-900 font-bold">{activity?.name ?? '...'}</span>
+        </div>
+        <button 
+          onClick={() => setIsEnrollModalOpen(true)}
+          className="px-4 py-2 bg-iris-600 hover:bg-iris-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-iris-100 transition-all flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Записати дитину
+        </button>
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-4">
         {/* Mode switcher */}
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`px-3 py-1.5 font-medium transition-colors ${mode === m ? 'bg-iris-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-              {m === 'day' ? 'День' : m === 'week' ? 'Тиждень' : 'Місяць'}
+              className={`px-4 py-2 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              {m === 'day' ? 'ДЕНЬ' : m === 'week' ? 'ТИЖДЕНЬ' : 'МІСЯЦЬ'}
             </button>
           ))}
         </div>
@@ -350,209 +506,183 @@ export function JournalPage() {
         {/* Nav */}
         <div className="flex items-center gap-2">
           <button onClick={() => setDate(navigate(baseDate, mode, -1))}
-            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            className="p-2 rounded-xl border border-gray-100 text-gray-400 hover:bg-gray-50 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <span className="text-sm font-medium text-gray-900 min-w-[180px] text-center">
+          <span className="text-sm font-bold text-gray-800 min-w-[200px] text-center">
             {formatHeader(from, to, mode)}
           </span>
           <button onClick={() => setDate(navigate(baseDate, mode, 1))}
-            className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <button onClick={() => setDate(toStr(new Date()))}
-            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors">
-            Сьогодні
+            className="p-2 rounded-xl border border-gray-100 text-gray-400 hover:bg-gray-50 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
 
-        {/* Activity info chips */}
-        {activity && (
-          <div className="ml-auto flex items-center gap-2">
-            {activity.is_rigid && (
-              <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full border border-amber-200">жорсткий абонемент</span>
-            )}
-            {activity.refund_config?.refund_on_excused && (
-              <span className="text-xs px-2 py-0.5 bg-green-50 text-green-700 rounded-full border border-green-200">
-                повернення: {activity.refund_config.refund_amount
-                  ? `${Number(activity.refund_config.refund_amount).toFixed(0)} грн`
-                  : `${activity.refund_config.refund_pct}%`}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+        {/* Grouping switcher */}
+        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
+          <button onClick={() => setGroupMode('group')}
+            className={`px-3 py-2 rounded-lg transition-all ${groupMode === 'group' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+            ПО ГРУПАХ
+          </button>
+          <button onClick={() => setGroupMode('alphabetical')}
+            className={`px-3 py-2 rounded-lg transition-all ${groupMode === 'alphabetical' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+            ПО ФІО
+          </button>
+        </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-green-100 border-green-200 inline-flex items-center justify-center text-green-700 font-medium">П</span> Присутній</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-amber-100 border-amber-200 inline-flex items-center justify-center text-amber-700 font-medium">В</span> Поважна причина</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-red-100 border-red-200 inline-flex items-center justify-center text-red-700 font-medium">Н</span> Неповажна</span>
-        <span className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-iris-100 border-iris-200 inline-flex items-center justify-center text-iris-700 font-medium">★</span> Спец. тариф</span>
+        {/* Legend */}
+        <div className="flex items-center gap-4 ml-auto px-2">
+          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-green-100 border-green-200 flex items-center justify-center text-[10px] text-green-700 font-bold">П</span> <span className="text-[10px] font-bold text-gray-400 uppercase">Прис</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-amber-100 border-amber-200 flex items-center justify-center text-[10px] text-amber-700 font-bold">В</span> <span className="text-[10px] font-bold text-gray-400 uppercase">Пов</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-red-100 border-red-200 flex items-center justify-center text-[10px] text-red-700 font-bold">Н</span> <span className="text-[10px] font-bold text-gray-400 uppercase">Неп</span></div>
+        </div>
       </div>
 
       {/* Journal table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {rows.length === 0 && !activity?.has_group_classes ? (
-          <div className="py-12 text-center text-sm text-gray-400">
-            Немає активних підписок для цієї активності.{' '}
-            <Link to={`/activities/${activityId}`} className="text-iris-600 hover:underline">Перейти до активності</Link>
-          </div>
-        ) : mode === 'day' ? (
-          // ── Day view (list layout) ──
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-5 py-3 font-medium text-gray-600">Дитина</th>
-                <th className="text-left px-5 py-3 font-medium text-gray-600">Відмітка</th>
-                <th className="text-left px-5 py-3 font-medium text-gray-600 hidden sm:table-cell">Примітка</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {activity?.has_group_classes && (
-                <tr className="bg-iris-50/50 hover:bg-iris-50 transition-colors">
-                  <td className="px-5 py-3 font-medium text-iris-900 flex items-center gap-2">
-                    Групове заняття
-                    {activity.auto_group_classes && <span className="text-[10px] uppercase tracking-wider text-iris-500 border border-iris-200 bg-white px-1.5 rounded-sm">auto</span>}
-                  </td>
-                  <td className="px-5 py-3">
-                    {(() => {
-                      const gLog = groupLogs[from]
-                      if (!gLog || gLog.status !== 'conducted') {
-                        return (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: from, logId: null, status: 'conducted', count: 1 })}
-                            className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors h-8 px-3 min-w-[2rem]`}
-                            title="Відмітити проведення">
-                            <span className="text-xs">+</span>
-                          </button>
-                        )
-                      }
-                      return (
-                        <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: from })}
-                          className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 h-8 px-2 text-xs min-w-[2rem]`}
-                          title="Проведено (натисніть щоб змінити)">
-                          <span>✔ Проведено {gLog.lessons_count > 1 ? `(x${gLog.lessons_count})` : ''}</span>
-                        </button>
-                      )
-                    })()}
-                  </td>
-                  <td className="px-5 py-3 text-xs text-gray-400 hidden sm:table-cell"></td>
-                </tr>
-              )}
-              {rows.map((row) => {
-                const frozen = isFrozenOn(row, from)
-                const log = row.logs[from]
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto relative max-h-[700px]">
+        <table className="w-full text-sm border-separate border-spacing-0">
+          <thead className="journal-header-sticky">
+            {/* Header Dates */}
+            <tr>
+              <th className="journal-col-sticky-1 z-30 bg-gray-50 text-left px-5 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100 min-w-[220px]">
+                Дитина
+              </th>
+              {dates.map(d => {
+                const { day, num } = formatDayCol(d)
+                const isHovered = hoveredDate === d
                 return (
-                  <tr key={row.enrollment_id} className={frozen ? 'bg-gray-50' : 'hover:bg-gray-50 transition-colors'}>
-                    <td className="px-5 py-3 font-medium text-gray-900">
-                      <Link to={`/children/${row.child_id}`} className="hover:text-iris-600 transition-colors">
-                        {row.child_name}
-                      </Link>
-                      {frozen && <span className="ml-2 text-xs text-gray-400">· заморожено</span>}
-                    </td>
-                    <td className="px-5 py-3">
-                      <AttendanceCell row={row} dateStr={from} onMark={handleMark} onSpecial={(r, d) => setSpecialTarget({ row: r, dateStr: d })} />
-                    </td>
-                    <td className="px-5 py-3 text-xs text-gray-400 hidden sm:table-cell">{log?.note ?? ''}</td>
-                  </tr>
+                  <th key={d} 
+                    onMouseEnter={() => setHoveredDate(d)}
+                    onMouseLeave={() => setHoveredDate(null)}
+                    className={`px-0.5 py-2 text-center font-bold border-b border-gray-100 transition-colors ${isHovered ? 'bg-iris-50' : 'bg-gray-50'}`}>
+                    <div className="text-[10px] text-gray-400 leading-tight">{day}</div>
+                    <div className={`text-sm leading-tight ${isHovered ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                  </th>
                 )
               })}
-            </tbody>
-          </table>
-        ) : (
-          // ── Week / Month view (grid) ──
-          <table className="text-sm border-collapse">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 sticky left-0 bg-gray-50 min-w-[160px]">Дитина</th>
-                {dates.map((d) => {
-                  const { day, num } = formatDayCol(d)
-                  const isToday = d === toStr(new Date())
+            </tr>
+            {/* Header Totals */}
+            <tr className="bg-white">
+              <th className="journal-col-sticky-1 z-20 bg-white border-b border-gray-100 text-[9px] font-bold text-gray-300 text-right pr-4 uppercase">Підсумки:</th>
+              {dates.map(d => {
+                const t = columnTotals[d]
+                const isHovered = hoveredDate === d
+                return (
+                  <th key={`total-${d}`} className={`px-0.5 py-1 border-b border-gray-100 text-[9px] transition-colors ${isHovered ? 'bg-iris-50' : ''}`}>
+                    <div className="flex flex-col gap-0.5 items-center font-bold">
+                      {t.present > 0 && <span className="text-green-500">{t.present}</span>}
+                      {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
+                      {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
+                    </div>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          
+          <tbody className="divide-y divide-gray-50">
+            {/* Group Lesson Row */}
+            {activity?.has_group_classes && (
+              <tr className="bg-iris-50/20">
+                <td className="journal-col-sticky-1 z-10 px-5 py-3 font-bold text-iris-600 text-xs border-r border-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 bg-iris-500 rounded-full animate-pulse" />
+                    Групове заняття
+                  </div>
+                </td>
+                {dates.map(d => {
+                  const gLog = groupLogs[d]
+                  const isHovered = hoveredDate === d
                   return (
-                    <th key={d} className={`px-1 py-2 font-medium text-center min-w-[${compact ? '32px' : '60px'}] ${isToday ? 'text-iris-600' : 'text-gray-500'}`}>
-                      <div className="text-xs">{day}</div>
-                      <div className={`text-sm font-semibold ${isToday ? 'bg-iris-600 text-white rounded-full w-6 h-6 flex items-center justify-center mx-auto' : ''}`}>{num}</div>
-                    </th>
+                    <td key={`group-${d}`} className={`px-0.5 py-2 text-center transition-colors ${isHovered ? 'bg-iris-50/40' : ''}`}>
+                      {!gLog || gLog.status !== 'conducted' ? (
+                        <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: null, status: 'conducted', count: 1 })}
+                          className="w-7 h-7 rounded-lg border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-xs">
+                          +
+                        </button>
+                      ) : (
+                        <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
+                          className="w-7 h-7 rounded-lg bg-iris-500 text-white shadow-md shadow-iris-200 flex items-center justify-center text-[10px] font-bold">
+                          {gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}
+                        </button>
+                      )}
+                    </td>
                   )
                 })}
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {activity?.has_group_classes && (
-                <tr className="bg-iris-50/50 hover:bg-iris-50 transition-colors">
-                  <td className="px-4 py-2 font-medium text-iris-900 sticky left-0 bg-iris-50 border-r border-iris-100 flex items-center justify-between">
-                    <span>Групове заняття</span>
-                    {activity.auto_group_classes && <span className="text-[9px] uppercase tracking-wider text-iris-500 border border-iris-200 bg-white px-1 rounded-sm mr-1">auto</span>}
-                  </td>
-                  {dates.map((d) => {
-                    const gLog = groupLogs[d]
-                    return (
-                      <td key={d} className="px-1 py-1.5 text-center">
-                        {!gLog || gLog.status !== 'conducted' ? (
-                          <button onClick={() => groupMarkMutation.mutate({ dateStr: d, logId: null, status: 'conducted', count: 1 })}
-                            className={`rounded border border-dashed border-gray-300 bg-white text-gray-400 hover:border-gray-500 hover:text-gray-500 transition-colors ${compact ? 'h-7 w-7' : 'h-8 w-8'}`}
-                            title="Відмітити проведення">
-                            <span className="text-xs">+</span>
-                          </button>
-                        ) : (
-                          <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
-                            className={`rounded border font-medium transition-colors bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200 flex items-center justify-center mx-auto ${compact ? 'h-7 w-7 text-xs' : 'h-8 px-2 min-w-[2rem] text-xs'}`}
-                            title="Проведено (натисніть щоб змінити)">
-                            {compact ? <span>✔{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : ''}</span> : <span>✔ {gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : ''}</span>}
-                          </button>
+            )}
+
+            {/* Child Rows */}
+            {rows.map((row) => {
+              const isRowHovered = hoveredEnrollmentId === row.enrollment_id
+              return (
+                <tr key={row.enrollment_id} className={`transition-colors ${isRowHovered ? 'journal-row-highlighted' : ''}`}>
+                  <td className="journal-col-sticky-1 z-10 px-5 py-3 whitespace-nowrap border-r border-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-sm font-bold truncate transition-colors ${isRowHovered ? 'text-iris-600' : 'text-gray-900'}`}>
+                          {row.child_name}
+                        </div>
+                        {row.group_name && (
+                          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{row.group_name}</div>
                         )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              )}
-              {rows.map((row) => (
-                <tr key={row.enrollment_id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-2 font-medium text-gray-900 sticky left-0 bg-white border-r border-gray-100">
-                    <Link to={`/children/${row.child_id}`} className="truncate block max-w-[155px] hover:text-iris-600 transition-colors" title={row.child_name}>
-                      {row.child_name}
-                    </Link>
-                    {row.status === 'frozen' && (
-                      <span className="text-xs text-gray-400">
-                        заморожено {row.frozen_from?.slice(5)} – {row.frozen_to?.slice(5)}
-                      </span>
-                    )}
+                      </div>
+                      {row.status === 'frozen' && (
+                        <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center" title="Заморожено">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        </div>
+                      )}
+                    </div>
                   </td>
-                  {dates.map((d) => (
-                    <td key={d} className="px-1 py-1.5 text-center">
-                      <AttendanceCell row={row} dateStr={d} onMark={handleMark}
-                        onSpecial={(r, dt) => setSpecialTarget({ row: r, dateStr: dt })} compact={compact} />
+
+                  {dates.map(dateStr => (
+                    <td key={dateStr} className={`px-0.5 py-1 text-center transition-colors ${hoveredDate === dateStr ? 'journal-cell-highlighted' : ''}`}>
+                      <AttendanceCell
+                        row={row}
+                        dateStr={dateStr}
+                        isHighlighted={hoveredDate === dateStr && isRowHovered}
+                        isRowHighlighted={isRowHovered}
+                        onMarkQuick={handleMarkQuick}
+                        onOpenDialog={(r, d) => setDialogTarget({ row: r, dateStr: d })}
+                        onHover={(eId, dStr) => {
+                          setHoveredEnrollmentId(eId)
+                          setHoveredDate(dStr)
+                        }}
+                        compact={compact}
+                      />
                     </td>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              )
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* Spec tariff popup */}
-      {specialTarget && (
-        <SpecialPopup
-          row={specialTarget.row}
-          dateStr={specialTarget.dateStr}
-          onSave={handleSpecialSave}
-          onClose={() => setSpecialTarget(null)}
+      {/* Popups */}
+      {dialogTarget && (
+        <AttendanceDialog
+          row={dialogTarget.row}
+          dateStr={dialogTarget.dateStr}
+          onSave={handleDialogSave}
+          onDelete={handleDialogDelete}
+          onClose={() => setDialogTarget(null)}
         />
       )}
-
-      {/* Group lesson popup */}
       {groupPopupTarget && (
         <GroupLessonPopup
           log={groupPopupTarget.log}
           dateStr={groupPopupTarget.dateStr}
-          onSave={(ds, id, count) => groupMarkMutation.mutate({ dateStr: ds, logId: id, status: 'conducted', count })}
-          onDelete={(id) => groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, logId: id, status: null })}
+          onSave={(d, id, c) => groupMarkMutation.mutate({ dateStr: d, logId: id, status: 'conducted', count: c })}
+          onDelete={(id) => groupRemoveMutation.mutate(id)}
           onClose={() => setGroupPopupTarget(null)}
+        />
+      )}
+      {isEnrollModalOpen && (
+        <EnrollModal 
+          activityId={activityId!} 
+          accountId={(activity as any)?.account_id || ''}
+          onClose={() => setIsEnrollModalOpen(false)} 
         />
       )}
     </div>

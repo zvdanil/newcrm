@@ -89,4 +89,15 @@ export const childrenApi = {
     const params = validTo ? `?valid_to=${validTo}` : ''
     await apiClient.delete(`/children/${childId}/individual-tariffs/${tariffId}${params}`)
   },
+
+  createEnrollment: async (childId: string, payload: {
+    activity_id: string
+    account_id: string
+    start_date: string
+    end_date?: string
+    note?: string
+  }) => {
+    const { data } = await apiClient.post('/enrollments', { ...payload, child_id: childId })
+    return data
+  },
 }
