@@ -282,19 +282,6 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
               className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between group transition-colors" >
               <div>
                 <div className="text-sm font-semibold text-gray-900 group-hover:text-iris-600">{child.full_name}</div>
-                <div className="text-[10px] text-gray-400">ID: {child.id.slice(0, 8)}</div>
-              </div>
-              <span className="text-xs font-bold text-iris-500 opacity-0 group-hover:opacity-100 transition-opacity">Записати →</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Головна сторінка ─────────────────────────────────────────────────────────
-
 export function JournalPage() {
   const { activityId } = useParams<{ activityId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -305,6 +292,7 @@ export function JournalPage() {
   const [from, to] = getRange(baseDate, mode)
 
   const [groupMode, setGroupMode] = useState<'group' | 'alphabetical'>('group')
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const [dialogTarget, setDialogTarget] = useState<{ row: JournalRow, dateStr: string } | null>(null)
   const [groupPopupTarget, setGroupPopupTarget] = useState<any | null>(null)
@@ -354,44 +342,36 @@ export function JournalPage() {
     setDialogTarget(null)
   }
 
+  const activity = data?.activity
+  const dates = data?.dates ?? []
+  const rows = data?.rows ?? []
+  const groupLogs = data?.group_logs ?? {}
+  const compact = mode === 'month'
+
+  const groupedData = useMemo(() => {
+    if (groupMode === 'alphabetical') return [{ groupName: null, rows }]
+    const groups: Record<string, JournalRow[]> = {}
+    rows.forEach(r => {
+      const g = r.group_name || 'БЕЗ ГРУПИ'
+      if (!groups[g]) groups[g] = []
+      groups[g].push(r)
+    })
+    return Object.entries(groups).map(([name, rows]) => ({ groupName: name, rows }))
+  }, [rows, groupMode])
+
   const columnTotals = useMemo(() => {
-    if (!data?.rows || !data?.dates) return {}
     const totals: Record<string, { present: number, excused: number, unexcused: number }> = {}
-    data.dates.forEach(d => {
-      totals[d] = { present: 0, excused: 0, unexcused: 0 }
-      data.rows.forEach(r => {
-        const log = r.logs[d]
-        if (log?.status === 'present' || log?.status === 'special') totals[d].present++
-        else if (log?.status === 'absent_excused') totals[d].excused++
-        else if (log?.status === 'absent_unexcused') totals[d].unexcused++
+    dates.forEach(d => { totals[d] = { present: 0, excused: 0, unexcused: 0 } })
+    rows.forEach(r => {
+      Object.entries(r.logs).forEach(([d, log]) => {
+        if (!totals[d]) return
+        if (log.status === 'present' || log.status === 'special') totals[d].present++
+        else if (log.status === 'absent_excused') totals[d].excused++
+        else if (log.status === 'absent_unexcused') totals[d].unexcused++
       })
     })
     return totals
-  }, [data])
-
-  const activity = data?.activity
-  const rawRows = data?.rows ?? []
-  const groupLogs = data?.group_logs ?? {}
-  const dates = data?.dates ?? []
-  const compact = mode === 'month'
-
-  // Optimized grouping
-  const groupedData = useMemo(() => {
-    const sorted = [...rawRows]
-    if (groupMode === 'alphabetical') {
-      return [{ groupName: null, rows: sorted.sort((a, b) => a.child_name.localeCompare(b.child_name)) }]
-    }
-    const map = new Map<string, JournalRow[]>()
-    sorted.forEach(r => {
-      const g = r.group_name || 'Без групи'
-      if (!map.has(g)) map.set(g, [])
-      map.get(g)!.push(r)
-    })
-    return Array.from(map.entries()).map(([name, rows]) => ({
-      groupName: name,
-      rows: rows.sort((a, b) => a.child_name.localeCompare(b.child_name))
-    })).sort((a, b) => (a.groupName || '').localeCompare(b.groupName || ''))
-  }, [rawRows, groupMode])
+  }, [dates, rows])
 
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
 
@@ -443,7 +423,7 @@ export function JournalPage() {
       </div>
 
       {/* Table Container - Fixed height for robust sticky header */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-170px)]">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-170px)] custom-scrollbar">
         <table className="w-full text-sm border-separate border-spacing-0">
           <thead className="sticky top-0 z-30 bg-white shadow-sm">
             <tr>
@@ -452,7 +432,7 @@ export function JournalPage() {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50/50' : 'bg-gray-50'}`}>
+                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
                     <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
                     <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
@@ -464,7 +444,7 @@ export function JournalPage() {
               {dates.map(d => {
                 const t = columnTotals[d]
                 return (
-                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-100 text-[8px] ${hoveredDate === d ? 'bg-iris-50/30' : ''}`}>
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-100 text-[8px] ${hoveredDate === d ? 'bg-iris-50/50' : ''}`}>
                     <div className="flex flex-col gap-0 items-center font-black leading-none">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -478,7 +458,7 @@ export function JournalPage() {
           <tbody className="divide-y divide-gray-50">
             {activity?.has_group_classes && (
               <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
-                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse" />
                     ГРУПОВЕ ЗАНЯТТЯ
@@ -487,7 +467,7 @@ export function JournalPage() {
                 {dates.map(d => {
                   const gLog = groupLogs[d]
                   return (
-                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === d ? 'bg-iris-50/20' : ''}`}>
+                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-50 transition-colors ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
                       {!gLog || gLog.status !== 'conducted' ? (
                         <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
                           className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
@@ -510,43 +490,53 @@ export function JournalPage() {
                     </td>
                   </tr>
                 )}
-                {group.rows.map((row) => (
-                  <tr key={row.enrollment_id} className="hover:bg-iris-50/5 transition-colors group">
-                    <td className="sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
-                            {row.child_name}
-                          </Link>
-                          {groupMode === 'alphabetical' && row.group_name && (
-                            <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                {group.rows.map((row) => {
+                  const isRowHovered = hoveredRowId === row.enrollment_id
+                  return (
+                    <tr key={row.enrollment_id} 
+                      onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
+                      onMouseLeave={() => setHoveredRowId(null)}
+                      className={`transition-colors group ${isRowHovered ? 'bg-iris-50/30' : ''}`}>
+                      <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
+                              {row.child_name}
+                            </Link>
+                            {groupMode === 'alphabetical' && row.group_name && (
+                              <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                            )}
+                          </div>
+                          {row.status === 'frozen' && (
+                            <div className="text-blue-400" title="Заморожено">
+                              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            </div>
                           )}
                         </div>
-                        {row.status === 'frozen' && (
-                          <div className="text-blue-400" title="Заморожено">
-                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {dates.map(dateStr => (
-                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/20' : ''}`}>
-                        <AttendanceCell
-                          row={row}
-                          enrollmentId={row.enrollment_id}
-                          dateStr={dateStr}
-                          log={row.logs[dateStr]}
-                          frozen={isFrozenOn(row, dateStr)}
-                          isHighlightedDate={hoveredDate === dateStr}
-                          onMarkQuick={handleMarkQuick}
-                          onOpenDialog={(r, d) => setDialogTarget({ row: r, dateStr: d })}
-                          onHoverDate={setHoveredDate}
-                          compact={compact}
-                        />
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {dates.map(dateStr => {
+                        const isColHovered = hoveredDate === dateStr
+                        const isCrosshair = isRowHovered && isColHovered
+                        return (
+                          <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-50 transition-colors ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
+                            <AttendanceCell
+                              row={row}
+                              enrollmentId={row.enrollment_id}
+                              dateStr={dateStr}
+                              log={row.logs[dateStr]}
+                              frozen={isFrozenOn(row, dateStr)}
+                              isHighlightedDate={isCrosshair}
+                              onMarkQuick={handleMarkQuick}
+                              onOpenDialog={(r, d) => setDialogTarget({ row: r, dateStr: d })}
+                              onHoverDate={setHoveredDate}
+                              compact={compact}
+                            />
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
               </React.Fragment>
             ))}
           </tbody>
@@ -558,7 +548,7 @@ export function JournalPage() {
         <GroupPopup
           log={groupPopupTarget.log}
           dateStr={groupPopupTarget.dateStr}
-          onUpdate={(count) => {
+          onUpdate={(count: number) => {
             groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, status: 'conducted', count })
             setGroupPopupTarget(null)
           }}
