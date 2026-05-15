@@ -328,6 +328,10 @@ export function JournalPage() {
     mutationFn: (p: any) => attendanceApi.markGroup({ activity_id: activityId!, date: p.dateStr, status: p.status, lessons_count: p.count }),
     onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
   })
+  const groupRemoveMutation = useMutation({
+    mutationFn: (id: string) => attendanceApi.removeGroup(id),
+    onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
+  })
 
   const handleMarkQuick = useCallback((enrollmentId: string, dateStr: string) => {
     markMutation.mutate({ enrollment_id: enrollmentId, date: dateStr, status: 'present' })
