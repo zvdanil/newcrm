@@ -207,7 +207,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .innerJoin('activity_schedules as s', 's.id', 'sub.schedule_id')
     .select(['sub.original_staff_id', 'sub.substitute_staff_id'])
     .where('s.activity_id', '=', activityId)
-    .where('sub.occurrence_date', '=', dateObj)
+    .where('sub.occurrence_date', '=', sql<Date>`CAST(${date} AS DATE)`)
     .executeTakeFirst()
 
   const blockedStaffId = substitution?.original_staff_id ?? null
@@ -221,10 +221,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       eb('rate_type', '=', 'per_child'),
       eb('rate_type', '=', 'group_lesson'),
     ]))
-    .where('valid_from', '<=', dateObj)
+    .where('valid_from', '<=', sql<Date>`CAST(${date} AS DATE)`)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', dateObj),
+      eb('valid_to', '>', sql<Date>`CAST(${date} AS DATE)`),
     ]))
     .selectAll()
     .execute()
@@ -235,7 +235,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', activityId)
-    .where('date', '=', dateObj)
+    .where('date', '=', sql<Date>`CAST(${date} AS DATE)`)
     .where('status', 'in', ['present', 'special'])
     .executeTakeFirst()
 
@@ -245,7 +245,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .selectFrom('group_lesson_logs')
     .select(['status', 'lessons_count'])
     .where('activity_id', '=', activityId)
-    .where('date', '=', dateObj)
+    .where('date', '=', sql<Date>`CAST(${date} AS DATE)`)
     .executeTakeFirst()
 
   const groupConducted = groupLog?.status === 'conducted'
@@ -262,7 +262,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       .where('staff_id',         '=', rate.staff_id)
       .where('rate_id',          '=', rate.id)
       .where('activity_id',      '=', activityId)
-      .where('transaction_date', '=', dateObj)
+      .where('transaction_date', '=', sql<Date>`CAST(${date} AS DATE)`)
       .where('type',             '=', 'ACCRUAL')
       .where('is_deleted',       '=', false)
       .executeTakeFirst()
