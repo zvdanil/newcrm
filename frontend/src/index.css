@@ -3,25 +3,8 @@
 @tailwind utilities;
 
 @layer components {
-  /* Sticky header for journals */
-  .journal-header-sticky {
-    @apply sticky top-0 z-20 bg-gray-50 shadow-sm;
-  }
-
-  /* Cross-highlighting */
+  /* Highlighting utilities for journals */
   .journal-cell-highlighted {
-    @apply bg-iris-50/50;
-  }
-  
-  .journal-row-highlighted {
-    @apply bg-iris-50/30;
-  }
-
-  /* Sticky first columns */
-  .journal-col-sticky-1 {
-    @apply sticky left-0 z-10 bg-inherit;
-  }
-  .journal-col-sticky-2 {
-    @apply sticky left-[180px] z-10 bg-inherit;
+    @apply bg-iris-100/50 ring-1 ring-iris-200;
   }
 }
