@@ -475,7 +475,10 @@ export function JournalPage() {
             {activity?.has_group_classes && (
               <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
                 <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
-                  ГРУПОВЕ ЗАНЯТТЯ
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse" />
+                    ГРУПОВЕ ЗАНЯТТЯ
+                  </div>
                 </td>
                 {dates.map(d => {
                   const gLog = groupLogs[d]
@@ -485,7 +488,8 @@ export function JournalPage() {
                         <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
                           className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
                       ) : (
-                        <div className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</div>
+                        <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
+                          className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black hover:bg-iris-600 transition-colors">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
                       )}
                     </td>
                   )
@@ -546,7 +550,59 @@ export function JournalPage() {
       </div>
 
       {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
+      {groupPopupTarget && (
+        <GroupPopup
+          log={groupPopupTarget.log}
+          dateStr={groupPopupTarget.dateStr}
+          onUpdate={(count) => {
+            groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, status: 'conducted', count })
+            setGroupPopupTarget(null)
+          }}
+          onDelete={() => {
+            groupRemoveMutation.mutate(groupPopupTarget.log.id)
+            setGroupPopupTarget(null)
+          }}
+          onClose={() => setGroupPopupTarget(null)}
+        />
+      )}
       {isEnrollModalOpen && <EnrollModal activityId={activityId!} accountId={(activity as any)?.account_id || ''} onClose={() => setIsEnrollModalOpen(false)} />}
+    </div>
+  )
+}
+
+// ─── Group Popup ─────────────────────────────────────────────────────────────
+
+function GroupPopup({ log, dateStr, onUpdate, onDelete, onClose }: any) {
+  const [count, setCount] = useState(log.lessons_count || 1)
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl p-5 w-[280px] space-y-4 animate-in fade-in zoom-in duration-200" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-bold text-gray-900">Групове заняття</h3>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{dateStr}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        
+        <div>
+          <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">Кількість занять</label>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setCount(Math.max(1, count - 1))} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 font-bold">-</button>
+            <div className="flex-1 text-center font-black text-lg text-iris-600">{count}</div>
+            <button onClick={() => setCount(count + 1)} className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-gray-600 font-bold">+</button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onDelete} className="px-3 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-bold text-[11px] uppercase">Видалити</button>
+          <button onClick={() => onUpdate(count)}
+            className="flex-1 py-2 bg-iris-600 hover:bg-iris-700 text-white text-[11px] font-bold rounded-xl shadow-lg transition-all uppercase">Зберегти</button>
+        </div>
+      </div>
     </div>
   )
 }
