@@ -212,7 +212,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
   const blockedStaffId = substitution?.original_staff_id ?? null
 
-  const rates = await db
+  const allRates = await db
     .selectFrom('staff_rates')
     .where('activity_id', '=', activityId)
     .where('rate_category', '=', 'auto')
@@ -227,7 +227,19 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       eb('valid_to', '>', sql<Date>`CAST(${date} AS DATE)`),
     ]))
     .selectAll()
+    .orderBy('valid_from', 'desc')
+    .orderBy('created_at', 'desc')
     .execute()
+
+  // Ensure only ONE auto rate per activity is processed to avoid double rows.
+  // We pick the latest one based on the order above.
+  const ratesMap = new Map<string, typeof allRates[0]>()
+  for (const r of allRates) {
+    if (r.activity_id && !ratesMap.has(r.activity_id)) {
+      ratesMap.set(r.activity_id, r)
+    }
+  }
+  const rates = Array.from(ratesMap.values())
 
   if (rates.length === 0) return
 
@@ -256,16 +268,30 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     // Skip auto-accrual for the teacher replaced by a substitution
     if (blockedStaffId && rate.staff_id === blockedStaffId) continue
 
-    const existing = await db
-      .selectFrom('salary_transactions')
-      .select(['id', 'gross_amount'])
-      .where('staff_id',         '=', rate.staff_id)
-      .where('rate_id',          '=', rate.id)
-      .where('activity_id',      '=', activityId)
-      .where('transaction_date', '=', sql<Date>`CAST(${date} AS DATE)`)
-      .where('type',             '=', 'ACCRUAL')
-      .where('is_deleted',       '=', false)
-      .executeTakeFirst()
+    const existingAccruals = await db
+      .selectFrom('salary_transactions as st')
+      .innerJoin('staff_rates as sr', 'sr.id', 'st.rate_id')
+      .select(['st.id', 'st.rate_id', 'st.gross_amount'])
+      .where('st.staff_id',         '=', rate.staff_id)
+      .where('st.activity_id',      '=', activityId)
+      .where('st.transaction_date', '=', sql<Date>`CAST(${date} AS DATE)`)
+      .where('st.type',             '=', 'ACCRUAL')
+      .where('st.is_deleted',       '=', false)
+      .where('sr.rate_category',    '=', 'auto') // Только автоматические
+      .execute()
+
+    const existing = existingAccruals.find(a => a.rate_id === rate.id)
+
+    // Clean up any other "competing" AUTO accruals for this activity on this date
+    // that are not part of the current active rates loop.
+    for (const ext of existingAccruals) {
+      if (!rates.some(r => r.id === ext.rate_id)) {
+        await db.updateTable('salary_transactions')
+          .set({ is_deleted: true, deleted_at: now })
+          .where('id', '=', ext.id)
+          .execute()
+      }
+    }
 
     const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount)
     let hasLesson = false
