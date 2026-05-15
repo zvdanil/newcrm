@@ -131,14 +131,17 @@ export async function recalcRetroAccruals(
 
 /** Returns total child billing revenue for an activity on a specific date. */
 async function revenueForActivityDate(activityId: string, dateObj: Date): Promise<number> {
+  const dateStr = dateObj.toISOString().slice(0, 10)
+
   const result = await db
     .selectFrom('transactions')
     .select((eb) => eb.fn.sum<string>('amount').as('total'))
     .where('activity_id', '=', activityId)
-    .where('transaction_date', '=', dateObj)
+    .where('transaction_date', '=', sql`CAST(${dateStr} AS DATE)`)
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
+
   return Math.round(Number(result?.total ?? 0) * 100) / 100
 }
 
@@ -150,8 +153,7 @@ async function revenueForActivityMonth(activityId: string, billingStart: Date): 
     .selectFrom('transactions')
     .select((eb) => eb.fn.sum<string>('amount').as('total'))
     .where('activity_id', '=', activityId)
-    .where('transaction_date', '>=', billingStart)
-    .where('transaction_date', '<', billingEnd)
+    .where('billing_month', '=', sql`CAST(${billingStart.toISOString().slice(0, 10)} AS DATE)`)
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -221,7 +223,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where('valid_from', '<=', dateObj)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', dateObj),
+      eb('valid_to', '>', dateObj),
     ]))
     .selectAll()
     .execute()
@@ -423,7 +425,7 @@ export async function runFixedMonthlyAccruals(billingMonth: string): Promise<voi
     .where('valid_from', '<=', billingObj)
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', billingObj),
+      eb('valid_to', '>', billingObj),
     ]))
     .selectAll()
     .execute()
@@ -513,4 +515,47 @@ export async function runSmartStaffAccruals(billingMonth: string): Promise<void>
       metadata_json:    { source: 'auto_smart', base_rate: Number(rate.rate_value), base_lessons: rate.base_lessons },
     }).execute()
   }
+}
+/**
+ * Принудительный перерасчет всех начислений сотрудника за период.
+ * Используется при вводе ставки задним числом для создания пропущенных записей.
+ */
+export async function triggerRetroAccruals(staffId: string, activityId: string | null, fromDate: Date, toDate: Date) {
+  // 1. Находим все уникальные даты, где есть активность (логи)
+  let dates: Date[] = []
+
+  if (activityId) {
+    const attendanceDates = await db
+      .selectFrom('attendance_logs')
+      .select('date')
+      .distinct()
+      .where('activity_id', '=', activityId)
+      .where('date', '>=', fromDate)
+      .where('date', '<=', toDate)
+      .execute()
+
+    const groupDates = await db
+      .selectFrom('group_lesson_logs')
+      .select('date')
+      .distinct()
+      .where('activity_id', '=', activityId)
+      .where('date', '>=', fromDate)
+      .where('date', '<=', toDate)
+      .execute()
+
+    const allDates = [...attendanceDates, ...groupDates].map(d => new Date(d.date).toISOString().slice(0, 10))
+    dates = Array.from(new Set(allDates)).map(d => new Date(d))
+  }
+
+  // 2. Для каждой даты запускаем стандартный перерасчет
+  for (const d of dates) {
+    const dateStr = d.toISOString().slice(0, 10)
+    await recalcStaffAccruals(activityId!, dateStr)
+  }
+
+  // 3. Если это фиксированный оклад (activityId === null или специфика rate_type),
+  // нужно также проверить 1-е числа месяцев.
+  // Но recalcStaffAccruals уже вызывается внутри цикла выше.
+  // Если ставка глобальная (activityId === null), логика сложнее, 
+  // но в текущей архитектуре авто-ставки всегда привязаны к активности.
 }

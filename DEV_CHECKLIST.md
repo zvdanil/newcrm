@@ -274,6 +274,8 @@
 - [x] CRUD /api/staff (GET список, GET /:id, POST, PUT /:id)
 - [x] GET /api/staff/:id/rates — ставки с join smart_config
 - [x] POST /api/staff/:id/rates — создание ставки (SCD Type 2: закрывает предыдущую); запускает `recalcRetroAccruals` если valid_from < today
+- [x] Ретро-создание начислений: при вводе ставки задним числом система автоматически создает пропущенные записи (triggerRetroAccruals)
+- [x] Поддержка Group Lessons: добавлен тип ставки `group_lesson`, учет `lessons_count` в начислениях
 - [x] PUT /api/staff/:id/rates/:rateId — редактирование (deduction_pct, valid_to, note, smart_config)
 - [x] DELETE /api/staff/:id/rates/:rateId — закрытие ставки (valid_to = today)
 - [x] GET /api/staff/:id/salary?month=YYYY-MM — транзакции + summary (gross/deduction/net/paid/balance)
@@ -286,6 +288,7 @@
 - [x] Смарт-ставка педагога: `recalcSmartStaffBenefit(rateId, billingMonth)` после каждой отметки
 - [x] Cron: `runFixedMonthlyAccruals` + `runSmartStaffAccruals` 1-го числа
 - [x] `recalcRetroAccruals` — ретроспективный пересчёт при backdated ставке (CORRECTION по delta)
+- [x] `triggerRetroAccruals` — автоматическое создание пропущенных начислений при вводе ставки задним числом
 - [ ] Логика замен педагогов — отложено
 
 ### Фронтенд

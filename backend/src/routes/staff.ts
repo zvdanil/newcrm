@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
-import { recalcRetroAccruals } from '../services/salaryService.js'
+import { recalcRetroAccruals, triggerRetroAccruals } from '../services/salaryService.js'
 
 export async function staffRoutes(app: FastifyInstance) {
 
@@ -119,7 +119,7 @@ export async function staffRoutes(app: FastifyInstance) {
     Body: {
       activity_id?: string
       rate_category?: 'auto' | 'manual'
-      rate_type: 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
       value_mode?: 'fixed' | 'percent_of_revenue'
       rate_value: number
       deduction_pct?: number
@@ -144,8 +144,7 @@ export async function staffRoutes(app: FastifyInstance) {
       let q = db
         .selectFrom('staff_rates')
         .select(['id', 'rate_value', 'valid_from', 'valid_to'])
-        .where('staff_id',    '=', req.params.id)
-        .where('rate_type',   '=', rate_type)
+        .where('staff_id', '=', req.params.id)
         .where('rate_category', '=', rate_category)
         .where((eb) => eb.or([
           eb('valid_to', 'is', null),
@@ -154,8 +153,14 @@ export async function staffRoutes(app: FastifyInstance) {
 
       if (activity_id) {
         q = q.where('activity_id', '=', activity_id)
+        // Для автоматических ставок блокируем все остальные авто-ставки по этой активности.
+        // Для ручных — только того же типа.
+        if (rate_category === 'manual') {
+          q = q.where('rate_type', '=', rate_type)
+        }
       } else {
         q = q.where('activity_id', 'is', null)
+             .where('rate_type', '=', rate_type)
       }
 
       const overlappingRates = await q.execute()
@@ -217,6 +222,11 @@ export async function staffRoutes(app: FastifyInstance) {
             fromDateObj,
           )
         }
+      }
+
+      // Если ставка создана в прошлом, также создаем недостающие начисления
+      if (fromDateObj < todayObj) {
+        await triggerRetroAccruals(req.params.id, activity_id ?? null, fromDateObj, todayObj)
       }
 
       return reply.status(201).send(rate)

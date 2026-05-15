@@ -617,9 +617,10 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
 // ── Manual Accrual Form ────────────────────────────────────────────────────
 
 const QUANTITY_LABEL: Partial<Record<RateType, string>> = {
-  hourly:     'Годин',
-  per_lesson: 'Занять',
-  per_child:  'Дітей',
+  hourly:       'Годин',
+  per_lesson:   'Занять',
+  per_child:    'Дітей',
+  group_lesson: 'Занять',
 }
 
 
