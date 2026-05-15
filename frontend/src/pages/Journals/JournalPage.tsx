@@ -471,7 +471,7 @@ export function JournalPage() {
           <tbody className="divide-y divide-gray-50">
             {activity?.has_group_classes && (
               <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
-                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-100 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse" />
                     ГРУПОВЕ ЗАНЯТТЯ
@@ -480,7 +480,7 @@ export function JournalPage() {
                 {dates.map(d => {
                   const gLog = groupLogs[d]
                   return (
-                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-50 transition-colors ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
+                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
                       {!gLog || gLog.status !== 'conducted' ? (
                         <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
                           className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
@@ -510,7 +510,7 @@ export function JournalPage() {
                       onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
                       onMouseLeave={() => setHoveredRowId(null)}
                       className={`transition-colors group ${isRowHovered ? 'bg-iris-50/30' : ''}`}>
-                      <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-50 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
+                      <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
@@ -531,7 +531,7 @@ export function JournalPage() {
                         const isColHovered = hoveredDate === dateStr
                         const isCrosshair = isRowHovered && isColHovered
                         return (
-                          <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-50 transition-colors ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
+                          <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-100 transition-colors ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
                             <AttendanceCell
                               row={row}
                               enrollmentId={row.enrollment_id}
