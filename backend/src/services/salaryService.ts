@@ -1,3 +1,4 @@
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 
 function billingMonthOf(date: string): string {
