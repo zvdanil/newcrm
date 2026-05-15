@@ -282,6 +282,19 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
               className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between group transition-colors" >
               <div>
                 <div className="text-sm font-semibold text-gray-900 group-hover:text-iris-600">{child.full_name}</div>
+                <div className="text-[10px] text-gray-400">ID: {child.id.slice(0, 8)}</div>
+              </div>
+              <span className="text-xs font-bold text-iris-500 opacity-0 group-hover:opacity-100 transition-opacity">Записати →</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Головна сторінка ─────────────────────────────────────────────────────────
+
 export function JournalPage() {
   const { activityId } = useParams<{ activityId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
