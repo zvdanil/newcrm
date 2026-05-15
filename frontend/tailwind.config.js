@@ -7,6 +7,7 @@ export default {
         iris: {
           50:  '#f0f4ff',
           100: '#e0e9ff',
+          200: '#c1d3ff',
           500: '#4f6ef7',
           600: '#3b55e6',
           700: '#2d42cc',
