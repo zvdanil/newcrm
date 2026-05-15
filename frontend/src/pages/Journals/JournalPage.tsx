@@ -440,12 +440,12 @@ export function JournalPage() {
         <table className="w-full text-sm border-separate border-spacing-0">
           <thead className="sticky top-0 z-30 bg-white shadow-sm">
             <tr>
-              <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
+              <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
+                    className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
                     <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
                     <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
@@ -453,11 +453,11 @@ export function JournalPage() {
               })}
             </tr>
             <tr className="bg-white">
-              <th className="sticky left-0 z-30 bg-white border-b border-gray-100 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+              <th className="sticky left-0 z-30 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
               {dates.map(d => {
                 const t = columnTotals[d]
                 return (
-                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-100 text-[8px] ${hoveredDate === d ? 'bg-iris-50/50' : ''}`}>
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] ${hoveredDate === d ? 'bg-iris-50/50' : ''}`}>
                     <div className="flex flex-col gap-0 items-center font-black leading-none">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -468,10 +468,10 @@ export function JournalPage() {
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-gray-200">
             {activity?.has_group_classes && (
               <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
-                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-100 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse" />
                     ГРУПОВЕ ЗАНЯТТЯ
@@ -480,7 +480,7 @@ export function JournalPage() {
                 {dates.map(d => {
                   const gLog = groupLogs[d]
                   return (
-                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
+                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
                       {!gLog || gLog.status !== 'conducted' ? (
                         <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
                           className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
@@ -498,7 +498,7 @@ export function JournalPage() {
               <React.Fragment key={group.groupName || 'all'}>
                 {group.groupName && (
                   <tr className="bg-gray-100/30">
-                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-3 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-100/50">
+                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-3 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-200/50">
                       {group.groupName}
                     </td>
                   </tr>
@@ -510,7 +510,7 @@ export function JournalPage() {
                       onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
                       onMouseLeave={() => setHoveredRowId(null)}
                       className={`transition-colors group ${isRowHovered ? 'bg-iris-50/30' : ''}`}>
-                      <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-100 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
+                      <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-200 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
@@ -531,7 +531,7 @@ export function JournalPage() {
                         const isColHovered = hoveredDate === dateStr
                         const isCrosshair = isRowHovered && isColHovered
                         return (
-                          <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-100 transition-colors ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
+                          <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
                             <AttendanceCell
                               row={row}
                               enrollmentId={row.enrollment_id}
