@@ -438,30 +438,30 @@ export function JournalPage() {
         </div>
       </div>
 
-      {/* Table - Optimized Sticky Layout */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible">
+      {/* Table Container - Fixed height for robust sticky header */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-170px)]">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-0 z-30 bg-white">
+          <thead className="sticky top-0 z-30 bg-white shadow-sm">
             <tr>
-              <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
+              <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
                     className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50/50' : 'bg-gray-50'}`}>
-                    <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
-                    <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                    <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
+                    <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
                 )
               })}
             </tr>
             <tr className="bg-white">
-              <th className="sticky left-0 z-30 bg-white border-b border-gray-100 text-[8px] font-black text-gray-300 text-right pr-3 uppercase">Підсумки:</th>
+              <th className="sticky left-0 z-30 bg-white border-b border-gray-100 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
               {dates.map(d => {
                 const t = columnTotals[d]
                 return (
                   <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-100 text-[8px] ${hoveredDate === d ? 'bg-iris-50/30' : ''}`}>
-                    <div className="flex flex-col gap-0 items-center font-black">
+                    <div className="flex flex-col gap-0 items-center font-black leading-none">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
                       {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
@@ -471,27 +471,21 @@ export function JournalPage() {
               })}
             </tr>
           </thead>
-          
           <tbody className="divide-y divide-gray-50">
-            {/* Group Lesson Row */}
             {activity?.has_group_classes && (
-              <tr className="bg-iris-50/20 hover:bg-iris-50/30 transition-colors">
-                <td className="sticky left-0 z-10 px-5 py-3 font-bold text-iris-600 text-xs border-r border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-iris-500 rounded-full animate-pulse" />
-                    Групове заняття
-                  </div>
+              <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
+                <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-gray-50 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                  ГРУПОВЕ ЗАНЯТТЯ
                 </td>
                 {dates.map(d => {
                   const gLog = groupLogs[d]
                   return (
-                    <td key={`group-${d}`} className={`px-0.5 py-2 text-center transition-colors ${hoveredDate === d ? 'bg-iris-50/40' : ''}`}>
+                    <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === d ? 'bg-iris-50/20' : ''}`}>
                       {!gLog || gLog.status !== 'conducted' ? (
                         <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
-                          className="w-7 h-7 mx-auto rounded-lg border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-xs">+</button>
+                          className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
                       ) : (
-                        <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
-                          className="w-7 h-7 mx-auto rounded-lg bg-iris-500 text-white shadow-md flex items-center justify-center text-[10px] font-bold">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
+                        <div className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</div>
                       )}
                     </td>
                   )
@@ -502,33 +496,33 @@ export function JournalPage() {
             {groupedData.map((group) => (
               <React.Fragment key={group.groupName || 'all'}>
                 {group.groupName && (
-                  <tr className="bg-gray-100/50">
-                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-4 py-1 text-[9px] font-black text-gray-500 uppercase tracking-widest bg-inherit border-y border-gray-100/50">
-                      ГРУПА: {group.groupName}
+                  <tr className="bg-gray-100/30">
+                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-3 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-100/50">
+                      {group.groupName}
                     </td>
                   </tr>
                 )}
                 {group.rows.map((row) => (
-                  <tr key={row.enrollment_id} className="hover:bg-iris-50/10 transition-colors group">
-                    <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                  <tr key={row.enrollment_id} className="hover:bg-iris-50/5 transition-colors group">
+                    <td className="sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors">
+                          <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
                             {row.child_name}
                           </Link>
                           {groupMode === 'alphabetical' && row.group_name && (
-                            <div className="text-[8px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                            <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
                           )}
                         </div>
                         {row.status === 'frozen' && (
                           <div className="text-blue-400" title="Заморожено">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                           </div>
                         )}
                       </div>
                     </td>
                     {dates.map(dateStr => (
-                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/30' : ''}`}>
+                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/20' : ''}`}>
                         <AttendanceCell
                           row={row}
                           enrollmentId={row.enrollment_id}

@@ -224,9 +224,11 @@ export async function journalsRoutes(app: FastifyInstance) {
 
         db.selectFrom('enrollments as e')
           .innerJoin('children as c', 'c.id', 'e.child_id')
+          .leftJoin('groups as g', 'g.id', 'c.group_id')
           .select([
             'e.id as enrollment_id', 'e.status', 'e.frozen_from', 'e.frozen_to', 'e.note as enrollment_note',
             'c.id as child_id', 'c.full_name as child_name',
+            'g.name as group_name'
           ])
           .where('e.activity_id', '=', activity_id)
           .where('e.status', '!=', 'archived')
@@ -270,6 +272,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           enrollment_id: e.enrollment_id,
           child_id: e.child_id,
           child_name: e.child_name,
+          group_name: e.group_name,
           status: e.status,
           frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
           frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
