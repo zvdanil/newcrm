@@ -91,8 +91,8 @@ interface CellProps {
 // Memoized to prevent re-renders of the whole grid
 const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlightedDate, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
   const baseClasses = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
-    compact ? 'h-7 w-7' : 'h-8 px-2 min-w-[2rem]'
-  } ${isHighlightedDate ? 'journal-cell-highlighted ring-1 ring-iris-200' : ''}`
+    compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
+  } ${isHighlightedDate ? 'bg-iris-50/50 border-iris-200' : 'border-transparent'}`
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -102,7 +102,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   if (frozen) {
     return (
       <div className={`${baseClasses} border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed`} title="Заморожено">
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
         </svg>
       </div>
@@ -116,9 +116,9 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         onContextMenu={handleContextMenu}
         onMouseEnter={() => onHoverDate(dateStr)}
         onMouseLeave={() => onHoverDate(null)}
-        className={`${baseClasses} border-dashed border-gray-200 bg-white text-gray-300 hover:border-gray-400 hover:text-gray-400`}
+        className={`${baseClasses} border-dashed border-gray-100 bg-white text-gray-200 hover:border-gray-300 hover:text-gray-300 hover:bg-gray-50`}
       >
-        <span className="text-xs opacity-0 group-hover:opacity-100 transition-opacity">+</span>
+        <span className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">+</span>
       </div>
     )
   }
@@ -129,18 +129,18 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onContextMenu={handleContextMenu}
       onMouseEnter={() => onHoverDate(dateStr)}
       onMouseLeave={() => onHoverDate(null)}
-      className={`${baseClasses} font-semibold ${STATUS_STYLE[log.status]}`}
+      className={`${baseClasses} font-bold ${STATUS_STYLE[log.status]}`}
     >
       {log.status === 'special' ? (
-        <span className="text-[10px] leading-tight">
+        <span className="text-[9px] leading-tight font-black">
           {Number(log.custom_amount).toFixed(0)}
         </span>
       ) : (
-        <span className="text-xs">{STATUS_LABEL[log.status]}</span>
+        <span className="text-[10px]">{STATUS_LABEL[log.status]}</span>
       )}
       
       {log.note && (
-        <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
+        <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
     </div>
   )
@@ -392,76 +392,76 @@ export function JournalPage() {
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-xs text-gray-500">
           <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
           <span>/</span>
           <span className="text-gray-900 font-bold">{activity?.name ?? '...'}</span>
         </div>
         <button onClick={() => setIsEnrollModalOpen(true)}
-          className="px-4 py-2 bg-iris-600 hover:bg-iris-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-2">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          className="px-3 py-1.5 bg-iris-600 hover:bg-iris-700 text-white text-[11px] font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
           Записати дитину
         </button>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-4">
-        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
+      <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
+        <div className="flex p-0.5 bg-gray-50 rounded-xl text-[10px] font-black">
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`px-4 py-2 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
-              {m === 'day' ? 'ДЕНЬ' : m === 'week' ? 'ТИЖДЕНЬ' : 'МІСЯЦЬ'}
+              className={`px-3 py-1.5 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-500'}`}>
+              {m.toUpperCase()}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-1.5 border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-400">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <span className="text-sm font-bold text-gray-800 min-w-[200px] text-center">{formatHeader(from, to, mode)}</span>
-          <button onClick={() => setDate(navigate(baseDate, mode, 1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+          <span className="text-xs font-black text-gray-700 min-w-[140px] text-center uppercase tracking-tighter">{formatHeader(from, to, mode)}</span>
+          <button onClick={() => setDate(navigate(baseDate, mode, 1))} className="p-1.5 border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-400">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
 
-        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
-          <button onClick={() => setGroupMode('group')} className={`px-3 py-2 rounded-lg ${groupMode === 'group' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>ПО ГРУПАХ</button>
-          <button onClick={() => setGroupMode('alphabetical')} className={`px-3 py-2 rounded-lg ${groupMode === 'alphabetical' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>ПО ФІО</button>
+        <div className="flex p-0.5 bg-gray-50 rounded-xl text-[10px] font-black">
+          <button onClick={() => setGroupMode('group')} className={`px-3 py-1.5 rounded-lg ${groupMode === 'group' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>ПО ГРУПАХ</button>
+          <button onClick={() => setGroupMode('alphabetical')} className={`px-3 py-1.5 rounded-lg ${groupMode === 'alphabetical' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>ПО ФІО</button>
         </div>
 
-        <div className="flex items-center gap-4 ml-auto px-2">
-          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-green-100 border-green-200 flex items-center justify-center text-[10px] text-green-700 font-bold">П</span> <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Прис</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-amber-100 border-amber-200 flex items-center justify-center text-[10px] text-amber-700 font-bold">В</span> <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Пов</span></div>
-          <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded-lg border bg-red-100 border-red-200 flex items-center justify-center text-[10px] text-red-700 font-bold">Н</span> <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">Неп</span></div>
+        <div className="flex items-center gap-3 ml-auto px-1">
+          <div className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-green-100 border-green-200 flex items-center justify-center text-[9px] text-green-700 font-black">П</span> <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Пр</span></div>
+          <div className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-amber-100 border-amber-200 flex items-center justify-center text-[9px] text-amber-700 font-black">В</span> <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Пв</span></div>
+          <div className="flex items-center gap-1"><span className="w-4 h-4 rounded border bg-red-100 border-red-200 flex items-center justify-center text-[9px] text-red-700 font-black">Н</span> <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Нп</span></div>
         </div>
       </div>
 
-      {/* Table - Optimized for performance and sticky layout */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible relative">
+      {/* Table - Optimized Sticky Layout */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-[64px] z-30 shadow-sm bg-gray-50">
+          <thead className="sticky top-0 z-30 bg-white">
             <tr>
-              <th className="sticky left-0 z-40 bg-gray-50 text-left px-5 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100 min-w-[220px]">Дитина</th>
+              <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-2 text-center font-bold border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
-                    <div className="text-[10px] text-gray-400 leading-tight">{day}</div>
-                    <div className={`text-sm leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50/50' : 'bg-gray-50'}`}>
+                    <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
+                    <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
                 )
               })}
             </tr>
             <tr className="bg-white">
-              <th className="sticky left-0 z-30 bg-white border-b border-gray-100 text-[9px] font-bold text-gray-300 text-right pr-4 uppercase">Підсумки:</th>
+              <th className="sticky left-0 z-30 bg-white border-b border-gray-100 text-[8px] font-black text-gray-300 text-right pr-3 uppercase">Підсумки:</th>
               {dates.map(d => {
                 const t = columnTotals[d]
                 return (
-                  <th key={`total-${d}`} className={`px-0.5 py-1 border-b border-gray-100 text-[9px] ${hoveredDate === d ? 'bg-iris-50' : ''}`}>
-                    <div className="flex flex-col gap-0.5 items-center font-bold">
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-100 text-[8px] ${hoveredDate === d ? 'bg-iris-50/30' : ''}`}>
+                    <div className="flex flex-col gap-0 items-center font-black">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
                       {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
@@ -502,33 +502,33 @@ export function JournalPage() {
             {groupedData.map((group) => (
               <React.Fragment key={group.groupName || 'all'}>
                 {group.groupName && (
-                  <tr className="bg-gray-50/80">
-                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-5 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-100">
-                      📦 Группа: {group.groupName}
+                  <tr className="bg-gray-100/50">
+                    <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-4 py-1 text-[9px] font-black text-gray-500 uppercase tracking-widest bg-inherit border-y border-gray-100/50">
+                      ГРУПА: {group.groupName}
                     </td>
                   </tr>
                 )}
                 {group.rows.map((row) => (
-                  <tr key={row.enrollment_id} className="hover:bg-iris-50/20 transition-colors group">
-                    <td className="sticky left-0 z-10 px-5 py-3 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                      <div className="flex items-center gap-3">
+                  <tr key={row.enrollment_id} className="hover:bg-iris-50/10 transition-colors group">
+                    <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <Link to={`/children/${row.child_id}`} className="text-sm font-bold text-gray-900 hover:text-iris-600 truncate block transition-colors">
+                          <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors">
                             {row.child_name}
                           </Link>
                           {groupMode === 'alphabetical' && row.group_name && (
-                            <div className="text-[9px] font-bold text-gray-400 uppercase">{row.group_name}</div>
+                            <div className="text-[8px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
                           )}
                         </div>
                         {row.status === 'frozen' && (
-                          <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center" title="Заморожено">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                          <div className="text-blue-400" title="Заморожено">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                           </div>
                         )}
                       </div>
                     </td>
                     {dates.map(dateStr => (
-                      <td key={dateStr} className={`px-0.5 py-1 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/40' : ''}`}>
+                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/30' : ''}`}>
                         <AttendanceCell
                           row={row}
                           enrollmentId={row.enrollment_id}

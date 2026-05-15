@@ -88,8 +88,8 @@ interface CellProps {
 }
 
 const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, onMark, onOpenDialog, onHover, pending }: CellProps) => {
-  const baseClasses = `w-7 h-7 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-xs ${
-    isHighlighted ? 'journal-cell-highlighted ring-1 ring-iris-200' : ''
+  const baseClasses = `relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${
+    isHighlighted ? 'bg-iris-50/50 border-iris-200' : 'border-transparent'
   }`
 
   if (frozen) {
@@ -105,9 +105,9 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         onMouseEnter={() => onHover(dateStr)}
         onMouseLeave={() => onHover(null)}
         disabled={pending}
-        className={`${baseClasses} border-dashed border-gray-300 text-gray-300 hover:border-gray-400 hover:text-gray-400 disabled:opacity-40`}
+        className={`${baseClasses} border-dashed border-gray-100 bg-white text-gray-200 hover:border-gray-300 hover:text-gray-300 hover:bg-gray-50 disabled:opacity-40`}
       >
-        <span className="opacity-0 group-hover:opacity-100">+</span>
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">+</span>
       </button>
     )
   }
@@ -120,9 +120,11 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       disabled={pending}
       className={`${baseClasses} font-bold transition-all disabled:opacity-40 ${STATUS_STYLE[log.status as AttendanceStatus]}`}
     >
-      {log.status === 'special' ? Number(log.custom_amount).toFixed(0) : STATUS_LABEL[log.status as AttendanceStatus]}
+      {log.status === 'special' ? (
+        <span className="font-black leading-tight">{Number(log.custom_amount).toFixed(0)}</span>
+      ) : STATUS_LABEL[log.status as AttendanceStatus]}
       {log.note && (
-        <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
+        <div className="absolute top-0 right-0 w-1 h-1 bg-red-500 rounded-full border border-white" />
       )}
     </button>
   )
@@ -272,36 +274,36 @@ export function MergedJournalPage() {
   if (!mj) return <div className="py-12 text-center text-sm text-gray-400">Журнал не знайдено</div>
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-gray-500">
         <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
         <span>/</span>
         <span className="text-gray-900 font-bold">{mj.name}</span>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-4">
-        <div className="flex p-1 bg-gray-50 rounded-xl text-xs font-bold">
+      <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
+        <div className="flex p-0.5 bg-gray-50 rounded-xl text-[10px] font-black">
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`px-4 py-2 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
-              {m === 'day' ? 'ДЕНЬ' : m === 'week' ? 'ТИЖДЕНЬ' : 'МІСЯЦЬ'}
+              className={`px-3 py-1.5 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              {m.toUpperCase()}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-1.5 border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-400">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          <span className="text-sm font-bold text-gray-800 min-w-[180px] text-center">{formatHeader(from, to, mode)}</span>
-          <button onClick={() => setDate(navigate(baseDate, mode, 1))} className="p-2 border border-gray-100 rounded-xl hover:bg-gray-50 text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+          <span className="text-xs font-black text-gray-800 min-w-[140px] text-center uppercase tracking-tighter">{formatHeader(from, to, mode)}</span>
+          <button onClick={() => setDate(navigate(baseDate, mode, 1))} className="p-1.5 border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-400">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
 
         {groups.length > 0 && (
           <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-            className="text-xs font-bold border border-gray-100 rounded-xl px-3 py-2 text-gray-600 focus:ring-iris-500 focus:border-iris-500">
+            className="text-[10px] font-black border border-gray-100 rounded-xl px-3 py-1.5 text-gray-600 focus:ring-iris-500 focus:border-iris-500 uppercase">
             <option value="">УСІ ГРУПИ</option>
             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
@@ -309,14 +311,14 @@ export function MergedJournalPage() {
       </div>
 
       {activities.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {activities.map(a => {
             const color = activityColorMap.get(a.id) ?? ACTIVITY_COLORS[0]
             const isOn  = activeActivityIds === null || activeActivityIds.has(a.id)
             return (
               <button key={a.id} onClick={() => toggleActivity(a.id)}
-                className={`text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all ${isOn ? color + ' border-transparent shadow-sm' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
-                {a.name.toUpperCase()}
+                className={`text-[9px] font-black px-2.5 py-1 rounded-full border transition-all uppercase ${isOn ? color + ' border-transparent shadow-sm' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                {a.name}
               </button>
             )
           })}
@@ -325,17 +327,17 @@ export function MergedJournalPage() {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible relative">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-[64px] z-30 shadow-sm bg-gray-50">
+          <thead className="sticky top-0 z-30 bg-white">
             <tr>
-              <th className="sticky left-0 z-40 bg-gray-50 text-left px-5 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100 min-w-[200px]">Дитина</th>
-              {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-3 font-bold text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
+              <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
+              {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-2 text-center font-bold border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
-                    <div className="text-[10px] text-gray-400 leading-tight">{day}</div>
-                    <div className={`text-sm leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50/50' : 'bg-gray-50'}`}>
+                    <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
+                    <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
                 )
               })}
@@ -347,20 +349,20 @@ export function MergedJournalPage() {
               const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
 
               return (
-                <tr key={row.enrollment_id} className="hover:bg-iris-50/20 transition-colors group">
-                  <td className="sticky left-0 z-10 px-5 py-3 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit font-bold text-gray-900 shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                    <Link to={`/children/${row.child_id}`} className="hover:text-iris-600 transition-colors">
+                <tr key={row.enrollment_id} className="hover:bg-iris-50/10 transition-colors group">
+                  <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                    <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors">
                       {row.child_name}
                     </Link>
-                    {row.group_name && <div className="text-[9px] text-gray-400 uppercase">{row.group_name}</div>}
+                    {row.group_name && <div className="text-[8px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>}
                   </td>
                   {activities.length > 1 && (
-                    <td className="px-2 py-2">
-                      <span className={`text-[9px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
+                    <td className="px-2 py-1.5">
+                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
                     </td>
                   )}
                   {dates.map(dateStr => (
-                    <td key={dateStr} className={`px-0.5 py-1 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/40' : ''}`}>
+                    <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/30' : ''}`}>
                       <AttendanceCell
                         enrollmentId={row.enrollment_id}
                         dateStr={dateStr}
