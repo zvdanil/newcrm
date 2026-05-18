@@ -92,7 +92,7 @@ interface CellProps {
 const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlightedDate, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
   const baseClasses = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
     compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
-  } ${isHighlightedDate ? 'bg-iris-50/50 border-iris-200' : 'border-transparent'}`
+  } ${isHighlightedDate ? 'border-iris-300' : 'border-transparent'}`
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -116,7 +116,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         onContextMenu={handleContextMenu}
         onMouseEnter={() => onHoverDate(dateStr)}
         onMouseLeave={() => onHoverDate(null)}
-        className={`${baseClasses} border-dashed border-gray-100 bg-white text-gray-200 hover:border-gray-300 hover:text-gray-300 hover:bg-gray-50`}
+        className={`${baseClasses} border-dashed border-gray-200 bg-transparent text-gray-300 hover:border-gray-300 hover:text-gray-400 hover:bg-black/5`}
       >
         <span className="text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">+</span>
       </div>
@@ -438,16 +438,19 @@ export function JournalPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-14rem)] custom-scrollbar">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+          <thead className="sticky top-14 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <tr>
               <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
+                const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                const baseBg = isWeekend ? 'bg-amber-50' : 'bg-gray-50'
+                const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
+                    className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
                     <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
                     <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-700' : 'text-gray-800'}`}>{num}</div>
                   </th>
@@ -458,8 +461,11 @@ export function JournalPage() {
               <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
               {dates.map(d => {
                 const t = columnTotals[d]
+                const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
+                const baseBg = isWeekend ? 'bg-amber-50/50' : ''
                 return (
-                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : ''}`}>
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
                     <div className="flex flex-col gap-0 items-center font-black leading-none">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -481,8 +487,11 @@ export function JournalPage() {
                   </td>
                   {dates.map(d => {
                     const gLog = groupLogs[d]
+                    const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                    const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
+                    const baseBg = isWeekend ? 'bg-amber-50/30' : ''
                     return (
-                      <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-100/50' : ''}`}>
+                      <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
                         {!gLog || gLog.status !== 'conducted' ? (
                           <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
                             className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
@@ -532,8 +541,15 @@ export function JournalPage() {
                         {dates.map(dateStr => {
                           const isColHovered = hoveredDate === dateStr
                           const isCrosshair = isRowHovered && isColHovered
+                          const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
+                          
+                          let bgClass = ''
+                          if (isCrosshair) bgClass = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
+                          else if (isColHovered) bgClass = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
+                          else if (isWeekend) bgClass = 'bg-amber-50/30'
+
                           return (
-                            <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${isCrosshair ? 'bg-iris-200/60' : isColHovered ? 'bg-iris-100' : ''}`}>
+                            <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${bgClass}`}>
                               <AttendanceCell
                                 row={row}
                                 enrollmentId={row.enrollment_id}

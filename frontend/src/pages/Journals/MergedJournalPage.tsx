@@ -89,7 +89,7 @@ interface CellProps {
 
 const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, onMark, onOpenDialog, onHover, pending }: CellProps) => {
   const baseClasses = `relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${
-    isHighlighted ? 'bg-iris-50/50 border-iris-200' : 'border-transparent'
+    isHighlighted ? 'border-iris-300' : 'border-transparent'
   }`
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -111,7 +111,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         onMouseEnter={() => onHover(dateStr)}
         onMouseLeave={() => onHover(null)}
         disabled={pending}
-        className={`${baseClasses} border-dashed border-gray-100 bg-white text-gray-200 hover:border-gray-300 hover:text-gray-300 hover:bg-gray-50 disabled:opacity-40`}
+        className={`${baseClasses} border-dashed border-gray-200 bg-transparent text-gray-300 hover:border-gray-300 hover:text-gray-400 hover:bg-black/5 disabled:opacity-40`}
       >
         <span className="opacity-0 group-hover:opacity-100 transition-opacity">+</span>
       </button>
@@ -335,17 +335,20 @@ export function MergedJournalPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-14rem)] custom-scrollbar relative">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible relative">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+          <thead className="sticky top-14 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <tr>
               <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
               {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
               {dates.map(d => {
                 const { day, num } = formatDayCol(d)
+                const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                const baseBg = isWeekend ? 'bg-amber-50' : 'bg-gray-50'
+                const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
+                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? hoverBg : baseBg}`}>
                     <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
                     <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
@@ -371,9 +374,17 @@ export function MergedJournalPage() {
                       <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
                     </td>
                   )}
-                  {dates.map(dateStr => (
-                    <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-100 group-hover:bg-iris-200/60' : ''}`}>
-                      <AttendanceCell
+                  {dates.map(dateStr => {
+                    const isColHovered = hoveredDate === dateStr
+                    const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
+                    
+                    let bgClass = ''
+                    if (isColHovered) bgClass = isWeekend ? 'bg-amber-100 group-hover:bg-amber-200/60' : 'bg-iris-100 group-hover:bg-iris-200/60'
+                    else if (isWeekend) bgClass = 'bg-amber-50/30'
+
+                    return (
+                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${bgClass}`}>
+                        <AttendanceCell
                         enrollmentId={row.enrollment_id}
                         dateStr={dateStr}
                         log={row.logs[dateStr]}
@@ -385,7 +396,8 @@ export function MergedJournalPage() {
                         pending={markMutation.isPending}
                       />
                     </td>
-                  ))}
+                  )
+                })}
                 </tr>
               )
             })}
