@@ -367,39 +367,39 @@
 ---
 
 ## ЭТАП 8 — Дивиденды и PnL
-**Статус:** `[ ] Не начат`
+**Статус:** `[x] Частково завершено (Модуль дивідендів реалізовано; PnL-звіт — в планах)`
 
-> ⚠️ **Уточнение после реализации Этапа 7:**
-> Флаг `is_dividend` на расходах уже реализован. В Этапе 8 остаётся:
-> - Учёт долей партнёров и Equity Ledger
-> - Двухэтапный cash-out (in_transit → completed) — отличается от простого обналичивания
-> - PnL-отчёт (7 колонок, только по кнопке)
+> Реалізовано у травні 2026. Див. детальну документацію: `DIVIDENDS_MODULE.md`
 
-### База данных
-- [ ] Таблица `equity_participants` (id, name, share_pct)
-- [ ] Таблица `dividend_transactions` (id, participant_id, amount, commission, status: in_transit/completed, date)
+### База даних
+- [x] Таблиця `equity_participants` (id, name, share_pct, is_active)
+- [x] Таблиця `dividend_settings` (default_tax_pct)
+- [x] Таблиця `dividend_payouts` (participant_id, date, type, gross_amount, net_amount, tax_pct, note, is_deleted)
+- [x] Колонка `dividend_payout_id` у таблиці `expenses` (міграція 023)
+- [x] Колонка `dividend_payout_id` у таблиці `salary_transactions` (міграція 024)
 
-### Бэкенд
-- [ ] CRUD /api/equity-participants (доли партнёров)
-- [ ] POST /api/dividends/cashout (двухэтапный вывод: in_transit → completed)
-- [ ] GET /api/equity/ledger (перекос выплат по партнёрам)
-- [ ] GET /api/reports/pnl?from=&to= (PnL по кнопке, 7 колонок по месяцам):
-  | Колонка | Источник |
-  |---|---|
-  | Ожидаемый доход | Σ ACCRUAL клиентам |
-  | Начисленный расход | Σ expenses.amount (статус pending+paid по дате начисления) |
-  | Реальные доходы | Σ PAYMENT от клиентов |
-  | Оборот расходов | Σ expenses.payment_date (фактически оплаченные) |
-  | Оборот без дивидендов | То же, is_dividend = false |
-  | Баланс без дивидендов | Реальные доходы − Оборот без дивидендов |
-  | Остаток на счетах | Ликвидность накопительно |
+### Бекенд
+- [x] CRUD `/api/dividends/participants`
+- [x] GET/PUT `/api/dividends/settings`
+- [x] GET `/api/dividends/ledger` — баланс, skew, leveling recommendations
+- [x] GET `/api/dividends/payouts` — журнал з джерелами (expenses + salary_transactions)
+- [x] POST `/api/dividends/payouts` — типи джерел: `new`, `existing`, `existing_salary`
+- [x] DELETE `/api/dividends/payouts/:id` — soft-delete, відв'язка джерел
+- [x] Каскадне видалення: видалення витрати/зарплати → видаляє дивіденд
+- [ ] POST `/api/dividends/cashout` (двохетапний вивід in_transit → completed) — в планах
+- [ ] GET `/api/reports/pnl` (PnL-звіт, 7 колонок) — в планах
 
 ### Фронтенд
-- [ ] Раздел "Дивіденди" (только Owner)
-- [ ] Настройка долей участников
-- [ ] Cash-out форма (двухэтапный с комиссией)
-- [ ] Equity Ledger с кнопкой "Виробнити баланс"
-- [ ] PnL-отчёт (генерируется по кнопке, 7 колонок)
+- [x] Розділ «Дивіденди» (тільки Owner) — `/dividends`
+- [x] `LedgerHeader` — баланс, skew, рекомендації для вирівнювання
+- [x] Налаштування часток учасників
+- [x] Журнал виплат з джерелами
+- [x] Форма фіксації виплати (`CreatePayoutModal`):
+  - [x] Джерела: нове списання, існуюча витрата, зарплатна виплата
+  - [x] Об'єднаний список з підписами «Витрата:» / «Зарплата:»
+  - [x] Pre-fill при переходах з Журналу витрат
+- [x] UX-флоу: відмітка `₴↑` → авто-redirect на `/dividends?add_expense=ID` → модалка відкривається
+- [ ] PnL-звіт (7 колонок, тільки по кнопці) — в планах
 
 ---
 
