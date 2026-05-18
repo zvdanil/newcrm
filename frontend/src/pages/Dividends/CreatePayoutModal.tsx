@@ -30,7 +30,12 @@ export function CreatePayoutModal({
     queryFn: () => accountsApi.list(),
   })
 
-  // We only want unlinked expenses that are marked as dividends
+  // We only want unlinked expenses/salaries that are marked as dividends
+  const { data: expensesData } = useQuery({
+    queryKey: ['expenses', { is_dividend: true }],
+    queryFn: () => expensesApi.list({ is_dividend: true }),
+  })
+
   const { data: salaryData } = useQuery({
     queryKey: ['salary-payments', { is_dividend: true }],
     queryFn: () => salaryPaymentsApi.list({ is_dividend: true }),
