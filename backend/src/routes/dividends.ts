@@ -276,7 +276,11 @@ export async function dividendsRoutes(app: FastifyInstance) {
               .execute()
           } else if (src.type === 'existing') {
             await trx.updateTable('expenses')
-              .set({ dividend_payout_id: payout.id })
+              .set({ 
+                dividend_payout_id: payout.id,
+                status: 'paid',
+                payment_date: dateStr
+              })
               .where('id', '=', src.expense_id)
               .execute()
           }

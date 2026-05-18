@@ -3,8 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { accountsApi } from '../../api/accounts.api'
 import { expensesApi } from '../../api/expenses.api'
+import { useEffect } from 'react'
 
-export function CreatePayoutModal({ onClose }: { onClose: () => void }) {
+export function CreatePayoutModal({ 
+  onClose,
+  prefillExpenseId 
+}: { 
+  onClose: () => void
+  prefillExpenseId?: string | null
+}) {
   const queryClient = useQueryClient()
 
   // ── Queries ─────────────────────────────────────────────────────────────
@@ -30,7 +37,7 @@ export function CreatePayoutModal({ onClose }: { onClose: () => void }) {
   })
 
   const availableExpenses = useMemo(() => {
-    return (expensesData?.data || []).filter(e => !e.dividend_payout_id && e.status === 'paid')
+    return (expensesData?.data || []).filter(e => !e.dividend_payout_id)
   }, [expensesData])
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -48,6 +55,26 @@ export function CreatePayoutModal({ onClose }: { onClose: () => void }) {
   const [newAccountId, setNewAccountId] = useState('')
   const [newAmount, setNewAmount] = useState('')
   const [selectedExpenseId, setSelectedExpenseId] = useState('')
+
+  // Prefill logic
+  useEffect(() => {
+    if (prefillExpenseId && availableExpenses.length > 0) {
+      const e = availableExpenses.find(x => x.id === prefillExpenseId)
+      if (e) {
+        // Only add if not already in sources
+        if (!sources.some(s => s.type === 'existing' && s.expense_id === prefillExpenseId)) {
+          setSources(prev => [...prev, {
+            id: Math.random().toString(),
+            type: 'existing',
+            expense_id: prefillExpenseId,
+            amount: Number(e.amount),
+            account_name: e.account_name,
+            note: e.note
+          }])
+        }
+      }
+    }
+  }, [prefillExpenseId, availableExpenses, sources])
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleAddSource = () => {

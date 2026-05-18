@@ -4,9 +4,14 @@ import { dividendsApi } from '../../api/dividends.api'
 import { PayoutsTab } from './PayoutsTab'
 import { SettingsTab } from './SettingsTab'
 import { LedgerHeader } from './LedgerHeader'
+import { useSearchParams } from 'react-router-dom'
 
 export function DividendsPage() {
-  const [activeTab, setActiveTab] = useState<'payouts' | 'settings'>('payouts')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const addExpenseId = searchParams.get('add_expense')
+  
+  // If we have an add_expense param, we want to force the payouts tab to be active initially
+  const [activeTab, setActiveTab] = useState<'payouts' | 'settings'>(addExpenseId ? 'payouts' : 'payouts')
 
   const ledgerQuery = useQuery({
     queryKey: ['dividends', 'ledger'],
@@ -49,7 +54,15 @@ export function DividendsPage() {
 
       {/* Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
-        {activeTab === 'payouts' && <PayoutsTab />}
+        {activeTab === 'payouts' && (
+          <PayoutsTab 
+            prefillExpenseId={addExpenseId} 
+            onClearPrefill={() => {
+              searchParams.delete('add_expense')
+              setSearchParams(searchParams)
+            }} 
+          />
+        )}
         {activeTab === 'settings' && <SettingsTab />}
       </div>
     </div>

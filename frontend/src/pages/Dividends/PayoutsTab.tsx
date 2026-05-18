@@ -3,9 +3,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { CreatePayoutModal } from './CreatePayoutModal'
 
-export function PayoutsTab() {
+export function PayoutsTab({ 
+  prefillExpenseId, 
+  onClearPrefill 
+}: { 
+  prefillExpenseId?: string | null
+  onClearPrefill?: () => void 
+}) {
   const queryClient = useQueryClient()
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(!!prefillExpenseId)
+
+  // Open modal automatically if prefillExpenseId is provided
+  // Note: we only do this once when the prop changes to a truthy value
+  useState(() => {
+    if (prefillExpenseId) {
+      setIsModalOpen(true)
+    }
+  })
 
   const { data: payouts = [], isLoading } = useQuery({
     queryKey: ['dividends', 'payouts'],
@@ -107,7 +121,15 @@ export function PayoutsTab() {
         </table>
       </div>
 
-      {isModalOpen && <CreatePayoutModal onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && (
+        <CreatePayoutModal 
+          prefillExpenseId={prefillExpenseId}
+          onClose={() => {
+            setIsModalOpen(false)
+            if (onClearPrefill) onClearPrefill()
+          }} 
+        />
+      )}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type SalaryPayment } from '../../api/expenses.api'
 import { accountsApi } from '../../api/accounts.api'
@@ -831,9 +832,16 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
     mutationFn: () => expensesApi.delete(expense.id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onRefresh() },
   })
+  const navigate = useNavigate()
   const dividendMutation = useMutation({
     mutationFn: (val: boolean) => expensesApi.toggleDividend(expense.id, val),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onRefresh() },
+    onSuccess: (data, val) => { 
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      onRefresh()
+      if (val) {
+        navigate(`/dividends?add_expense=${expense.id}`)
+      }
+    },
   })
 
   if (editing) {
