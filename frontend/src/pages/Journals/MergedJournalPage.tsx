@@ -82,7 +82,7 @@ interface CellProps {
   frozen:        boolean
   isHighlighted: boolean
   onMark:        (enrollmentId: string, dateStr: string) => void
-  onOpenDialog:  (enrollmentId: string, dateStr: string) => void
+  onOpenDialog:  (enrollmentId: string, dateStr: string, context: 'edit' | 'note') => void
   onHover:       (dateStr: string | null) => void
   pending:       boolean
 }
@@ -91,6 +91,11 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   const baseClasses = `relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${
     isHighlighted ? 'bg-iris-50/50 border-iris-200' : 'border-transparent'
   }`
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    onOpenDialog(enrollmentId, dateStr, 'note')
+  }
 
   if (frozen) {
     return (
@@ -102,6 +107,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     return (
       <button
         onClick={() => onMark(enrollmentId, dateStr)}
+        onContextMenu={handleContextMenu}
         onMouseEnter={() => onHover(dateStr)}
         onMouseLeave={() => onHover(null)}
         disabled={pending}
@@ -114,7 +120,8 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
 
   return (
     <button
-      onClick={() => onOpenDialog(enrollmentId, dateStr)}
+      onClick={() => onOpenDialog(enrollmentId, dateStr, 'edit')}
+      onContextMenu={handleContextMenu}
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
@@ -141,7 +148,7 @@ const ACTIVITY_COLORS = [
   'bg-cyan-100 text-cyan-700',
 ]
 
-function MergedAttendanceDialog({ enrollmentId, dateStr, log, onSave, onDelete, onClose }: any) {
+function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, onSave, onDelete, onClose }: any) {
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
@@ -161,7 +168,8 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, onSave, onDelete, 
         <div className="grid grid-cols-4 gap-2">
           {(['present', 'absent_excused', 'absent_unexcused', 'special'] as AttendanceStatus[]).map((s) => (
             <button key={s} onClick={() => setStatus(s)}
-              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'}`}>
+              autoFocus={openContext === 'edit' && s === 'absent_excused'}
+              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all focus:outline-none ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'}`}>
               {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : '$$$'}
             </button>
           ))}
@@ -174,7 +182,9 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, onSave, onDelete, 
         )}
         <div>
           <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка</label>
-          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            autoFocus={openContext === 'note'}
+            className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
         </div>
         <div className="flex gap-3 pt-2">
           {log && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
@@ -325,9 +335,9 @@ export function MergedJournalPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto overflow-y-visible relative">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-14rem)] custom-scrollbar relative">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-0 z-30 bg-white">
+          <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <tr>
               <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
               {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
@@ -335,7 +345,7 @@ export function MergedJournalPage() {
                 const { day, num } = formatDayCol(d)
                 return (
                   <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-50/50' : 'bg-gray-50'}`}>
+                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
                     <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
                     <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
                   </th>
@@ -349,8 +359,8 @@ export function MergedJournalPage() {
               const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
 
               return (
-                <tr key={row.enrollment_id} className="hover:bg-iris-50/10 transition-colors group">
-                  <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)]">
+                <tr key={row.enrollment_id} className="hover:bg-iris-100/50 transition-colors group">
+                  <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-iris-100 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors">
                     <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors">
                       {row.child_name}
                     </Link>
@@ -362,7 +372,7 @@ export function MergedJournalPage() {
                     </td>
                   )}
                   {dates.map(dateStr => (
-                    <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-50/30' : ''}`}>
+                    <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${hoveredDate === dateStr ? 'bg-iris-100 group-hover:bg-iris-200/60' : ''}`}>
                       <AttendanceCell
                         enrollmentId={row.enrollment_id}
                         dateStr={dateStr}
@@ -370,7 +380,7 @@ export function MergedJournalPage() {
                         frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
                         isHighlighted={hoveredDate === dateStr}
                         onMark={handleQuickMark}
-                        onOpenDialog={(eId, dStr) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr] })}
+                        onOpenDialog={(eId, dStr, context) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr], context })}
                         onHover={setHoveredDate}
                         pending={markMutation.isPending}
                       />
@@ -388,6 +398,7 @@ export function MergedJournalPage() {
           enrollmentId={dialogTarget.enrollmentId}
           dateStr={dialogTarget.dateStr}
           log={dialogTarget.log}
+          openContext={dialogTarget.context}
           onSave={markMutation.mutate}
           onDelete={removeMutation.mutate}
           onClose={() => setDialogTarget(null)}

@@ -96,7 +96,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
-    onOpenDialog(row, dateStr)
+    onOpenDialog(row, dateStr, 'note')
   }
 
   if (frozen) {
@@ -125,7 +125,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
 
   return (
     <div
-      onClick={() => onOpenDialog(row, dateStr)}
+      onClick={() => onOpenDialog(row, dateStr, 'edit')}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => onHoverDate(dateStr)}
       onMouseLeave={() => onHoverDate(null)}
@@ -151,12 +151,13 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
 interface AttendanceDialogProps {
   row: JournalRow
   dateStr: string
+  openContext: 'edit' | 'note'
   onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null }) => void
   onDelete: (logId: string) => void
   onClose: () => void
 }
 
-function AttendanceDialog({ row, dateStr, onSave, onDelete, onClose }: AttendanceDialogProps) {
+function AttendanceDialog({ row, dateStr, openContext, onSave, onDelete, onClose }: AttendanceDialogProps) {
   const log = row.logs[dateStr]
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
@@ -191,10 +192,11 @@ function AttendanceDialog({ row, dateStr, onSave, onDelete, onClose }: Attendanc
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all ${
+              autoFocus={openContext === 'edit' && s === 'absent_excused'}
+              className={`py-2 px-1 rounded-xl border text-xs font-bold transition-all focus:outline-none ${
                 status === s 
                   ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' 
-                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100'
+                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'
               }`}
             >
               {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : '$$$'}
@@ -217,6 +219,7 @@ function AttendanceDialog({ row, dateStr, onSave, onDelete, onClose }: Attendanc
         <div>
           <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка (бачить адмін)</label>
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            autoFocus={openContext === 'note'}
             placeholder="Введіть коментар..."
             className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
         </div>
@@ -245,7 +248,7 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
   const { data: resp, isLoading } = useQuery({
     queryKey: ['children-search', search],
     queryFn: () => childrenApi.list({ search }),
-    enabled: search.length >= 2
+    enabled: true
   })
   const children = resp?.data
 
@@ -275,8 +278,8 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
         </div>
         <input type="text" placeholder="Прізвище або ім'я дитини..." value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
           className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-        <div className="max-h-60 overflow-y-auto divide-y divide-gray-50 border border-gray-50 rounded-xl">
-          {isLoading && <div className="p-4 text-center text-xs text-gray-400">Пошук...</div>}
+        <div className="h-[400px] overflow-y-auto custom-scrollbar divide-y divide-gray-50 border border-gray-100 rounded-xl">
+          {isLoading && <div className="p-4 text-center text-xs text-gray-400">Завантаження...</div>}
           {children?.map(child => (
             <button key={child.id} onClick={() => enrollMutation.mutate(child.id)} disabled={enrollMutation.isPending}
               className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center justify-between group transition-colors" >
@@ -307,7 +310,7 @@ export function JournalPage() {
   const [groupMode, setGroupMode] = useState<'group' | 'alphabetical'>('group')
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
-  const [dialogTarget, setDialogTarget] = useState<{ row: JournalRow, dateStr: string } | null>(null)
+  const [dialogTarget, setDialogTarget] = useState<{ row: JournalRow, dateStr: string, context: 'edit' | 'note' } | null>(null)
   const [groupPopupTarget, setGroupPopupTarget] = useState<any | null>(null)
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false)
 
@@ -398,28 +401,27 @@ export function JournalPage() {
 
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
 
-  const TableHeader = () => (
     <table className="w-full text-sm border-separate border-spacing-0">
-      <thead>
+      <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
         <tr>
           <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
           {dates.map(d => {
             const { day, num } = formatDayCol(d)
             return (
               <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-50' : 'bg-gray-50'}`}>
+                className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
                 <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
-                <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
+                <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-700' : 'text-gray-800'}`}>{num}</div>
               </th>
             )
           })}
         </tr>
         <tr className="bg-white">
-          <th className="sticky left-0 z-30 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+          <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
           {dates.map(d => {
             const t = columnTotals[d]
             return (
-              <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? 'bg-iris-50/50' : ''}`}>
+              <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : ''}`}>
                 <div className="flex flex-col gap-0 items-center font-black leading-none">
                   {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                   {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -430,8 +432,6 @@ export function JournalPage() {
           })}
         </tr>
       </thead>
-    </table>
-  )
 
   return (
     <div className="space-y-3 pb-20">
@@ -480,16 +480,39 @@ export function JournalPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Sticky Header Wrapper */}
-        <div ref={headerRef} className="sticky top-14 z-30 bg-white border-b border-gray-200 overflow-hidden">
-          <TableHeader />
-        </div>
-
-        {/* Scrollable Body Wrapper */}
-        <div ref={bodyRef} onScroll={onBodyScroll} className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-sm border-separate border-spacing-0">
-            <tbody className="divide-y divide-gray-200">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-14rem)] custom-scrollbar">
+        <table className="w-full text-sm border-separate border-spacing-0">
+          <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <tr>
+              <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
+              {dates.map(d => {
+                const { day, num } = formatDayCol(d)
+                return (
+                  <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
+                    className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
+                    <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
+                    <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-700' : 'text-gray-800'}`}>{num}</div>
+                  </th>
+                )
+              })}
+            </tr>
+            <tr className="bg-white">
+              <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+              {dates.map(d => {
+                const t = columnTotals[d]
+                return (
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : ''}`}>
+                    <div className="flex flex-col gap-0 items-center font-black leading-none">
+                      {t.present > 0 && <span className="text-green-500">{t.present}</span>}
+                      {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
+                      {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
+                    </div>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
               {activity?.has_group_classes && (
                 <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
                   <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
@@ -530,8 +553,8 @@ export function JournalPage() {
                       <tr key={row.enrollment_id} 
                         onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
                         onMouseLeave={() => setHoveredRowId(null)}
-                        className={`transition-colors group ${isRowHovered ? 'bg-iris-50/30' : ''}`}>
-                        <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-200 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors min-w-[180px] ${isRowHovered ? 'bg-iris-50' : 'bg-white'}`}>
+                        className={`transition-colors group ${isRowHovered ? 'bg-iris-100/50' : ''}`}>
+                        <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-200 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors min-w-[180px] ${isRowHovered ? 'bg-iris-100' : 'bg-white'}`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex-1 min-w-0">
                               <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
@@ -552,7 +575,7 @@ export function JournalPage() {
                           const isColHovered = hoveredDate === dateStr
                           const isCrosshair = isRowHovered && isColHovered
                           return (
-                            <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${isCrosshair ? 'bg-iris-100/50' : isColHovered ? 'bg-iris-50/50' : ''}`}>
+                            <td key={dateStr} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${isCrosshair ? 'bg-iris-200/60' : isColHovered ? 'bg-iris-100' : ''}`}>
                               <AttendanceCell
                                 row={row}
                                 enrollmentId={row.enrollment_id}
@@ -561,7 +584,7 @@ export function JournalPage() {
                                 frozen={isFrozenOn(row, dateStr)}
                                 isHighlightedDate={isCrosshair}
                                 onMarkQuick={handleMarkQuick}
-                                onOpenDialog={(r, d) => setDialogTarget({ row: r, dateStr: d })}
+                                onOpenDialog={(r, d, context) => setDialogTarget({ row: r, dateStr: d, context })}
                                 onHoverDate={setHoveredDate}
                                 compact={compact}
                               />
@@ -578,7 +601,7 @@ export function JournalPage() {
         </div>
       </div>
 
-      {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
+      {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
       {groupPopupTarget && (
         <GroupPopup
           log={groupPopupTarget.log}
