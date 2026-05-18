@@ -23,6 +23,7 @@ import { StaffListPage } from './pages/Staff/StaffListPage'
 import { StaffCardPage } from './pages/Staff/StaffCardPage'
 import { SalaryJournalPage } from './pages/Salary/SalaryJournalPage'
 import { CalendarPage } from './pages/Calendar/CalendarPage'
+import { DividendsPage } from './pages/Dividends/DividendsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,9 @@ export function App() {
 
               {/* Календар */}
               <Route path="calendar" element={<CalendarPage />} />
+
+              {/* Дивіденди */}
+              <Route path="dividends" element={<DividendsPage />} />
 
               <Route path="reports"   element={<Placeholder title="Звіти" />} />
             </Route>

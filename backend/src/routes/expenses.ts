@@ -108,7 +108,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
           'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
-          'e.withdrawal_transfer_id',
+          'e.withdrawal_transfer_id', 'e.dividend_payout_id',
           'e.account_id', 'a.name as account_name',
           'e.category_id',
           'c.name as category_name',
@@ -242,13 +242,25 @@ export async function expensesRoutes(app: FastifyInstance) {
     '/:id',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const updated = await db.updateTable('expenses')
-        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
-        .where('id', '=', req.params.id)
-        .where('is_deleted', '=', false)
-        .returningAll()
-        .executeTakeFirst()
-      if (!updated) return reply.status(404).send({ error: 'NotFound' })
+      const expense = await db.selectFrom('expenses').select(['id', 'dividend_payout_id']).where('id', '=', req.params.id).where('is_deleted', '=', false).executeTakeFirst()
+      if (!expense) return reply.status(404).send({ error: 'NotFound' })
+
+      await db.transaction().execute(async (trx) => {
+        // Soft delete the linked dividend payout if exists
+        if (expense.dividend_payout_id) {
+          await trx.updateTable('dividend_payouts')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+            .where('id', '=', expense.dividend_payout_id)
+            .execute()
+        }
+
+        // Soft delete the expense itself
+        await trx.updateTable('expenses')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+          .where('id', '=', req.params.id)
+          .execute()
+      })
+
       return { ok: true }
     }
   )

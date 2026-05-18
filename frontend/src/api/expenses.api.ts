@@ -24,6 +24,7 @@ export interface Expense {
   is_instant: boolean
   is_dividend: boolean
   withdrawal_transfer_id: string | null
+  dividend_payout_id: string | null
   note: string | null
   created_by_email: string | null
   created_at: string

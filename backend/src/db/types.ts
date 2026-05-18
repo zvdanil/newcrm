@@ -238,6 +238,7 @@ export interface ExpensesTable {
   note:                   string | null
   created_by:             string | null
   withdrawal_transfer_id: string | null
+  dividend_payout_id:     string | null
   is_deleted:             Generated<boolean>
   deleted_at:             ColumnType<Date | null, string | null, string | null>
   deleted_by:             string | null
@@ -459,4 +460,37 @@ export interface Database {
   activity_schedules:         ActivitySchedulesTable
   schedule_exceptions:        ScheduleExceptionsTable
   substitutions:              SubstitutionsTable
+  equity_participants:        EquityParticipantsTable
+  dividend_settings:          DividendSettingsTable
+  dividend_payouts:           DividendPayoutsTable
+
+}
+
+export interface EquityParticipantsTable {
+  id:         Generated<string>
+  name:       string
+  share_pct:  ColumnType<string, number | string, number | string>
+  is_active:  Generated<boolean>
+  created_at: Generated<Date>
+}
+
+export interface DividendSettingsTable {
+  id:              Generated<number>
+  default_tax_pct: ColumnType<string, number | string, number | string>
+}
+
+export interface DividendPayoutsTable {
+  id:             Generated<string>
+  participant_id: string
+  date:           ColumnType<Date, string, string>
+  type:           'cash' | 'cashless'
+  tax_pct:        ColumnType<string, number | string, number | string>
+  gross_amount:   ColumnType<string, number | string, number | string>
+  net_amount:     ColumnType<string, number | string, number | string>
+  note:           string | null
+  is_deleted:     Generated<boolean>
+  deleted_at:     ColumnType<Date | null, string | null, string | null>
+  deleted_by:     string | null
+  created_by:     string | null
+  created_at:     Generated<Date>
 }
