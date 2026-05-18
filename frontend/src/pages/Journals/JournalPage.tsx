@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo, memo, useRef } from 'react'
+import React, { useState, useCallback, useMemo, memo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
 import { childrenApi } from '../../api/children.api'
-import type { AttendanceStatus, JournalRow, GroupLessonLog, AttendanceLog } from '../../types'
+import type { AttendanceStatus, JournalRow, AttendanceLog } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -82,7 +82,7 @@ interface CellProps {
   frozen: boolean
   isHighlightedDate: boolean
   onMarkQuick: (enrollmentId: string, dateStr: string) => void
-  onOpenDialog: (row: JournalRow, dateStr: string) => void
+  onOpenDialog: (row: JournalRow, dateStr: string, context: 'edit' | 'note') => void
   onHoverDate: (dateStr: string | null) => void
   compact?: boolean
   row: JournalRow // needed for dialog
@@ -389,49 +389,7 @@ export function JournalPage() {
     return totals
   }, [dates, rows])
 
-  const headerRef = useRef<HTMLDivElement>(null)
-  const bodyRef = useRef<HTMLDivElement>(null)
-
-  // Sync horizontal scroll between header and body
-  const onBodyScroll = () => {
-    if (headerRef.current && bodyRef.current) {
-      headerRef.current.scrollLeft = bodyRef.current.scrollLeft
-    }
-  }
-
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
-
-    <table className="w-full text-sm border-separate border-spacing-0">
-      <thead className="sticky top-0 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-        <tr>
-          <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
-          {dates.map(d => {
-            const { day, num } = formatDayCol(d)
-            return (
-              <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : 'bg-gray-50'}`}>
-                <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
-                <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-700' : 'text-gray-800'}`}>{num}</div>
-              </th>
-            )
-          })}
-        </tr>
-        <tr className="bg-white">
-          <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
-          {dates.map(d => {
-            const t = columnTotals[d]
-            return (
-              <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? 'bg-iris-100' : ''}`}>
-                <div className="flex flex-col gap-0 items-center font-black leading-none">
-                  {t.present > 0 && <span className="text-green-500">{t.present}</span>}
-                  {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
-                  {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
-                </div>
-              </th>
-            )
-          })}
-        </tr>
-      </thead>
 
   return (
     <div className="space-y-3 pb-20">
@@ -599,8 +557,6 @@ export function JournalPage() {
             </tbody>
           </table>
         </div>
-      </div>
-
       {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
       {groupPopupTarget && (
         <GroupPopup

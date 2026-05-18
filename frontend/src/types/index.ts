@@ -162,6 +162,7 @@ export interface JournalRow {
   status: 'active' | 'frozen' | 'archived'
   frozen_from: string | null
   frozen_to: string | null
+  group_name?: string | null
   logs: Record<string, AttendanceLog>
 }
 

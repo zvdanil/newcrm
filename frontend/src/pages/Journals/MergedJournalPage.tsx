@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mergedJournalsApi } from '../../api/mergedJournals.api'
 import { attendanceApi } from '../../api/attendance.api'
-import type { AttendanceStatus, AttendanceLog } from '../../types'
+import type { AttendanceStatus } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -78,7 +78,7 @@ function isFrozen(status: string, frozenFrom: string | null, frozenTo: string | 
 interface CellProps {
   enrollmentId: string
   dateStr:      string
-  log:          AttendanceLog | null
+  log:          any
   frozen:        boolean
   isHighlighted: boolean
   onMark:        (enrollmentId: string, dateStr: string) => void
