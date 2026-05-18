@@ -185,6 +185,7 @@ export interface SalaryPayment {
   note: string | null
   is_dividend: boolean
   withdrawal_transfer_id: string | null
+  dividend_payout_id?: string | null
   created_at: string
 }
 

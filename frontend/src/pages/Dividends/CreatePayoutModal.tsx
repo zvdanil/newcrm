@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { accountsApi } from '../../api/accounts.api'
-import { expensesApi } from '../../api/expenses.api'
+import { expensesApi, salaryPaymentsApi } from '../../api/expenses.api'
 import { useEffect } from 'react'
 
 export function CreatePayoutModal({ 
@@ -31,14 +31,38 @@ export function CreatePayoutModal({
   })
 
   // We only want unlinked expenses that are marked as dividends
-  const { data: expensesData } = useQuery({
-    queryKey: ['expenses', { is_dividend: true }],
-    queryFn: () => expensesApi.list({ is_dividend: true }),
+  const { data: salaryData } = useQuery({
+    queryKey: ['salary-payments', { is_dividend: true }],
+    queryFn: () => salaryPaymentsApi.list({ is_dividend: true }),
   })
 
-  const availableExpenses = useMemo(() => {
-    return (expensesData?.data || []).filter(e => !e.dividend_payout_id)
-  }, [expensesData])
+  const availableSources = useMemo(() => {
+    const exps = (expensesData?.data || [])
+      .filter(e => !e.dividend_payout_id)
+      .map(e => ({
+        id: e.id,
+        source_type: 'existing' as const,
+        amount: e.amount,
+        account_name: e.account_name,
+        date: e.accrual_date,
+        note: e.note,
+        label: 'Витрата'
+      }))
+
+    const sals = (salaryData?.data || [])
+      .filter(s => !s.dividend_payout_id)
+      .map(s => ({
+        id: s.id,
+        source_type: 'existing_salary' as const,
+        amount: s.gross_amount,
+        account_name: s.account_name || 'Без рахунку',
+        date: s.transaction_date,
+        note: `Зарплата: ${s.staff_name}`,
+        label: 'Зарплата'
+      }))
+
+    return [...exps, ...sals].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [expensesData, salaryData])
 
   // ── State ───────────────────────────────────────────────────────────────
   const [participantId, setParticipantId] = useState('')
@@ -58,23 +82,23 @@ export function CreatePayoutModal({
 
   // Prefill logic
   useEffect(() => {
-    if (prefillExpenseId && availableExpenses.length > 0) {
-      const e = availableExpenses.find(x => x.id === prefillExpenseId)
-      if (e) {
+    if (prefillExpenseId && availableSources.length > 0) {
+      const src = availableSources.find(x => x.id === prefillExpenseId)
+      if (src) {
         // Only add if not already in sources
-        if (!sources.some(s => s.type === 'existing' && s.expense_id === prefillExpenseId)) {
+        if (!sources.some(s => (s.type === 'existing' || s.type === 'existing_salary') && s.expense_id === prefillExpenseId)) {
           setSources(prev => [...prev, {
             id: Math.random().toString(),
-            type: 'existing',
+            type: src.source_type,
             expense_id: prefillExpenseId,
-            amount: Number(e.amount),
-            account_name: e.account_name,
-            note: e.note
+            amount: Number(src.amount),
+            account_name: src.account_name,
+            note: src.note
           }])
         }
       }
     }
-  }, [prefillExpenseId, availableExpenses, sources])
+  }, [prefillExpenseId, availableSources, sources])
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleAddSource = () => {
@@ -88,17 +112,17 @@ export function CreatePayoutModal({
       }])
     } else if (sourceMode === 'existing') {
       if (!selectedExpenseId) return
-      const e = availableExpenses.find(x => x.id === selectedExpenseId)
-      if (!e) return
+      const src = availableSources.find(x => x.id === selectedExpenseId)
+      if (!src) return
       // prevent duplicates
-      if (sources.find(s => s.type === 'existing' && s.expense_id === selectedExpenseId)) return
+      if (sources.find(s => (s.type === 'existing' || s.type === 'existing_salary') && s.expense_id === selectedExpenseId)) return
       setSources([...sources, {
         id: Math.random().toString(),
-        type: 'existing',
+        type: src.source_type,
         expense_id: selectedExpenseId,
-        amount: Number(e.amount),
-        account_name: e.account_name,
-        note: e.note
+        amount: Number(src.amount),
+        account_name: src.account_name,
+        note: src.note
       }])
     }
     setSourceMode('none')
@@ -133,7 +157,7 @@ export function CreatePayoutModal({
       note,
       sources: sources.map(s => {
         if (s.type === 'new') return { type: 'new', account_id: s.account_id, amount: s.amount }
-        return { type: 'existing', expense_id: s.expense_id }
+        return { type: s.type, expense_id: s.expense_id }
       })
     })
   }
@@ -218,7 +242,7 @@ export function CreatePayoutModal({
                           </span>
                         ) : (
                           <span className="flex items-center gap-2">
-                            <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded uppercase font-bold">Привʼязка витрати</span>
+                            <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded uppercase font-bold">Привʼязка {s.type === 'existing_salary' ? 'зарплати' : 'витрати'}</span>
                             <span className="truncate max-w-[200px]" title={s.note}>{s.note || 'Без опису'}</span>
                             <span className="text-gray-400">({s.account_name})</span>
                           </span>
@@ -278,12 +302,12 @@ export function CreatePayoutModal({
                   </>
                 ) : (
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Оберіть витрату (оплачену, з міткою дивіденд)</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Оберіть витрату чи зарплату (з міткою дивіденд)</label>
                     <select value={selectedExpenseId} onChange={e => setSelectedExpenseId(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm">
-                      <option value="">Оберіть витрату...</option>
-                      {availableExpenses.map(e => (
-                        <option key={e.id} value={e.id}>
-                          {new Date(e.accrual_date).toLocaleDateString()} — {e.amount} ₴ ({e.account_name}) {e.note ? `— ${e.note}` : ''}
+                      <option value="">Оберіть...</option>
+                      {availableSources.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}: {new Date(s.date).toLocaleDateString()} — {s.amount} ₴ ({s.account_name}) {s.note ? `— ${s.note}` : ''}
                         </option>
                       ))}
                     </select>

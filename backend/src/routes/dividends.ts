@@ -186,9 +186,20 @@ export async function dividendsRoutes(app: FastifyInstance) {
       .where('e.is_deleted', '=', false)
       .execute()
 
+    // Attach sources (salary_transactions)
+    const salaries = await db.selectFrom('salary_transactions as st')
+      .leftJoin('staff as s', 's.id', 'st.staff_id')
+      .select(['st.id', 'st.gross_amount as amount', 'st.dividend_payout_id', 's.full_name as account_name'])
+      .where('st.dividend_payout_id', 'is not', null)
+      .where('st.is_deleted', '=', false)
+      .execute()
+
     return payouts.map(p => ({
       ...p,
-      sources: expenses.filter(e => e.dividend_payout_id === p.id)
+      sources: [
+        ...expenses.filter(e => e.dividend_payout_id === p.id),
+        ...salaries.filter(s => s.dividend_payout_id === p.id).map(s => ({ ...s, is_salary: true }))
+      ]
     }))
   })
 
@@ -199,7 +210,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
       type: 'cash' | 'cashless'
       tax_pct: number
       note?: string
-      sources: Array<{ type: 'new', account_id: string, amount: number } | { type: 'existing', expense_id: string }>
+      sources: Array<{ type: 'new', account_id: string, amount: number } | { type: 'existing', expense_id: string } | { type: 'existing_salary', expense_id: string }>
     }
   }>(
     '/payouts',
@@ -232,6 +243,18 @@ export async function dividendsRoutes(app: FastifyInstance) {
           
           grossAmount += Number(expense.amount)
           existingExpenses.push(expense.id)
+        } else if (src.type === 'existing_salary') {
+          const salary = await db.selectFrom('salary_transactions')
+            .select(['id', 'gross_amount as amount', 'is_dividend', 'dividend_payout_id'])
+            .where('id', '=', src.expense_id)
+            .where('is_deleted', '=', false)
+            .executeTakeFirst()
+
+          if (!salary) return reply.status(404).send({ error: 'NotFound', message: `Зарплата ${src.expense_id} не знайдена` })
+          if (!salary.is_dividend) return reply.status(400).send({ error: 'BadRequest', message: `Зарплата ${src.expense_id} не є дивідендом` })
+          if (salary.dividend_payout_id) return reply.status(409).send({ error: 'Conflict', message: `Зарплата ${src.expense_id} вже привʼязана до виплати` })
+          
+          grossAmount += Number(salary.amount)
         }
       }
 
@@ -283,6 +306,11 @@ export async function dividendsRoutes(app: FastifyInstance) {
               })
               .where('id', '=', src.expense_id)
               .execute()
+          } else if (src.type === 'existing_salary') {
+            await trx.updateTable('salary_transactions')
+              .set({ dividend_payout_id: payout.id })
+              .where('id', '=', src.expense_id)
+              .execute()
           }
         }
 
@@ -314,6 +342,12 @@ export async function dividendsRoutes(app: FastifyInstance) {
 
         // Unlink expenses (but keep them as is_dividend)
         await trx.updateTable('expenses')
+          .set({ dividend_payout_id: null })
+          .where('dividend_payout_id', '=', req.params.id)
+          .execute()
+
+        // Unlink salaries
+        await trx.updateTable('salary_transactions')
           .set({ dividend_payout_id: null })
           .where('dividend_payout_id', '=', req.params.id)
           .execute()

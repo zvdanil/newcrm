@@ -97,7 +97,7 @@ export const dividendsApi = {
     type: 'cash' | 'cashless'
     tax_pct: number
     note?: string
-    sources: Array<{ type: 'new'; account_id: string; amount: number } | { type: 'existing'; expense_id: string }>
+    sources: Array<{ type: 'new'; account_id: string; amount: number } | { type: 'existing'; expense_id: string } | { type: 'existing_salary'; expense_id: string }>
   }) => {
     const { data } = await apiClient.post<DividendPayout>('/dividends/payouts', payload)
     return data

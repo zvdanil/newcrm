@@ -237,7 +237,8 @@ export interface ExpensesTable {
   is_dividend:            Generated<boolean>
   note:                   string | null
   created_by:             string | null
-  withdrawal_transfer_id: string | null
+  withdrawal_transfer_id:   string | null
+  dividend_payout_id:       string | null
   dividend_payout_id:     string | null
   is_deleted:             Generated<boolean>
   deleted_at:             ColumnType<Date | null, string | null, string | null>
@@ -337,6 +338,7 @@ export interface SalaryTransactionsTable {
   metadata_json:    ColumnType<unknown | null, object | null, object | null>
   is_dividend:              Generated<boolean>
   withdrawal_transfer_id:   string | null
+  dividend_payout_id:       string | null
   is_deleted:       Generated<boolean>
   deleted_at:       ColumnType<Date | null, string | null, string | null>
   deleted_by:       string | null

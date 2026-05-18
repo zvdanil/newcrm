@@ -1098,13 +1098,19 @@ function SalaryPaymentRow({ payment, isOwner, accounts, onRefresh }: {
   isOwner: boolean
   accounts: { id: string; name: string }[]
   onRefresh: () => void
+  navigate: (to: string) => void
 }) {
   const qc = useQueryClient()
   const [withdrawing, setWithdrawing] = useState(false)
 
   const dividendMutation = useMutation({
     mutationFn: (val: boolean) => salaryPaymentsApi.toggleDividend(payment.id, val),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['salary-payments'] }),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: ['salary-payments'] })
+      if (variables === true) {
+        navigate(`/dividends?add_expense=${payment.id}`)
+      }
+    },
   })
 
   const rowClass = payment.is_dividend ? 'bg-purple-50/40 hover:bg-purple-50' : 'hover:bg-gray-50'
@@ -1213,6 +1219,7 @@ type Tab = 'expenses' | 'salary' | 'transfers' | 'categories'
 
 export function ExpensesPage() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const isOwner = useCanAccess('owner')
   const isAdmin = useCanAccess('owner', 'admin')
 
@@ -1563,6 +1570,7 @@ export function ExpensesPage() {
                     isOwner={isOwner}
                     accounts={accounts}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ['salary-payments'] })}
+                    navigate={navigate}
                   />
                 ))}
               </tbody>

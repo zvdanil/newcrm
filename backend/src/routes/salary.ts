@@ -226,17 +226,27 @@ export async function salaryRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
       const tx = await db.selectFrom('salary_transactions')
-        .select(['id', 'staff_id', 'is_deleted'])
+        .select(['id', 'staff_id', 'is_deleted', 'dividend_payout_id'])
         .where('id', '=', req.params.txId)
         .where('staff_id', '=', req.params.id)
         .executeTakeFirst()
 
       if (!tx || tx.is_deleted) return reply.status(404).send({ error: 'NotFound' })
 
-      await db.updateTable('salary_transactions')
-        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
-        .where('id', '=', req.params.txId)
-        .execute()
+      await db.transaction().execute(async (trx) => {
+        // Soft delete the linked dividend payout if exists
+        if (tx.dividend_payout_id) {
+          await trx.updateTable('dividend_payouts')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+            .where('id', '=', tx.dividend_payout_id)
+            .execute()
+        }
+
+        await trx.updateTable('salary_transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+          .where('id', '=', req.params.txId)
+          .execute()
+      })
 
       return reply.status(204).send()
     }
@@ -422,6 +432,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           'st.account_id', 'ac.name as account_name',
           'st.gross_amount', 'st.transaction_date', 'st.billing_month',
           'st.note', 'st.is_dividend', 'st.withdrawal_transfer_id', 'st.created_at',
+          'st.dividend_payout_id'
         ])
         .orderBy('st.transaction_date', 'desc')
         .orderBy('st.created_at', 'desc')
