@@ -1,4 +1,4 @@
-import axios from './axios'
+import { apiClient } from './client'
 
 export interface EquityParticipant {
   id: string
@@ -52,42 +52,42 @@ export interface DividendPayout {
 
 export const dividendsApi = {
   getParticipants: async () => {
-    const { data } = await axios.get<EquityParticipant[]>('/api/dividends/participants')
+    const { data } = await apiClient.get<EquityParticipant[]>('/dividends/participants')
     return data
   },
 
   createParticipant: async (payload: { name: string; share_pct: number }) => {
-    const { data } = await axios.post<EquityParticipant>('/api/dividends/participants', payload)
+    const { data } = await apiClient.post<EquityParticipant>('/dividends/participants', payload)
     return data
   },
 
   updateParticipant: async (id: string, payload: Partial<{ name: string; share_pct: number; is_active: boolean }>) => {
-    const { data } = await axios.put<EquityParticipant>(`/api/dividends/participants/${id}`, payload)
+    const { data } = await apiClient.put<EquityParticipant>(`/dividends/participants/${id}`, payload)
     return data
   },
 
   deleteParticipant: async (id: string) => {
-    const { data } = await axios.delete(`/api/dividends/participants/${id}`)
+    const { data } = await apiClient.delete(`/dividends/participants/${id}`)
     return data
   },
 
   getSettings: async () => {
-    const { data } = await axios.get<DividendSettings>('/api/dividends/settings')
+    const { data } = await apiClient.get<DividendSettings>('/dividends/settings')
     return data
   },
 
   updateSettings: async (payload: { default_tax_pct: number }) => {
-    const { data } = await axios.put<DividendSettings>('/api/dividends/settings', payload)
+    const { data } = await apiClient.put<DividendSettings>('/dividends/settings', payload)
     return data
   },
 
   getLedger: async () => {
-    const { data } = await axios.get<DividendLedger>('/api/dividends/ledger')
+    const { data } = await apiClient.get<DividendLedger>('/dividends/ledger')
     return data
   },
 
   getPayouts: async () => {
-    const { data } = await axios.get<DividendPayout[]>('/api/dividends/payouts')
+    const { data } = await apiClient.get<DividendPayout[]>('/dividends/payouts')
     return data
   },
 
@@ -99,12 +99,12 @@ export const dividendsApi = {
     note?: string
     sources: Array<{ type: 'new'; account_id: string; amount: number } | { type: 'existing'; expense_id: string }>
   }) => {
-    const { data } = await axios.post<DividendPayout>('/api/dividends/payouts', payload)
+    const { data } = await apiClient.post<DividendPayout>('/dividends/payouts', payload)
     return data
   },
 
   deletePayout: async (id: string) => {
-    const { data } = await axios.delete(`/api/dividends/payouts/${id}`)
+    const { data } = await apiClient.delete(`/dividends/payouts/${id}`)
     return data
   },
 }
