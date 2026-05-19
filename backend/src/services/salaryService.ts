@@ -6,6 +6,160 @@ function billingMonthOf(date: string): string {
 }
 
 /**
+ * Computes the salary amount for one child given visit count and smart_per_child config.
+ *
+ * Ranges:
+ *   0 visits                          → 0
+ *   1 .. attendance_threshold-1       → starter_rate
+ *   attendance_threshold .. base_lessons → threshold_rate (base rate)
+ *   > base_lessons                    → threshold_rate + (N - base_lessons) * extra_lesson_price
+ */
+function calcSmartPerChildAmount(
+  visits: number,
+  config: { attendance_threshold: number; starter_rate: number; threshold_rate: number; base_lessons: number; extra_lesson_price: number }
+): number {
+  if (visits === 0) return 0
+  if (visits < config.attendance_threshold) return config.starter_rate
+  if (visits <= config.base_lessons) return config.threshold_rate
+  return config.threshold_rate + (visits - config.base_lessons) * config.extra_lesson_price
+}
+
+/**
+ * Recalculates "smart_per_child" ACCRUAL for a given rate+billing_month.
+ *
+ * Logic per child:
+ *   Count attendance marks (present/special) for this activity in the billing month.
+ *   Apply three-tier formula:
+ *     0 visits          → 0
+ *     1..(threshold-1)  → starter_rate
+ *     threshold..base   → threshold_rate (base rate)
+ *     >base             → threshold_rate + extras * extra_lesson_price
+ *
+ * Stores one combined ACCRUAL per rate per billing_month (upserts on change).
+ * metadata_json contains breakdown per child for UI display.
+ */
+export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: string): Promise<void> {
+  const billingObj = new Date(billingMonth)
+  const now = new Date().toISOString()
+
+  const [rate, config] = await Promise.all([
+    db.selectFrom('staff_rates').selectAll().where('id', '=', rateId).executeTakeFirst(),
+    db.selectFrom('staff_smart_configs').selectAll().where('rate_id', '=', rateId).executeTakeFirst(),
+  ])
+
+  if (!rate || !config || !rate.activity_id) return
+
+  const nextMonth = new Date(billingObj)
+  nextMonth.setMonth(nextMonth.getMonth() + 1)
+
+  const cfg = {
+    attendance_threshold: Number(config.attendance_threshold),
+    starter_rate:         Number(config.starter_rate),
+    threshold_rate:       Number(config.threshold_rate),
+    base_lessons:         Number(config.base_lessons),
+    extra_lesson_price:   Number(config.extra_lesson_price),
+  }
+
+  // Count present marks per child for this activity in billing month
+  const rows = await db
+    .selectFrom('attendance_logs as al')
+    .innerJoin('children as c', 'c.id', 'al.child_id')
+    .select(['al.child_id', 'c.full_name'])
+    .select((eb) => eb.fn.countAll<number>().as('visits'))
+    .where('al.activity_id', '=', rate.activity_id!)
+    .where('al.date', '>=', billingObj)
+    .where('al.date', '<', nextMonth)
+    .where('al.status', 'in', ['present', 'special'])
+    .groupBy(['al.child_id', 'c.full_name'])
+    .execute()
+
+  type ChildRange = 'none' | 'starter' | 'base' | 'extra'
+
+  const children = rows.map(r => {
+    const visits  = Number(r.visits)
+    const amount  = calcSmartPerChildAmount(visits, cfg)
+    let range: ChildRange = 'none'
+    if (visits === 0)                             range = 'none'
+    else if (visits < cfg.attendance_threshold)   range = 'starter'
+    else if (visits <= cfg.base_lessons)          range = 'base'
+    else                                          range = 'extra'
+
+    return { child_id: r.child_id, child_name: r.full_name, visits, range, amount }
+  })
+
+  const totalGross = Math.round(children.reduce((s, c) => s + c.amount, 0) * 100) / 100
+
+  const existingAccrual = await db
+    .selectFrom('salary_transactions')
+    .select(['id', 'gross_amount'])
+    .where('staff_id',    '=', rate.staff_id)
+    .where('rate_id',     '=', rateId)
+    .where('billing_month', '=', billingObj)
+    .where('type',        '=', 'ACCRUAL')
+    .where('is_deleted',  '=', false)
+    .executeTakeFirst()
+
+  // Build note summary
+  const childLines = children
+    .filter(c => c.visits > 0)
+    .map(c => `${c.child_name}: ${c.visits} відв. → ${c.amount.toFixed(0)} грн`)
+    .join('; ')
+  const noteStr = `Смарт за дитину. ${childLines}`
+
+  const meta = {
+    source:   'smart_per_child',
+    children,
+    total:    totalGross,
+    config:   cfg,
+  }
+
+  if (totalGross <= 0) {
+    // Remove existing accrual if any
+    if (existingAccrual) {
+      await db.updateTable('salary_transactions')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('id', '=', existingAccrual.id)
+        .execute()
+    }
+    return
+  }
+
+  if (!existingAccrual) {
+    await db.insertInto('salary_transactions').values({
+      staff_id:         rate.staff_id,
+      rate_id:          rateId,
+      activity_id:      rate.activity_id,
+      type:             'ACCRUAL',
+      gross_amount:     totalGross,
+      deduction_pct:    rate.deduction_pct,
+      transaction_date: billingMonth,
+      billing_month:    billingMonth,
+      note:             noteStr,
+      metadata_json:    meta,
+    }).execute()
+  } else if (Math.abs(Number(existingAccrual.gross_amount) - totalGross) > 0.001) {
+    // Update: soft-delete old, insert new
+    await db.updateTable('salary_transactions')
+      .set({ is_deleted: true, deleted_at: now })
+      .where('id', '=', existingAccrual.id)
+      .execute()
+    await db.insertInto('salary_transactions').values({
+      staff_id:         rate.staff_id,
+      rate_id:          rateId,
+      activity_id:      rate.activity_id,
+      type:             'ACCRUAL',
+      gross_amount:     totalGross,
+      deduction_pct:    rate.deduction_pct,
+      transaction_date: billingMonth,
+      billing_month:    billingMonth,
+      note:             noteStr,
+      metadata_json:    meta,
+    }).execute()
+  }
+}
+
+
+/**
  * Retroactive recalculation when a rate is created backdated.
  * Finds all ACCRUALs for oldRateId in the retro period,
  * computes delta per billing_month, creates CORRECTION transactions.

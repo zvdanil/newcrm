@@ -3,7 +3,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
-import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
+import { recalcStaffAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
 import { getChildIndividualTariff } from '../services/billingRunService.js'
 
 function toDateStr(d: Date): string {
@@ -436,13 +436,17 @@ export async function journalsRoutes(app: FastifyInstance) {
       await recalcStaffAccruals(enrollment.activity_id, date)
       // Smart staff rates: recalc for all smart rates on this activity
       const smartStaffRates = await db.selectFrom('staff_rates')
-        .select('id')
+        .select(['id', 'rate_type'])
         .where('activity_id', '=', enrollment.activity_id)
-        .where('rate_type', '=', 'smart')
+        .where('rate_type', 'in', ['smart', 'smart_per_child'])
         .where('rate_category', '=', 'auto')
         .execute()
       for (const r of smartStaffRates) {
-        await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
+        if (r.rate_type === 'smart') {
+          await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
+        } else {
+          await recalcSmartPerChildBenefit(r.id, date.slice(0, 7) + '-01')
+        }
       }
 
       return reply.status(201).send(log.main)
@@ -544,13 +548,17 @@ export async function journalsRoutes(app: FastifyInstance) {
       // Staff salary auto-accruals after PUT
       await recalcStaffAccruals(existing.activity_id, dateStr)
       const smartStaffRatesPut = await db.selectFrom('staff_rates')
-        .select('id')
+        .select(['id', 'rate_type'])
         .where('activity_id', '=', existing.activity_id)
-        .where('rate_type', '=', 'smart')
+        .where('rate_type', 'in', ['smart', 'smart_per_child'])
         .where('rate_category', '=', 'auto')
         .execute()
       for (const r of smartStaffRatesPut) {
-        await recalcSmartStaffBenefit(r.id, dateStr.slice(0, 7) + '-01')
+        if (r.rate_type === 'smart') {
+          await recalcSmartStaffBenefit(r.id, dateStr.slice(0, 7) + '-01')
+        } else {
+          await recalcSmartPerChildBenefit(r.id, dateStr.slice(0, 7) + '-01')
+        }
       }
 
       return updated
@@ -601,13 +609,17 @@ export async function journalsRoutes(app: FastifyInstance) {
         const dateStrDel = toDateStr(log.date as unknown as Date)
         await recalcStaffAccruals(log.activity_id, dateStrDel)
         const smartStaffRatesDel = await db.selectFrom('staff_rates')
-          .select('id')
+          .select(['id', 'rate_type'])
           .where('activity_id', '=', log.activity_id)
-          .where('rate_type', '=', 'smart')
+          .where('rate_type', 'in', ['smart', 'smart_per_child'])
           .where('rate_category', '=', 'auto')
           .execute()
         for (const r of smartStaffRatesDel) {
-          await recalcSmartStaffBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
+          if (r.rate_type === 'smart') {
+            await recalcSmartStaffBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
+          } else {
+            await recalcSmartPerChildBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
+          }
         }
       }
 

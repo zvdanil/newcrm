@@ -105,6 +105,7 @@ export async function staffRoutes(app: FastifyInstance) {
           'r.value_mode', 'r.rate_value', 'r.deduction_pct', 'r.valid_from', 'r.valid_to', 'r.note', 'r.created_at',
           'a.name as activity_name',
           'sc.base_lessons', 'sc.absence_threshold', 'sc.threshold_rate',
+          'sc.attendance_threshold', 'sc.starter_rate', 'sc.extra_lesson_price',
         ])
         .orderBy('r.valid_from', 'desc')
         .execute()
@@ -119,14 +120,22 @@ export async function staffRoutes(app: FastifyInstance) {
     Body: {
       activity_id?: string
       rate_category?: 'auto' | 'manual'
-      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'smart_per_child' | 'bonus'
       value_mode?: 'fixed' | 'percent_of_revenue'
       rate_value: number
       deduction_pct?: number
       valid_from?: string
       valid_to?: string
       note?: string
-      smart_config?: { base_lessons: number; absence_threshold: number; threshold_rate: number }
+      smart_config?: { 
+        base_lessons: number
+        absence_threshold: number
+        threshold_rate: number
+        // smart_per_child fields
+        attendance_threshold?: number
+        starter_rate?: number
+        extra_lesson_price?: number
+      }
     }
   }>(
     '/:id/rates',
@@ -199,12 +208,15 @@ export async function staffRoutes(app: FastifyInstance) {
         note:          note ?? null,
       }).returningAll().executeTakeFirstOrThrow()
 
-      if (smart_config && rate_type === 'smart') {
+      if (smart_config && (rate_type === 'smart' || rate_type === 'smart_per_child')) {
         await db.insertInto('staff_smart_configs').values({
-          rate_id:           rate.id,
-          base_lessons:      smart_config.base_lessons,
-          absence_threshold: smart_config.absence_threshold,
-          threshold_rate:    String(smart_config.threshold_rate),
+          rate_id:              rate.id,
+          base_lessons:         smart_config.base_lessons,
+          absence_threshold:    smart_config.absence_threshold,
+          threshold_rate:       String(smart_config.threshold_rate),
+          attendance_threshold: smart_config.attendance_threshold ?? 5,
+          starter_rate:         String(smart_config.starter_rate ?? 0),
+          extra_lesson_price:   String(smart_config.extra_lesson_price ?? 0),
         }).execute()
       }
 
@@ -240,7 +252,14 @@ export async function staffRoutes(app: FastifyInstance) {
       deduction_pct?: number
       valid_to?: string | null
       note?: string | null
-      smart_config?: { base_lessons: number; absence_threshold: number; threshold_rate: number }
+      smart_config?: { 
+        base_lessons: number
+        absence_threshold: number
+        threshold_rate: number
+        attendance_threshold?: number
+        starter_rate?: number
+        extra_lesson_price?: number
+      }
     }
   }>(
     '/:id/rates/:rateId',
@@ -264,12 +283,23 @@ export async function staffRoutes(app: FastifyInstance) {
 
       if (smart_config) {
         await db.insertInto('staff_smart_configs')
-          .values({ rate_id: req.params.rateId, ...smart_config })
+          .values({
+            rate_id:              req.params.rateId,
+            base_lessons:         smart_config.base_lessons,
+            absence_threshold:    smart_config.absence_threshold,
+            threshold_rate:       String(smart_config.threshold_rate),
+            attendance_threshold: smart_config.attendance_threshold ?? 5,
+            starter_rate:         String(smart_config.starter_rate ?? 0),
+            extra_lesson_price:   String(smart_config.extra_lesson_price ?? 0),
+          })
           .onConflict((oc) => oc.column('rate_id').doUpdateSet({
-            base_lessons:      smart_config.base_lessons,
-            absence_threshold: smart_config.absence_threshold,
-            threshold_rate:    smart_config.threshold_rate,
-            updated_at:        new Date().toISOString() as unknown as Date,
+            base_lessons:         smart_config.base_lessons,
+            absence_threshold:    smart_config.absence_threshold,
+            threshold_rate:       String(smart_config.threshold_rate),
+            attendance_threshold: smart_config.attendance_threshold ?? 5,
+            starter_rate:         String(smart_config.starter_rate ?? 0),
+            extra_lesson_price:   String(smart_config.extra_lesson_price ?? 0),
+            updated_at:           new Date().toISOString() as unknown as Date,
           }))
           .execute()
       }

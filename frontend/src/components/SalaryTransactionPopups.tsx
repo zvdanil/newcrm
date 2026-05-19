@@ -5,13 +5,14 @@ import { staffApi, type SalaryTransaction, type RateType } from '../api/staff.ap
 export function fmt(v: string | number) { return Number(v).toFixed(2) }
 
 export const RATE_TYPE_LABELS: Record<RateType, string> = {
-  per_lesson:    'За заняття',
-  per_child:     'За дитину',
-  group_lesson:  'За групу',
-  fixed_monthly: 'Фіксований оклад',
-  hourly:        'Погодинна',
-  smart:         'Смарт',
-  bonus:         'Бонус',
+  per_lesson:      'За заняття',
+  per_child:       'За дитину',
+  group_lesson:    'За групу',
+  fixed_monthly:   'Фіксований оклад',
+  hourly:          'Погодинна',
+  smart:           'Смарт',
+  bonus:           'Бонус',
+  smart_per_child: 'Смарт за дитину',
 }
 
 export const TX_TYPE_LABELS: Record<string, string> = {
@@ -59,6 +60,17 @@ export function metaDetail(tx: SalaryTransaction): string | null {
     const ab = typeof m.absences  === 'number' ? m.absences  : '?'
     const th = typeof m.threshold === 'number' ? m.threshold : '?'
     return `Коригування: ${ab} пропусків ≥ ${th}`
+  }
+
+  if (src === 'smart_per_child') {
+    const children = Array.isArray(m.children) ? m.children as Array<{ child_name: string; visits: number; range: string; amount: number }> : []
+    if (children.length === 0) return 'Смарт за дитину'
+    const lines = children
+      .filter(c => c.visits > 0)
+      .map(c => `${c.child_name}: ${c.visits} відв.→${c.amount.toFixed(0)} грн`)
+      .join('; ')
+    const total = typeof m.total === 'number' ? m.total : null
+    return `${total != null ? total.toFixed(2) + ' грн. ' : ''}${lines}`
   }
 
   if (src === 'retro_correction') {

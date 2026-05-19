@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 export type StaffType    = 'employee' | 'partner'
 export type RateCategory = 'auto' | 'manual'
-export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus'
+export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'smart_per_child'
 export type ValueMode    = 'fixed' | 'percent_of_revenue'
 export type SalaryTxType = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
@@ -33,9 +33,12 @@ export interface StaffRate {
   note:            string | null
   created_at:      string
   // smart config (joined)
-  base_lessons:      number | null
-  absence_threshold: number | null
-  threshold_rate:    string | null
+  base_lessons:         number | null
+  absence_threshold:    number | null
+  threshold_rate:       string | null
+  attendance_threshold: number | null
+  starter_rate:         string | null
+  extra_lesson_price:   string | null
 }
 
 export interface SalaryTransaction {
@@ -153,7 +156,14 @@ export const staffApi = {
     deduction_pct?: number
     valid_from?: string
     note?: string
-    smart_config?: { base_lessons: number; absence_threshold: number; threshold_rate: number }
+    smart_config?: { 
+      base_lessons: number
+      absence_threshold: number
+      threshold_rate: number
+      attendance_threshold?: number
+      starter_rate?: number
+      extra_lesson_price?: number
+    }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.post<StaffRate>(`/staff/${staffId}/rates`, payload)
     return data
@@ -163,7 +173,14 @@ export const staffApi = {
     deduction_pct?: number
     valid_to?: string | null
     note?: string | null
-    smart_config?: { base_lessons: number; absence_threshold: number; threshold_rate: number }
+    smart_config?: { 
+      base_lessons: number
+      absence_threshold: number
+      threshold_rate: number
+      attendance_threshold?: number
+      starter_rate?: number
+      extra_lesson_price?: number
+    }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.put<StaffRate>(`/staff/${staffId}/rates/${rateId}`, payload)
     return data

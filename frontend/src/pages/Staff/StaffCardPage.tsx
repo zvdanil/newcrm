@@ -160,6 +160,13 @@ function AddRateForm({ staffId, activities, onDone }: {
     note:          '',
   })
   const [smartConfig, setSmartConfig] = useState({ base_lessons: '8', absence_threshold: '', threshold_rate: '' })
+  const [smartPCConfig, setSmartPCConfig] = useState({
+    starter_rate:         '',
+    attendance_threshold: '5',
+    threshold_rate:       '',
+    base_lessons:         '8',
+    extra_lesson_price:   '0',
+  })
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
@@ -176,6 +183,13 @@ function AddRateForm({ staffId, activities, onDone }: {
         base_lessons:      parseInt(smartConfig.base_lessons) || 8,
         absence_threshold: parseInt(smartConfig.absence_threshold),
         threshold_rate:    parseFloat(smartConfig.threshold_rate),
+      } : form.rate_type === 'smart_per_child' ? {
+        base_lessons:         parseInt(smartPCConfig.base_lessons) || 8,
+        absence_threshold:    0,
+        threshold_rate:       parseFloat(smartPCConfig.threshold_rate),
+        attendance_threshold: parseInt(smartPCConfig.attendance_threshold) || 5,
+        starter_rate:         parseFloat(smartPCConfig.starter_rate),
+        extra_lesson_price:   parseFloat(smartPCConfig.extra_lesson_price) || 0,
       } : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['staff-rates', staffId] }); onDone() },
@@ -187,6 +201,10 @@ function AddRateForm({ staffId, activities, onDone }: {
     if (!form.rate_value || parseFloat(form.rate_value) < 0) return setError('Введіть суму ставки')
     if (form.rate_type === 'smart') {
       if (!smartConfig.absence_threshold || !smartConfig.threshold_rate) return setError('Заповніть параметри смарт-ставки')
+    }
+    if (form.rate_type === 'smart_per_child') {
+      if (!smartPCConfig.starter_rate || !smartPCConfig.threshold_rate) return setError('Заповніть стартову та базову ставку')
+      if (!smartPCConfig.attendance_threshold) return setError('Вкажіть мінімальну кількість відвідувань (поріг)')
     }
     mutation.mutate()
   }
@@ -269,7 +287,7 @@ function AddRateForm({ staffId, activities, onDone }: {
 
       {form.rate_type === 'smart' && (
         <div className="bg-white rounded-lg border border-blue-200 p-3 space-y-2">
-          <p className="text-xs font-medium text-gray-700">Параметри смарт-ставки</p>
+          <p className="text-xs font-medium text-gray-700">Параметри смарт-ставки (за пропусками)</p>
           <div className="grid grid-cols-3 gap-2">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Базових занять (N)</label>
@@ -293,6 +311,54 @@ function AddRateForm({ staffId, activities, onDone }: {
           <p className="text-xs text-gray-400">
             Нарахування 1-го числа = B × N = {(parseFloat(form.rate_value) || 0) * (parseInt(smartConfig.base_lessons) || 8)} грн.
             При пропусках ≥ {smartConfig.absence_threshold || 'P'} — виплата: {smartConfig.threshold_rate || 'BN'} грн.
+          </p>
+        </div>
+      )}
+
+      {form.rate_type === 'smart_per_child' && (
+        <div className="bg-white rounded-lg border border-blue-200 p-3 space-y-2">
+          <p className="text-xs font-medium text-gray-700">Параметри «Смарт за дитину»</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Стартова ставка (грн)</label>
+              <input type="number" min="0" step="0.01" placeholder="1000" value={smartPCConfig.starter_rate}
+                onChange={e => setSmartPCConfig(s => ({ ...s, starter_rate: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">1 до (поріг-1) відвідувань</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Мін. відвідувань (поріг)</label>
+              <input type="number" min="1" placeholder="5" value={smartPCConfig.attendance_threshold}
+                onChange={e => setSmartPCConfig(s => ({ ...s, attendance_threshold: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Перехід на базову ставку</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Базова ставка (грн)</label>
+              <input type="number" min="0" step="0.01" placeholder="2000" value={smartPCConfig.threshold_rate}
+                onChange={e => setSmartPCConfig(s => ({ ...s, threshold_rate: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Від порогу до базових занять</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Базових занять</label>
+              <input type="number" min="1" placeholder="8" value={smartPCConfig.base_lessons}
+                onChange={e => setSmartPCConfig(s => ({ ...s, base_lessons: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Стеля базової ставки</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ціна за надпл. заняття</label>
+              <input type="number" min="0" step="0.01" placeholder="250" value={smartPCConfig.extra_lesson_price}
+                onChange={e => setSmartPCConfig(s => ({ ...s, extra_lesson_price: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Після базових занять</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 bg-gray-50 rounded p-2">
+            Приклад: 1–{(parseInt(smartPCConfig.attendance_threshold)||5)-1} відв → {smartPCConfig.starter_rate||'Старт'} грн ·
+            {' '}{smartPCConfig.attendance_threshold||5}–{smartPCConfig.base_lessons||8} відв → {smartPCConfig.threshold_rate||'База'} грн ·
+            {' '}&gt;{smartPCConfig.base_lessons||8} відв → {smartPCConfig.threshold_rate||'База'} + N×{smartPCConfig.extra_lesson_price||0} грн
           </p>
         </div>
       )}
@@ -474,6 +540,11 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
           {rate.rate_type === 'smart' && rate.base_lessons !== null && (
             <div className="mt-1 text-xs text-gray-400">
               N={rate.base_lessons} · P={rate.absence_threshold} · BN={fmt(rate.threshold_rate ?? 0)}
+            </div>
+          )}
+          {rate.rate_type === 'smart_per_child' && rate.base_lessons !== null && (
+            <div className="mt-1 text-xs text-gray-400">
+              Старт: {fmt(rate.starter_rate ?? 0)} грн · Поріг: {rate.attendance_threshold} відв · База: {fmt(rate.threshold_rate ?? 0)} грн · Max: {rate.base_lessons} занять · Надпл: {fmt(rate.extra_lesson_price ?? 0)} грн/зан
             </div>
           )}
           {rate.note && <p className="text-xs text-gray-400 mt-0.5">{rate.note}</p>}

@@ -283,7 +283,7 @@ export interface BillingRunLogTable {
 
 export type StaffType     = 'employee' | 'partner'
 export type RateCategory  = 'auto' | 'manual'
-export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'group_lesson'
+export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'group_lesson' | 'smart_per_child'
 export type SalaryTxType  = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
 export interface StaffTable {
@@ -314,11 +314,14 @@ export interface StaffRatesTable {
 }
 
 export interface StaffSmartConfigsTable {
-  rate_id:           string
-  base_lessons:      Generated<number>
-  absence_threshold: number
-  threshold_rate:    ColumnType<string, number | string, number | string>
-  updated_at:        Generated<Date>
+  rate_id:              string
+  base_lessons:         Generated<number>
+  absence_threshold:    number
+  threshold_rate:       ColumnType<string, number | string, number | string>
+  attendance_threshold: Generated<number>
+  starter_rate:         ColumnType<string, number | string, number | string>
+  extra_lesson_price:   ColumnType<string, number | string, number | string>
+  updated_at:           Generated<Date>
 }
 
 export interface SalaryTransactionsTable {
