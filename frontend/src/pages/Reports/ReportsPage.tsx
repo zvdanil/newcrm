@@ -111,32 +111,30 @@ export function ReportsPage() {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
 
           {/* Period */}
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Період нарахувань</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <input
                 type="month"
                 value={filters.from_month}
                 onChange={(e) => setFilters((f) => ({ ...f, from_month: e.target.value }))}
-                className="flex-1 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                placeholder="від"
+                className="min-w-0 flex-1 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
               />
-              <span className="text-gray-400 text-sm">—</span>
+              <span className="shrink-0 text-gray-400 text-sm">—</span>
               <input
                 type="month"
                 value={filters.to_month}
                 onChange={(e) => setFilters((f) => ({ ...f, to_month: e.target.value }))}
-                className="flex-1 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                placeholder="до"
+                className="min-w-0 flex-1 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
               />
             </div>
           </div>
 
-          {/* Account */}
-          <div className="space-y-2">
+          {/* Account — spans 2 cols to give pills room */}
+          <div className="space-y-2 min-w-0 sm:col-span-1 lg:col-span-2">
             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Рахунок</label>
             <div className="flex flex-wrap gap-2">
               {accounts.filter((a) => a.is_active).map((a) => {
@@ -165,7 +163,7 @@ export function ReportsPage() {
           </div>
 
           {/* Status + Min debt + Sort */}
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <div>
               <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Статус дитини</label>
               <div className="flex gap-3">
@@ -189,30 +187,29 @@ export function ReportsPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Мін. борг (грн)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={filters.min_debt}
-                  onChange={(e) => setFilters((f) => ({ ...f, min_debt: e.target.value }))}
-                  placeholder="0.01"
-                  className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Сортування</label>
-                <select
-                  value={filters.sort}
-                  onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as ARFilters['sort'] }))}
-                  className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                >
-                  <option value="desc">Найбільший борг</option>
-                  <option value="asc">Найменший борг</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Мін. борг (грн)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={filters.min_debt}
+                onChange={(e) => setFilters((f) => ({ ...f, min_debt: e.target.value }))}
+                placeholder="0.01"
+                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Сортування</label>
+              <select
+                value={filters.sort}
+                onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as ARFilters['sort'] }))}
+                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+              >
+                <option value="desc">Найбільший борг</option>
+                <option value="asc">Найменший борг</option>
+              </select>
             </div>
           </div>
         </div>
