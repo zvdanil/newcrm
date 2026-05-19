@@ -131,7 +131,7 @@ export async function childrenRoutes(app: FastifyInstance) {
         ? await Promise.all([
             db.selectFrom('family_members as fm')
               .innerJoin('parents as p', 'p.id', 'fm.parent_id')
-              .select(['p.id', 'p.full_name', 'p.phone', 'p.email', 'p.edrpou', 'p.iban'])
+              .select(['fm.role', 'p.id', 'p.full_name', 'p.phone', 'p.email', 'p.edrpou', 'p.iban'])
               .where('fm.family_id', '=', child.family_id)
               .orderBy('p.full_name', 'asc')
               .execute(),

@@ -53,13 +53,6 @@ export function ChildCardPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: familiesData } = useQuery({
-    queryKey: ['families'],
-    queryFn: () => familiesApi.list(),
-    staleTime: 5 * 60 * 1000,
-    enabled: editing,
-  })
-
   const updateMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) => childrenApi.update(id!, payload),
     onSuccess: () => {
@@ -139,16 +132,30 @@ export function ChildCardPage() {
         </div>
 
         {/* View mode */}
-        {!editing && (
-          <dl className="grid grid-cols-2 gap-4">
-            <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
-            <InfoRow label="Група"           value={child.group_name  ?? '—'} />
-            <InfoRow label="Сімʼя"           value={child.family_name ?? '—'} />
-            <InfoRow label="Відповідальний"  value={child.primary_parent_name  ?? '—'} />
-            <InfoRow label="Контакт"         value={child.primary_parent_phone ?? '—'} />
-            {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
-          </dl>
-        )}
+        {!editing && (() => {
+          const mama = child.family_members?.find((m) => m.role === 'мама')
+          const tato = child.family_members?.find((m) => m.role === 'тато')
+          return (
+            <dl className="grid grid-cols-2 gap-4">
+              <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
+              <InfoRow label="Група"           value={child.group_name  ?? '—'} />
+              <InfoRow label="Сімʼя"           value={child.family_name ?? '—'} />
+              <div /> {/* spacer */}
+              {mama || tato ? (
+                <>
+                  <InfoRow label="Мама" value={mama ? `${mama.full_name}${mama.phone ? `  ·  ${mama.phone}` : ''}` : '—'} />
+                  <InfoRow label="Тато" value={tato ? `${tato.full_name}${tato.phone ? `  ·  ${tato.phone}` : ''}` : '—'} />
+                </>
+              ) : (
+                <>
+                  <InfoRow label="Відповідальний" value={child.primary_parent_name  ?? '—'} />
+                  <InfoRow label="Контакт"        value={child.primary_parent_phone ?? '—'} />
+                </>
+              )}
+              {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
+            </dl>
+          )
+        })()}
 
         {/* Edit mode */}
         {editing && (
@@ -185,16 +192,7 @@ export function ChildCardPage() {
             </Field>
 
             <Field label="Сімʼя">
-              <select
-                value={form.family_id}
-                onChange={(e) => setForm({ ...form, family_id: e.target.value })}
-                className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-              >
-                <option value="">— без сімʼї —</option>
-                {familiesData?.data.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+              <p className="py-2 text-sm text-gray-700">{child.family_name ?? '—'}</p>
             </Field>
 
             <Field label="Нотатка">
@@ -1584,9 +1582,23 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
 // ─── Family Block ────────────────────────────────────────────────────────────
 
+const ROLE_OPTIONS = [
+  { value: '',     label: '— роль —' },
+  { value: 'мама', label: 'Мама' },
+  { value: 'тато', label: 'Тато' },
+]
+
 function FamilyBlock({ child }: { child: Child }) {
+  const qc = useQueryClient()
+  const canEdit = useCanAccess('owner', 'admin', 'manager')
   const members: FamilyMember[] = child.family_members ?? []
   const siblings: FamilySibling[] = child.family_siblings ?? []
+
+  const roleMutation = useMutation({
+    mutationFn: ({ parentId, role }: { parentId: string; role: string | null }) =>
+      familiesApi.updateMemberRole(child.family_id!, parentId, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['child', child.id] }),
+  })
 
   if (members.length === 0 && siblings.length === 0) return null
 
@@ -1598,7 +1610,18 @@ function FamilyBlock({ child }: { child: Child }) {
         <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Батьки</p>
           {members.map((m) => (
-            <div key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-sm">
+            <div key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              {canEdit ? (
+                <select
+                  value={m.role ?? ''}
+                  onChange={(e) => roleMutation.mutate({ parentId: m.id, role: e.target.value || null })}
+                  className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
+                >
+                  {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ) : (
+                m.role && <span className="text-xs font-medium text-iris-600 w-10">{m.role}</span>
+              )}
               <span className="font-medium text-gray-900">{m.full_name}</span>
               {m.phone && <span className="text-gray-500">{m.phone}</span>}
               {m.email && <span className="text-gray-400">{m.email}</span>}

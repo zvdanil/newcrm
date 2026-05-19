@@ -247,17 +247,33 @@ export async function familiesRoutes(app: FastifyInstance) {
   )
 
   // POST /api/families/:id/members (добавить участника)
-  app.post<{ Params: { id: string }; Body: { parent_id: string } }>(
+  app.post<{ Params: { id: string }; Body: { parent_id: string; role?: string | null } }>(
     '/:id/members',
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
       await db
         .insertInto('family_members')
-        .values({ family_id: request.params.id, parent_id: request.body.parent_id })
+        .values({ family_id: request.params.id, parent_id: request.body.parent_id, role: request.body.role ?? null })
         .onConflict((oc) => oc.doNothing())
         .execute()
 
       return reply.status(201).send({ ok: true })
+    }
+  )
+
+  // PATCH /api/families/:id/members/:parentId — обновить роль участника (мама/тато/null)
+  app.patch<{ Params: { id: string; parentId: string }; Body: { role: string | null } }>(
+    '/:id/members/:parentId',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (request, reply) => {
+      await db
+        .updateTable('family_members')
+        .set({ role: request.body.role ?? null })
+        .where('family_id', '=', request.params.id)
+        .where('parent_id', '=', request.params.parentId)
+        .execute()
+
+      return reply.send({ ok: true })
     }
   )
 }

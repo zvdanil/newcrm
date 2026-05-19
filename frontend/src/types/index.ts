@@ -13,6 +13,7 @@ export interface FamilyMember {
   email: string | null
   edrpou: string | null
   iban: string | null
+  role: string | null
 }
 
 export interface FamilySibling {

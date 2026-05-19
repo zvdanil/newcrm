@@ -45,6 +45,7 @@ export interface FamiliesTable {
 export interface FamilyMembersTable {
   family_id: string
   parent_id: string
+  role: string | null
 }
 
 export interface ChildrenTable {

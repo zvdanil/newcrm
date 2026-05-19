@@ -46,6 +46,10 @@ export const familiesApi = {
     await apiClient.post(`/families/${familyId}/members`, { parent_id: parentId })
   },
 
+  updateMemberRole: async (familyId: string, parentId: string, role: string | null) => {
+    await apiClient.patch(`/families/${familyId}/members/${parentId}`, { role })
+  },
+
   getDebts: async (familyId: string, accountId: string): Promise<FamilyDebtsResponse> => {
     const { data } = await apiClient.get<FamilyDebtsResponse>(`/families/${familyId}/debts?account_id=${accountId}`)
     return data
