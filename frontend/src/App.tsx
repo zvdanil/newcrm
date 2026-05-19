@@ -24,6 +24,7 @@ import { StaffCardPage } from './pages/Staff/StaffCardPage'
 import { SalaryJournalPage } from './pages/Salary/SalaryJournalPage'
 import { CalendarPage } from './pages/Calendar/CalendarPage'
 import { DividendsPage } from './pages/Dividends/DividendsPage'
+import { ReportsPage } from './pages/Reports/ReportsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,13 +32,6 @@ const queryClient = new QueryClient({
   },
 })
 
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="py-12 text-center">
-      <p className="text-gray-400 text-sm">{title} — буде реалізовано в наступних етапах</p>
-    </div>
-  )
-}
 
 export function App() {
   return (
@@ -92,7 +86,7 @@ export function App() {
               {/* Дивіденди */}
               <Route path="dividends" element={<DividendsPage />} />
 
-              <Route path="reports"   element={<Placeholder title="Звіти" />} />
+              <Route path="reports" element={<ReportsPage />} />
             </Route>
           </Route>
 
