@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type SalaryPayment } from '../../api/expenses.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
-import { today as todayStr } from '../../utils/dateStr'
+import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -431,10 +431,11 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     category_id:  initial?.category_id ?? '',
     amount:       initial ? fmt(initial.amount ?? 0) : '',
     accrual_date: initial?.accrual_date?.slice(0, 10) ?? today,
-    is_instant:   initial?.is_instant ?? false,
+    is_instant:   initial?.is_instant ?? true,
     is_dividend:  initial?.is_dividend ?? false,
     note:         initial?.note ?? '',
   })
+  const [editNote, setEditNote] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleNewSubcategory(parentId: string, name: string): Promise<ExpenseCategory> {
@@ -468,7 +469,8 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         category_id:  form.category_id || null,
         amount,
         accrual_date: form.accrual_date,
-        note: form.note || null,
+        note:      form.note || null,
+        edit_note: editNote.trim() || undefined,
       })
     } else {
       createMutation.mutate({
@@ -530,7 +532,15 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         </div>
       </div>
 
-      {!isEdit && (
+      {isEdit ? (
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Причина правки</label>
+          <input type="text" value={editNote}
+            onChange={e => setEditNote(e.target.value)}
+            placeholder="Хто, що і чому змінено..."
+            className="w-full text-sm border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+        </div>
+      ) : (
         <div className="flex items-center gap-6">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={form.is_instant}
@@ -821,8 +831,9 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   onRefresh: () => void
 }) {
   const qc = useQueryClient()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing]       = useState(false)
   const [withdrawing, setWithdrawing] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
 
   const payMutation = useMutation({
     mutationFn: () => expensesApi.pay(expense.id),
@@ -835,7 +846,7 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   const navigate = useNavigate()
   const dividendMutation = useMutation({
     mutationFn: (val: boolean) => expensesApi.toggleDividend(expense.id, val),
-    onSuccess: (data, val) => { 
+    onSuccess: (data, val) => {
       qc.invalidateQueries({ queryKey: ['expenses'] })
       onRefresh()
       if (val) {
@@ -923,9 +934,15 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               </button>
             )
           )}
-          {expense.status === 'pending' && (isOwner || isAdmin) && (
+          {(isOwner || isAdmin) && (
             <button onClick={() => setEditing(true)}
               className="text-xs text-gray-400 hover:text-iris-600 transition-colors">ред.</button>
+          )}
+          {(isOwner || isAdmin) && (
+            <button onClick={() => setShowHistory(true)}
+              className="text-xs text-gray-300 hover:text-gray-500 transition-colors" title="Історія змін">
+              📋
+            </button>
           )}
           {(isOwner || isAdmin) && (
             <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
@@ -941,8 +958,71 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             onSuccess={onRefresh}
           />
         )}
+        {showHistory && (
+          <ExpenseHistoryPopup expenseId={expense.id} onClose={() => setShowHistory(false)} />
+        )}
       </td>
     </tr>
+  )
+}
+
+// ── Expense History Popup ──────────────────────────────────────────────────
+
+const FIELD_LABELS: Record<string, string> = {
+  amount:       'Сума',
+  note:         'Нотатка',
+  category_id:  'Категорія',
+  accrual_date: 'Дата нарахування',
+  account_id:   'Рахунок',
+}
+
+function ExpenseHistoryPopup({ expenseId, onClose }: { expenseId: string; onClose: () => void }) {
+  const { data: edits = [], isLoading } = useQuery({
+    queryKey: ['expense-edits', expenseId],
+    queryFn: () => expensesApi.getEdits(expenseId),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Історія змін</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {isLoading ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Завантаження...</p>
+          ) : edits.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Змін не знайдено</p>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                <tr>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Дата</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Хто</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Поле</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Було</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Стало</th>
+                  <th className="text-left px-3 py-2 text-gray-500 font-medium">Причина</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {edits.map(e => (
+                  <tr key={e.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{String(e.edited_at).slice(0, 16).replace('T', ' ')}</td>
+                    <td className="px-3 py-2 text-gray-600">{e.editor_email ?? '—'}</td>
+                    <td className="px-3 py-2 font-medium">{FIELD_LABELS[e.field_name] ?? e.field_name}</td>
+                    <td className="px-3 py-2 text-red-600 line-through">{e.old_value ?? '—'}</td>
+                    <td className="px-3 py-2 text-green-700 font-medium">{e.new_value ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-400 italic">{e.edit_note ?? ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1213,6 +1293,56 @@ function FilterCategoryPicker({ categories, value, onChange }: {
   )
 }
 
+function AccountMultiSelect({ accounts, selected, onChange }: {
+  accounts: { id: string; name: string }[]
+  selected: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const toggle = (id: string) => {
+    if (selected.includes(id)) onChange(selected.filter(x => x !== id))
+    else onChange([...selected, id])
+  }
+  const toggleAll = () => {
+    if (selected.length === accounts.length || selected.length === 0) onChange([])
+    else onChange(accounts.map(a => a.id))
+  }
+  
+  let label = 'Всі рахунки'
+  if (selected.length > 0 && selected.length < accounts.length) {
+    label = selected.length === 1 
+      ? (accounts.find(a => a.id === selected[0])?.name || '1 рахунок') 
+      : `${selected.length} рахунки`
+  }
+
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)}
+        className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white flex items-center justify-between min-w-[140px] focus:outline-none focus:ring-2 focus:ring-iris-500">
+        <span className="truncate">{label}</span>
+        <span className="ml-2 text-gray-400 text-xs">▼</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-lg rounded-lg py-1 z-20 max-h-60 overflow-auto">
+            <label className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100">
+              <input type="checkbox" checked={selected.length === 0 || selected.length === accounts.length} onChange={toggleAll} className="rounded" />
+              <span className="text-sm font-medium">Всі рахунки</span>
+            </label>
+            {accounts.map(a => (
+              <label key={a.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" checked={selected.length === 0 || selected.includes(a.id)} onChange={() => toggle(a.id)} className="rounded" />
+                <span className="text-sm text-gray-700">{a.name}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 type Tab = 'expenses' | 'salary' | 'transfers' | 'categories'
@@ -1224,12 +1354,13 @@ export function ExpensesPage() {
   const isAdmin = useCanAccess('owner', 'admin')
 
   const [filters, setFilters] = useState({
-    account_id:  '',
+    account_ids: [] as string[],
     category_id: '',
     status:      '' as '' | 'pending' | 'paid',
-    from:        '',
+    from:        firstOfMonth(),
     to:          '',
     is_dividend: undefined as boolean | undefined,
+    search:      '',
   })
   const { defaultAccountId, setDefaultAccountId } = useDefaultAccount()
   const [showAddForm, setShowAddForm]           = useState(false)
@@ -1253,6 +1384,8 @@ export function ExpensesPage() {
       ...filters,
       status: filters.status || undefined,
       is_dividend: filters.is_dividend,
+      // Omit account_id to fetch all, we filter locally
+      account_id: undefined,
     }),
     enabled: tab === 'expenses',
   })
@@ -1275,10 +1408,9 @@ export function ExpensesPage() {
     enabled: tab === 'salary',
   })
 
-  const { data: transfers = [], isLoading: transfersLoading } = useQuery({
-    queryKey: ['transfers', filters.account_id, filters.from, filters.to],
+  const { data: transfersData = [], isLoading: transfersLoading } = useQuery({
+    queryKey: ['transfers', filters.from, filters.to],
     queryFn: () => expensesApi.getTransfers({
-      account_id: filters.account_id || undefined,
       from: filters.from || undefined,
       to:   filters.to   || undefined,
     }),
@@ -1290,11 +1422,37 @@ export function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transfers'] }),
   })
 
-  const expenses    = expensesData?.data ?? []
-  const totalAmount = expensesData?.total_amount ?? 0
-  const totalCount  = expensesData?.total ?? 0
+  let expenses = expensesData?.data ?? []
+  let transfers = transfersData
 
-  const hasFilters = !!(filters.account_id || filters.category_id || filters.status || filters.from || filters.to || filters.is_dividend !== undefined)
+  // Local filtering
+  if (filters.account_ids.length > 0) {
+    expenses = expenses.filter(e => filters.account_ids.includes(e.account_id))
+    transfers = transfers.filter(t => 
+      filters.account_ids.includes(t.from_account_id) || 
+      filters.account_ids.includes(t.to_account_id)
+    )
+  }
+  if (filters.search.trim()) {
+    const q = filters.search.trim().toLowerCase()
+    expenses = expenses.filter(e =>
+      e.note?.toLowerCase().includes(q) ||
+      (categoryLabel(e) || '').toLowerCase().includes(q) ||
+      e.account_name.toLowerCase().includes(q) ||
+      String(e.amount).includes(q)
+    )
+    transfers = transfers.filter(t =>
+      t.note?.toLowerCase().includes(q) ||
+      t.from_account_name.toLowerCase().includes(q) ||
+      t.to_account_name.toLowerCase().includes(q) ||
+      String(t.amount).includes(q)
+    )
+  }
+
+  const totalAmount = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
+  const totalCount  = expenses.length
+
+  const hasFilters = !!(filters.account_ids.length > 0 || filters.category_id || filters.status || filters.from !== firstOfMonth() || filters.to || filters.is_dividend !== undefined || filters.search)
 
   const salaryPayments   = salaryData?.data ?? []
   const salaryTotal      = salaryData?.total_amount ?? 0
@@ -1364,14 +1522,25 @@ export function ExpensesPage() {
       {tab !== 'categories' && tab !== 'salary' && (
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Рахунок</label>
-            <select value={filters.account_id}
-              onChange={e => setFilters(f => ({ ...f, account_id: e.target.value }))}
-              className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
-              <option value="">Всі рахунки</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            <label className="block text-xs text-gray-500 mb-1">Рахунки</label>
+            <AccountMultiSelect
+              accounts={accounts}
+              selected={filters.account_ids}
+              onChange={ids => setFilters(f => ({ ...f, account_ids: ids }))}
+            />
           </div>
+
+          {tab === 'expenses' && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Пошук</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+                <input type="text" value={filters.search} placeholder="Сума, нотатка..."
+                  onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                  className="text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 w-48 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+            </div>
+          )}
 
           {tab === 'expenses' && (
             <>
@@ -1424,7 +1593,7 @@ export function ExpensesPage() {
           </div>
 
           {hasFilters && (
-            <button onClick={() => setFilters({ account_id: '', category_id: '', status: '', from: '', to: '', is_dividend: undefined })}
+            <button onClick={() => setFilters({ account_ids: [], category_id: '', status: '', from: firstOfMonth(), to: '', is_dividend: undefined, search: '' })}
               className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2">
               Скинути
             </button>

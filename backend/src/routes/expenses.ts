@@ -215,25 +215,80 @@ export async function expensesRoutes(app: FastifyInstance) {
     }
   )
 
-  // PUT /api/expenses/:id
+  // PUT /api/expenses/:id  — edit any expense (including paid), record audit diff
   app.put<{
     Params: { id: string }
-    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; note?: string | null }
+    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; note?: string | null; edit_note?: string }
   }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
-      const expense = await db.selectFrom('expenses').select(['id', 'status', 'is_deleted'])
-        .where('id', '=', req.params.id).executeTakeFirst()
-      if (!expense || expense.is_deleted) return reply.status(404).send({ error: 'NotFound' })
-      if (expense.status === 'paid') return reply.status(409).send({ error: 'Conflict', message: 'Оплачений витрат не можна редагувати' })
+      const expense = await db.selectFrom('expenses')
+        .selectAll()
+        .where('id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .executeTakeFirst()
+      if (!expense) return reply.status(404).send({ error: 'NotFound' })
+
+      const { edit_note, ...fields } = req.body
+      const editedBy = (req.user as { sub: string }).sub
+
+      // Build only changed fields
+      const tracked: Array<{ field_name: string; old_value: string | null; new_value: string | null }> = []
+      for (const [key, newVal] of Object.entries(fields)) {
+        const oldVal = (expense as Record<string, unknown>)[key]
+        const oldStr = oldVal != null ? String(oldVal) : null
+        const newStr = newVal != null ? String(newVal) : null
+        if (oldStr !== newStr) {
+          tracked.push({ field_name: key, old_value: oldStr, new_value: newStr })
+        }
+      }
+
+      if (tracked.length === 0) {
+        return expense  // nothing changed
+      }
 
       const updated = await db.updateTable('expenses')
-        .set(req.body)
+        .set(fields)
         .where('id', '=', req.params.id)
         .returningAll()
-        .executeTakeFirst()
+        .executeTakeFirstOrThrow()
+
+      // Write audit records
+      if (tracked.length > 0) {
+        await db.insertInto('expense_edits')
+          .values(tracked.map(t => ({
+            expense_id: req.params.id,
+            edited_by:  editedBy,
+            field_name: t.field_name,
+            old_value:  t.old_value,
+            new_value:  t.new_value,
+            edit_note:  edit_note ?? null,
+          })))
+          .execute()
+      }
+
       return updated
+    }
+  )
+
+  // GET /api/expenses/:id/edits  — audit history for an expense
+  app.get<{ Params: { id: string } }>(
+    '/:id/edits',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req, reply) => {
+      const edits = await db
+        .selectFrom('expense_edits as ee')
+        .leftJoin('users as u', 'u.id', 'ee.edited_by')
+        .select([
+          'ee.id', 'ee.field_name', 'ee.old_value', 'ee.new_value',
+          'ee.edit_note', 'ee.edited_at',
+          'u.email as editor_email',
+        ])
+        .where('ee.expense_id', '=', req.params.id)
+        .orderBy('ee.edited_at', 'desc')
+        .execute()
+      return edits
     }
   )
 

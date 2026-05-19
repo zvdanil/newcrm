@@ -116,8 +116,22 @@ export const expensesApi = {
     amount?: number
     accrual_date?: string
     note?: string | null
+    edit_note?: string
   }) => {
     const { data } = await apiClient.put<Expense>(`/expenses/${id}`, payload)
+    return data
+  },
+
+  getEdits: async (id: string): Promise<Array<{
+    id: string
+    field_name: string
+    old_value: string | null
+    new_value: string | null
+    edit_note: string | null
+    edited_at: string
+    editor_email: string | null
+  }>> => {
+    const { data } = await apiClient.get(`/expenses/${id}/edits`)
     return data
   },
 

@@ -414,6 +414,16 @@ export interface ScheduleExceptionsTable {
   created_at:     Generated<Date>
 }
 
+export interface ExpenseEditsTable {
+  id:         Generated<string>
+  expense_id: string
+  edited_by:  string | null
+  edited_at:  Generated<Date>
+  field_name: string
+  old_value:  string | null
+  new_value:  string | null
+  edit_note:  string | null
+}
 export interface SubstitutionsTable {
   id:                  Generated<string>
   schedule_id:         string
@@ -467,6 +477,7 @@ export interface Database {
   equity_participants:        EquityParticipantsTable
   dividend_settings:          DividendSettingsTable
   dividend_payouts:           DividendPayoutsTable
+  expense_edits:              ExpenseEditsTable
 
 }
 
