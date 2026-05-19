@@ -175,7 +175,7 @@ function AddRateForm({ staffId, activities, onDone }: {
       rate_category: form.rate_category,
       rate_type:     form.rate_type,
       value_mode:    form.value_mode,
-      rate_value:    parseFloat(form.rate_value),
+      rate_value:    form.rate_type === 'smart_per_child' ? 0 : parseFloat(form.rate_value),
       deduction_pct: parseFloat(form.deduction_pct) || 0,
       valid_from:    form.valid_from,
       note:          form.note || undefined,
@@ -198,7 +198,7 @@ function AddRateForm({ staffId, activities, onDone }: {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null)
-    if (!form.rate_value || parseFloat(form.rate_value) < 0) return setError('Введіть суму ставки')
+    if (form.rate_type !== 'smart_per_child' && (!form.rate_value || parseFloat(form.rate_value) < 0)) return setError('Введіть суму ставки')
     if (form.rate_type === 'smart') {
       if (!smartConfig.absence_threshold || !smartConfig.threshold_rate) return setError('Заповніть параметри смарт-ставки')
     }
@@ -209,7 +209,8 @@ function AddRateForm({ staffId, activities, onDone }: {
     mutation.mutate()
   }
 
-  const needsActivity = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart'].includes(form.rate_type)
+  const needsActivity = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
+  const isSmartPC = form.rate_type === 'smart_per_child'
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
@@ -240,33 +241,37 @@ function AddRateForm({ staffId, activities, onDone }: {
             </select>
           </div>
         )}
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Режим значення</label>
-          <select value={form.value_mode} onChange={e => setForm(f => ({ ...f, value_mode: e.target.value as ValueMode }))}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="fixed">Фіксована сума</option>
-            <option value="percent_of_revenue">% від виручки батьків</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            {form.value_mode === 'percent_of_revenue'
-              ? '% від виручки'
-              : form.rate_type === 'smart' ? 'Базова ставка (B)' : 'Ставка / Сума'}
-          </label>
-          <input
-            type="number"
-            min="0"
-            max={form.value_mode === 'percent_of_revenue' ? 100 : undefined}
-            step={form.value_mode === 'percent_of_revenue' ? '0.1' : '0.01'}
-            placeholder={form.value_mode === 'percent_of_revenue' ? '0–100' : '0.00'}
-            value={form.rate_value}
-            onChange={e => setForm(f => ({ ...f, rate_value: e.target.value }))}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          {form.value_mode === 'percent_of_revenue' && (
-            <p className="text-xs text-gray-400 mt-0.5">Система розрахує суму від нарахувань батьків за цю активність</p>
-          )}
-        </div>
+        {!isSmartPC && (
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Режим значення</label>
+            <select value={form.value_mode} onChange={e => setForm(f => ({ ...f, value_mode: e.target.value as ValueMode }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="fixed">Фіксована сума</option>
+              <option value="percent_of_revenue">% від виручки батьків</option>
+            </select>
+          </div>
+        )}
+        {!isSmartPC && (
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              {form.value_mode === 'percent_of_revenue'
+                ? '% від виручки'
+                : form.rate_type === 'smart' ? 'Базова ставка (B)' : 'Ставка / Сума'}
+            </label>
+            <input
+              type="number"
+              min="0"
+              max={form.value_mode === 'percent_of_revenue' ? 100 : undefined}
+              step={form.value_mode === 'percent_of_revenue' ? '0.1' : '0.01'}
+              placeholder={form.value_mode === 'percent_of_revenue' ? '0–100' : '0.00'}
+              value={form.rate_value}
+              onChange={e => setForm(f => ({ ...f, rate_value: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            {form.value_mode === 'percent_of_revenue' && (
+              <p className="text-xs text-gray-400 mt-0.5">Система розрахує суму від нарахувань батьків за цю активність</p>
+            )}
+          </div>
+        )}
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">% утримання</label>
           <input type="number" min="0" max="100" step="0.01" placeholder="0" value={form.deduction_pct}
