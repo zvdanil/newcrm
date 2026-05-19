@@ -53,6 +53,13 @@ export function ChildCardPage() {
     staleTime: 5 * 60 * 1000,
   })
 
+  const { data: familiesData } = useQuery({
+    queryKey: ['families-list'],
+    queryFn: () => familiesApi.list({ limit: 500 }),
+    staleTime: 5 * 60 * 1000,
+    enabled: editing,
+  })
+
   const updateMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) => childrenApi.update(id!, payload),
     onSuccess: () => {
@@ -192,7 +199,16 @@ export function ChildCardPage() {
             </Field>
 
             <Field label="Сімʼя">
-              <p className="py-2 text-sm text-gray-700">{child.family_name ?? '—'}</p>
+              <select
+                value={form.family_id}
+                onChange={(e) => setForm({ ...form, family_id: e.target.value })}
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+              >
+                <option value="">— без сімʼї —</option>
+                {familiesData?.data.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Нотатка">
