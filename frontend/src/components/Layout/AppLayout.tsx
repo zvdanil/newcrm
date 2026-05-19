@@ -4,7 +4,6 @@ import { useCanAccess } from '../../hooks/useCanAccess'
 
 const NAV_LINKS = [
   { to: '/children',        label: 'Діти' },
-  { to: '/families',        label: 'Сімʼї' },
   { to: '/activities',      label: 'Активності' },
   { to: '/journals',        label: 'Журнали' },
   { to: '/calendar',        label: 'Календар' },

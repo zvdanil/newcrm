@@ -38,6 +38,15 @@ export interface IndividualTariffPayload {
   l2_refund_per_absence?: number | null
 }
 
+export interface OpenAccrual {
+  id: string
+  transaction_date: string
+  billing_month: string | null
+  activity_name: string | null
+  amount: number
+  remaining: number
+}
+
 export const childrenApi = {
   list: async (filters: ChildrenFilters = {}) => {
     const params = new URLSearchParams()
@@ -88,6 +97,11 @@ export const childrenApi = {
   closeIndividualTariff: async (childId: string, tariffId: string, validTo?: string): Promise<void> => {
     const params = validTo ? `?valid_to=${validTo}` : ''
     await apiClient.delete(`/children/${childId}/individual-tariffs/${tariffId}${params}`)
+  },
+
+  getOpenAccruals: async (childId: string, accountId: string): Promise<OpenAccrual[]> => {
+    const { data } = await apiClient.get<OpenAccrual[]>(`/children/${childId}/open-accruals?account_id=${accountId}`)
+    return data
   },
 
   createEnrollment: async (childId: string, payload: {

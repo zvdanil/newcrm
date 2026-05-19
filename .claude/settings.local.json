@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(npx tsc *)",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"ChildCardPage|children\\\\.api|AppLayout|types/index\" })",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $out = npx tsc --noEmit 2>&1; $out | Where-Object { $_ -match \"ChildCard|children\\\\.api|AppLayout\" } | Out-String)",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Out-String | Select-String -Pattern \"ChildCard|children\\\\.api|AppLayout\" -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value })"
+    ]
+  }
+}

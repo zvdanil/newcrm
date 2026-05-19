@@ -6,6 +6,22 @@ export interface AuthUser {
   role: UserRole
 }
 
+export interface FamilyMember {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  edrpou: string | null
+  iban: string | null
+}
+
+export interface FamilySibling {
+  id: string
+  full_name: string
+  group_name: string | null
+  is_active: boolean
+}
+
 export interface Child {
   id: string
   full_name: string
@@ -21,6 +37,8 @@ export interface Child {
   primary_parent_id?: string | null
   primary_parent_name?: string | null
   primary_parent_phone?: string | null
+  family_members?: FamilyMember[]
+  family_siblings?: FamilySibling[]
 }
 
 export interface Group {

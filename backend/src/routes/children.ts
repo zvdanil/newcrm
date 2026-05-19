@@ -127,7 +127,25 @@ export async function childrenRoutes(app: FastifyInstance) {
         if (!access) return reply.status(403).send({ error: 'Forbidden' })
       }
 
-      return child
+      const [familyMembers, familySiblings] = child.family_id
+        ? await Promise.all([
+            db.selectFrom('family_members as fm')
+              .innerJoin('parents as p', 'p.id', 'fm.parent_id')
+              .select(['p.id', 'p.full_name', 'p.phone', 'p.email', 'p.edrpou', 'p.iban'])
+              .where('fm.family_id', '=', child.family_id)
+              .orderBy('p.full_name', 'asc')
+              .execute(),
+            db.selectFrom('children as c')
+              .leftJoin('groups as g', 'g.id', 'c.group_id')
+              .select(['c.id', 'c.full_name', 'c.is_active', 'g.name as group_name'])
+              .where('c.family_id', '=', child.family_id)
+              .where('c.id', '!=', request.params.id)
+              .orderBy('c.full_name', 'asc')
+              .execute(),
+          ])
+        : [[], []]
+
+      return { ...child, family_members: familyMembers, family_siblings: familySiblings }
     }
   )
 
@@ -714,6 +732,65 @@ export async function childrenRoutes(app: FastifyInstance) {
       }
 
       return reply.status(204).send()
+    }
+  )
+
+  // GET /api/children/:id/open-accruals?account_id=UUID
+  // Returns accruals not yet fully covered by payments (FIFO), with remaining amounts.
+  app.get<{ Params: { id: string }; Querystring: { account_id?: string } }>(
+    '/:id/open-accruals',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id } = request.params
+      const { account_id } = request.query
+
+      if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'account_id is required' })
+
+      const child = await db.selectFrom('children').select('id').where('id', '=', id).executeTakeFirst()
+      if (!child) return reply.status(404).send({ error: 'NotFound' })
+
+      const [accruals, creditRow] = await Promise.all([
+        db.selectFrom('transactions as t')
+          .leftJoin('activities as act', 'act.id', 't.activity_id')
+          .select(['t.id', 't.amount', 't.transaction_date', 't.billing_month', 'act.name as activity_name'])
+          .where('t.child_id', '=', id)
+          .where('t.account_id', '=', account_id)
+          .where('t.type', '=', 'ACCRUAL')
+          .where('t.is_deleted', '=', false)
+          .orderBy('t.transaction_date', 'asc')
+          .orderBy('t.amount', 'desc')
+          .execute(),
+        db.selectFrom('transactions')
+          .select((eb) => eb.fn.sum<string>('amount').as('total'))
+          .where('child_id', '=', id)
+          .where('account_id', '=', account_id)
+          .where('type', 'in', ['PAYMENT', 'REFUND'])
+          .where('is_deleted', '=', false)
+          .executeTakeFirst(),
+      ])
+
+      const toDateStr = (v: unknown) => {
+        if (!v) return null
+        if (v instanceof Date) return v.toISOString().slice(0, 10)
+        return String(v).slice(0, 10)
+      }
+
+      let pool = Number(creditRow?.total ?? 0)
+      const result = []
+      for (const acc of accruals) {
+        const amount = Number(acc.amount)
+        if (pool >= amount) { pool -= amount; continue }
+        result.push({
+          id: acc.id,
+          transaction_date: toDateStr(acc.transaction_date)!,
+          billing_month: toDateStr(acc.billing_month),
+          activity_name: acc.activity_name ?? null,
+          amount,
+          remaining: amount - pool,
+        })
+        pool = 0
+      }
+      return result
     }
   )
 

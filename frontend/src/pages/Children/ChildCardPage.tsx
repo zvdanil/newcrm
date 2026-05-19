@@ -2,7 +2,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { childrenApi } from '../../api/children.api'
-import type { IndividualTariff, IndTariffType } from '../../api/children.api'
+import type { IndividualTariff, IndTariffType, OpenAccrual } from '../../api/children.api'
+import type { FamilyMember, FamilySibling, Child } from '../../types'
 import { groupsApi } from '../../api/groups.api'
 import { familiesApi } from '../../api/families.api'
 import { activitiesApi } from '../../api/activities.api'
@@ -239,6 +240,9 @@ export function ChildCardPage() {
           </div>
         )}
       </div>
+
+      {/* Family */}
+      {child.family_id && <FamilyBlock child={child} />}
 
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} />}
@@ -864,6 +868,22 @@ function currentYM() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
+const UA_MONTHS = ['Січ', 'Лют', 'Бер', 'Квіт', 'Трав', 'Черв', 'Лип', 'Серп', 'Вер', 'Жовт', 'Лист', 'Груд']
+
+function formatBillingMonth(iso: string): string {
+  const [y, m] = iso.slice(0, 7).split('-')
+  return `${UA_MONTHS[Number(m) - 1]} ${y}`
+}
+
+function computePreview(amount: number, accruals: OpenAccrual[]) {
+  let pool = amount
+  return accruals.map((acc) => {
+    const cover = Math.min(pool, acc.remaining)
+    pool = Math.max(0, pool - acc.remaining)
+    return { ...acc, willCover: cover }
+  })
+}
+
 function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean }) {
   const qc = useQueryClient()
   const [ym, setYm] = useState(currentYM())
@@ -905,6 +925,13 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     queryKey: ['imbalances', childId],
     queryFn: () => billingApi.getImbalances(childId),
     enabled: canEdit,
+  })
+
+  const { data: openAccruals = [] } = useQuery({
+    queryKey: ['open-accruals', childId, payForm.account_id],
+    queryFn: () => childrenApi.getOpenAccruals(childId, payForm.account_id),
+    enabled: showPayForm && !!payForm.account_id,
+    staleTime: 0,
   })
 
   const initMutation = useMutation({
@@ -1125,6 +1152,43 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
             </div>
           </div>
+
+          {/* Payment preview */}
+          {payForm.account_id && Number(payForm.amount) > 0 && openAccruals.length > 0 && (() => {
+            const preview = computePreview(Number(payForm.amount), openAccruals)
+            const totalDebt = openAccruals.reduce((s, a) => s + a.remaining, 0)
+            const remainder = Math.max(0, Number(payForm.amount) - totalDebt)
+            return (
+              <div className="text-xs space-y-1.5">
+                <p className="text-gray-500 font-medium">Буде погашено:</p>
+                <div className="bg-white rounded border border-gray-200 divide-y divide-gray-100">
+                  {preview.map((acc) => {
+                    const full = acc.willCover >= acc.remaining
+                    const partial = acc.willCover > 0 && !full
+                    return (
+                      <div key={acc.id} className="flex items-center justify-between px-3 py-1.5 gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={full ? 'text-green-500' : partial ? 'text-amber-500' : 'text-gray-300'}>
+                            {full ? '✓' : partial ? '◑' : '○'}
+                          </span>
+                          <span className="truncate text-gray-700">
+                            {acc.activity_name ?? 'Нарахування'}
+                            {acc.billing_month && ` · ${formatBillingMonth(acc.billing_month)}`}
+                          </span>
+                        </div>
+                        <div className="shrink-0 font-mono text-gray-600">
+                          {acc.willCover > 0 ? acc.willCover.toFixed(2) : '—'} / {acc.remaining.toFixed(2)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {remainder > 0.005 && (
+                  <p className="text-gray-400">Залишок авансу: <span className="font-mono text-green-600">+{remainder.toFixed(2)} грн</span></p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Cross-account toggle */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -1513,6 +1577,53 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
       {clearError && (
         <p className="text-xs text-red-600 mt-2">{clearError}</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Family Block ────────────────────────────────────────────────────────────
+
+function FamilyBlock({ child }: { child: Child }) {
+  const members: FamilyMember[] = child.family_members ?? []
+  const siblings: FamilySibling[] = child.family_siblings ?? []
+
+  if (members.length === 0 && siblings.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 className="font-medium text-gray-900">Сімʼя</h2>
+
+      {members.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Батьки</p>
+          {members.map((m) => (
+            <div key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-sm">
+              <span className="font-medium text-gray-900">{m.full_name}</span>
+              {m.phone && <span className="text-gray-500">{m.phone}</span>}
+              {m.email && <span className="text-gray-400">{m.email}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {siblings.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Брати / Сестри</p>
+          {siblings.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 text-sm">
+              <Link to={`/children/${s.id}`} className="font-medium text-iris-600 hover:text-iris-700 transition-colors">
+                {s.full_name}
+              </Link>
+              {s.group_name && <span className="text-gray-500">{s.group_name}</span>}
+              <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                s.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {s.is_active ? 'Активна' : 'Архів'}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
