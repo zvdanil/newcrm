@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
-import { getEffectivePrice } from '../services/billingRunService.js'
-import { createTransaction } from '../services/balanceService.js'
+import { getEffectivePrice, recalcActivityAccruals } from '../services/billingRunService.js'
+import { createTransaction, recalcBalance } from '../services/balanceService.js'
 
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments
@@ -56,7 +56,9 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         .returningAll()
         .executeTakeFirstOrThrow()
 
-      // Pro-rata ACCRUAL for mid-month enrollment (monthly tariff only)
+      // Accrual generation for monthly tariff:
+      // 1. Retroactive billing for all full months from start_date month through current month
+      // 2. Pro-rata for mid-month start in CURRENT month only
       const activity = await db
         .selectFrom('activities')
         .select('tariff_type')
@@ -65,19 +67,33 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
 
       if (activity?.tariff_type === 'monthly') {
         const d = new Date(start_date)
+        const createdBy = (req as { user?: { sub?: string } }).user?.sub ?? null
+        const now = new Date()
+        const startMonthStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+        const currentMonthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
+
+        // Retroactive + current-month billing (recalcActivityAccruals skips months where start_date > 1st)
+        if (startMonthStr <= currentMonthStr) {
+          await recalcActivityAccruals(
+            activity_id,
+            new Date(startMonthStr),
+            new Date(currentMonthStr),
+            createdBy,
+            child_id,
+          )
+        }
+
+        // Pro-rata for mid-month start in CURRENT MONTH only
+        // (recalcActivityAccruals skips the current month when start_date > 1st — no double-billing)
         const dayOfMonth = d.getUTCDate()
-        if (dayOfMonth > 1) {
+        if (dayOfMonth > 1 && startMonthStr === currentMonthStr) {
           const year = d.getUTCFullYear()
           const month = d.getUTCMonth()
           const daysInMonth = new Date(year, month + 1, 0).getDate()
           const daysRemaining = daysInMonth - dayOfMonth + 1
-          const billingMonthStr = `${year}-${String(month + 1).padStart(2, '0')}-01`
-          const billingDate = new Date(billingMonthStr)
-
-          const price = await getEffectivePrice(child_id, activity_id, billingDate)
+          const price = await getEffectivePrice(child_id, activity_id, new Date(startMonthStr))
           if (price && price > 0) {
             const proRata = Math.round((price / daysInMonth) * daysRemaining * 100) / 100
-            const createdBy = (req as { user?: { sub?: string } }).user?.sub ?? null
             await createTransaction({
               type: 'ACCRUAL',
               child_id,
@@ -86,8 +102,8 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
               enrollment_id: enrollment.id,
               amount: proRata,
               transaction_date: start_date,
-              billing_month: billingMonthStr,
-              note: `Нарахування за ${billingMonthStr.slice(0, 7)} (про-рата ${daysRemaining}/${daysInMonth} дн.)`,
+              billing_month: startMonthStr,
+              note: `Нарахування за ${startMonthStr.slice(0, 7)} (про-рата ${daysRemaining}/${daysInMonth} дн.)`,
               metadata_json: {
                 pro_rata: true,
                 days_remaining: daysRemaining,
@@ -156,17 +172,84 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
   )
 
   // POST /api/enrollments/:id/archive
-  app.post<{ Params: { id: string } }>(
+  app.post<{
+    Params: { id: string }
+    Body: { end_date?: string; cancel_month_accruals?: boolean }
+  }>(
     '/enrollments/:id/archive',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
+      const endDate = req.body?.end_date ?? new Date().toISOString().slice(0, 10)
+
       const updated = await db.updateTable('enrollments')
-        .set({ status: 'archived', end_date: new Date().toISOString().slice(0, 10) })
+        .set({ status: 'archived', end_date: endDate })
         .where('id', '=', req.params.id)
         .where('status', '!=', 'archived')
         .returningAll()
         .executeTakeFirst()
       if (!updated) return reply.status(409).send({ error: 'Conflict', message: 'Підписка вже в архіві або не знайдена' })
+
+      // Close individual prices from end_date so new subscription starts fresh with base tariff
+      await db.updateTable('child_prices')
+        .set({ valid_to: endDate })
+        .where('child_id', '=', updated.child_id)
+        .where('activity_id', '=', updated.activity_id)
+        .where('valid_to', 'is', null)
+        .execute()
+
+      await db.updateTable('child_individual_tariffs')
+        .set({ valid_to: endDate })
+        .where('child_id', '=', updated.child_id)
+        .where('activity_id', '=', updated.activity_id)
+        .where('valid_to', 'is', null)
+        .execute()
+
+      const activity = await db
+        .selectFrom('activities')
+        .select('tariff_type')
+        .where('id', '=', updated.activity_id)
+        .executeTakeFirst()
+
+      // For per_lesson: reverse ACCRUALs generated after end_date (marks entered beyond unsubscribe date)
+      if (activity?.tariff_type === 'per_lesson') {
+        await db.updateTable('transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: (req as { user?: { sub?: string } }).user?.sub ?? null })
+          .where('enrollment_id', '=', updated.id)
+          .where('type', '=', 'ACCRUAL')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>', new Date(endDate))
+          .execute()
+        await recalcBalance(updated.child_id, updated.account_id)
+      }
+
+      // Optional: cancel ACCRUAL+ADJUSTMENT for billing months on/after end_date month
+      if (req.body?.cancel_month_accruals) {
+        const firstOfEndMonth = endDate.slice(0, 7) + '-01'
+        const deletedBy = (req as { user?: { sub?: string } }).user?.sub ?? null
+        const softDel = { is_deleted: true as const, deleted_at: new Date().toISOString(), deleted_by: deletedBy }
+
+        // Monthly/smart: cancel by billing_month
+        await db.updateTable('transactions')
+          .set(softDel)
+          .where('enrollment_id', '=', updated.id)
+          .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+          .where('is_deleted', '=', false)
+          .where('billing_month', '>=', new Date(firstOfEndMonth))
+          .execute()
+
+        // Per_lesson (billing_month IS NULL): cancel by transaction_date
+        await db.updateTable('transactions')
+          .set(softDel)
+          .where('enrollment_id', '=', updated.id)
+          .where('type', '=', 'ACCRUAL')
+          .where('is_deleted', '=', false)
+          .where('billing_month', 'is', null)
+          .where('transaction_date', '>', new Date(endDate))
+          .execute()
+
+        await recalcBalance(updated.child_id, updated.account_id)
+      }
+
       return updated
     }
   )

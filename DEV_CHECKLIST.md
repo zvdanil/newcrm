@@ -403,6 +403,72 @@
 
 ---
 
+---
+
+## UX-УЛУЧШЕНИЯ — СЕССИЯ 2026-05-20
+
+> Набор точечных улучшений UX и новый отчёт. Не меняют архитектуру, расширяют существующие модули.
+
+### Блок «Сімʼя» в картці дитини (расширение Этапа 1)
+
+**База данных**
+- [x] Миграция `027_family_member_role.sql` — добавлена колонка `role VARCHAR(50)` в `family_members`
+- [x] Тип `FamilyMembersTable` в `backend/src/db/types.ts` — добавлено поле `role: string | null`
+
+**Бэкенд**
+- [x] `GET /api/children/:id` — расширен: возвращает `family_members[]` (id, full_name, phone, email, edrpou, iban, role) и `family_siblings[]` (id, full_name, group_name, is_active) через параллельные запросы
+- [x] `PATCH /api/families/:id/members/:parentId` — новый эндпоинт: обновляет роль (`{ role: string | null }`) участника семьи
+
+**Фронтенд**
+- [x] Интерфейсы `FamilyMember`, `FamilySibling` добавлены в `frontend/src/types/index.ts`
+- [x] `familiesApi.updateMemberRole(familyId, parentId, role)` добавлен в `families.api.ts`
+- [x] `FamilyBlock` компонент в `ChildCardPage.tsx`:
+  - Список родителей с dropdown для выбора роли (Мама / Тато / —)
+  - Список братьев/сестёр как кликабельные ссылки (`/children/:id`)
+  - Показывается только если `family_id` не null и есть хотя бы один член / сиблинг
+- [x] View-режим карточки ребёнка: поля «Мама» / «Тато» заполняются из `family_members` по роли; fallback на «Відповідальний» / «Контакт» если роли не заданы
+- [x] Edit-режим: поле «Сімʼя» — рабочий `<select>` из всех семей (query с `enabled: editing`); возможность изменить / снять семью восстановлена
+- [x] Навигация: «Сімʼї» убрана из боковой панели (`AppLayout.tsx`); страницы `FamiliesListPage` и `FamilyCardPage` остались в роутинге
+
+### Деталізований попередній перегляд оплати (расширение Этапа 5)
+
+> ⚠️ **Изменение от плана:** Family Waterfall убран из карточки дитини. Оплаты — только индивидуальные (per child). Семейная страница больше не является основной точкой входа для оплат.
+
+**Бэкенд**
+- [x] `GET /api/children/:id/open-accruals?account_id=UUID` — новый эндпоинт: FIFO-матч платежей к начислениям, возвращает только ACCRUAL с `remaining > 0` (поля: id, transaction_date, billing_month, activity_name, amount, remaining)
+
+**Фронтенд**
+- [x] `OpenAccrual` интерфейс и `getOpenAccruals(childId, accountId)` добавлены в `children.api.ts`
+- [x] В `BalancesBlock` (`ChildCardPage.tsx`): при открытии формы оплаты с выбранным `account_id` — автоматически загружаются open-accruals
+- [x] Preview-таблица «Буде погашено» под полем суммы: ✓ погашено полностью (зелёный), ◑ частично (жёлтый), ○ не достигнуто (серый)
+- [x] Показывается «Залишок авансу» если сумма платежа превышает суммарный долг
+- [x] `computePreview()` helper: локально применяет введённую сумму к open-accruals
+- [x] `formatBillingMonth()` helper: форматирует billing_month как «Місяць РРРР» (украинские названия)
+
+### Звіт «Дебіторська заборгованість» (новый модуль Отчётов)
+
+**Бэкенд**
+- [x] `backend/src/routes/reports.ts` — новый файл:
+  - `GET /api/reports/accounts-receivable` с фильтрами: `from_month`, `to_month`, `account_ids` (comma-separated), `is_active`, `min_debt`, `sort`
+  - Запрос: `child_balances WHERE balance < 0`, JOIN с children / accounts / families / parents
+  - Фильтр периода: inner join с подзапросом ACCRUAL, отфильтрованным по `billing_month` (fallback на `transaction_date` для per_lesson)
+  - Возвращает: `{ rows[], total_debt, children_count }`
+  - `LIMIT 500`; сортировка по долгу (asc/desc), затем по имени
+- [x] Зарегистрирован в `server.ts`: `await app.register(reportsRoutes, { prefix: '/api/reports' })`
+
+**Фронтенд**
+- [x] `frontend/src/api/reports.api.ts` — новый файл: интерфейсы `DebtorRow`, `ARReport`, `ARFilters`; функция `reportsApi.getAccountsReceivable(filters)`
+- [x] `frontend/src/pages/Reports/ReportsPage.tsx` — новый компонент:
+  - Фильтры: период (два `input type="month"`), рахунок (pill-checkbox), статус (radio), мін. борг, сортування
+  - Отчёт формируется только по кнопке (не при открытии страницы)
+  - Итоговая строка: кол-во детей, общий долг, разбивка по рахункам
+  - Таблица: ФІО (ссылка) | Сімʼя | Рахунок (badge) | Борг (красный, mono) | Контакт
+  - CSV-экспорт с UTF-8 BOM (корректно открывается в Excel)
+  - Исправление layout (2026-05-20): 4-колоночная сетка с `min-w-0` на ячейках; min_debt и sort — вертикально
+- [x] `App.tsx`: импортирован и подключён `<ReportsPage />` на маршруте `/reports`
+
+---
+
 ## ЭТАП 9 — Личный кабинет родителя
 **Статус:** `[ ] Не начат`
 

@@ -309,6 +309,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
   const [discountError, setDiscountError]   = useState<string | null>(null)
   const [enrollForm, setEnrollForm]   = useState({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
   const [enrollError, setEnrollError] = useState<string | null>(null)
+  const [archiveState, setArchiveState] = useState<{ enrollmentId: string; date: string; cancelAccruals: boolean } | null>(null)
 
   const { data: enrollments = [], isLoading } = useQuery({
     queryKey: ['enrollments', childId],
@@ -365,8 +366,14 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
   })
   const archiveMutation = useMutation({
-    mutationFn: enrollmentsApi.archive,
-    onSuccess:  () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
+    mutationFn: ({ id, endDate, cancelAccruals }: { id: string; endDate: string; cancelAccruals: boolean }) =>
+      enrollmentsApi.archive(id, { end_date: endDate, cancel_month_accruals: cancelAccruals }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['enrollments', childId] })
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      setArchiveState(null)
+    },
   })
 
   const setTariffMutation = useMutation({
@@ -702,7 +709,35 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                             {e.status === 'frozen' && (
                               <button onClick={() => unfreezeMutation.mutate(e.id)} className="hover:text-green-600 transition-colors">розморозити</button>
                             )}
-                            <button onClick={() => archiveMutation.mutate(e.id)} className="hover:text-red-600 transition-colors">архів</button>
+                            {archiveState?.enrollmentId === e.id ? (
+                              <span className="flex items-center gap-2 flex-wrap">
+                                <input
+                                  type="date"
+                                  value={archiveState.date}
+                                  onChange={(ev) => setArchiveState({ ...archiveState, date: ev.target.value })}
+                                  className="border rounded px-1 py-0.5 text-xs text-gray-700"
+                                />
+                                <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={archiveState.cancelAccruals}
+                                    onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked })}
+                                  />
+                                  скасувати нарахування
+                                </label>
+                                <button
+                                  onClick={() => archiveMutation.mutate({ id: e.id, endDate: archiveState.date, cancelAccruals: archiveState.cancelAccruals })}
+                                  disabled={archiveMutation.isPending}
+                                  className="text-red-600 hover:text-red-800 font-medium transition-colors">
+                                  підтвердити
+                                </button>
+                                <button onClick={() => setArchiveState(null)} className="hover:text-gray-600 transition-colors">скасувати</button>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => setArchiveState({ enrollmentId: e.id, date: TODAY, cancelAccruals: false })}
+                                className="hover:text-red-600 transition-colors">архів</button>
+                            )}
                           </>
                         )}
                       </div>

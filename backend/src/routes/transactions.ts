@@ -81,6 +81,15 @@ export async function transactionsRoutes(app: FastifyInstance) {
             .where('transaction_date', '<=', new Date(monthLastDay))
             .execute()
 
+          // Soft-delete ADJUSTMENT transactions for same enrollment+billing_month
+          await db.updateTable('transactions')
+            .set(softDel)
+            .where('enrollment_id', '=', tx.enrollment_id)
+            .where('billing_month', '=', billingDate)
+            .where('type', '=', 'ADJUSTMENT')
+            .where('is_deleted', '=', false)
+            .execute()
+
           // Delete absent_excused attendance marks for this enrollment in this billing month
           await db.deleteFrom('attendance_logs')
             .where('enrollment_id', '=', tx.enrollment_id)
