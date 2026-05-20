@@ -35,6 +35,7 @@ import { runSmartAccruals } from './services/smartTariffService.js'
 import { runFixedMonthlyAccruals, runSmartStaffAccruals } from './services/salaryService.js'
 
 const app = Fastify({
+  trustProxy: true,
   logger: isProd
     ? true
     : { transport: { target: 'pino-pretty', options: { colorize: true } } },

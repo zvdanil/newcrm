@@ -81,7 +81,7 @@ export async function usersRoutes(app: FastifyInstance) {
         expires_at: expiresAt,
       }).execute()
 
-      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+      const frontendUrl = process.env.FRONTEND_URL ?? `${req.protocol}://${req.hostname}`
       return { inviteUrl: `${frontendUrl}/invite/${token}` }
     }
   )
@@ -187,7 +187,7 @@ export async function usersRoutes(app: FastifyInstance) {
         expires_at: expiresAt,
       }).execute()
 
-      const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+      const frontendUrl = process.env.FRONTEND_URL ?? `${req.protocol}://${req.hostname}`
       return { resetUrl: `${frontendUrl}/reset/${token}` }
     }
   )
