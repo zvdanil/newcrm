@@ -23,7 +23,7 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
           'a.id as activity_id', 'a.name as activity_name',
           'a.tariff_type', 'a.is_rigid',
           'ac.id as account_id', 'ac.name as account_name',
-          't.base_fee',
+          't.base_fee', 't.valid_from as tariff_valid_from',
         ])
         .where('e.child_id', '=', req.params.childId)
         .orderBy('e.status', 'asc')

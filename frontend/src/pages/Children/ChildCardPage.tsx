@@ -338,6 +338,13 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
     enabled:  showForm,
   })
 
+  const { data: priceCheck } = useQuery({
+    queryKey: ['price-check', childId, enrollForm.activity_id, enrollForm.start_date],
+    queryFn:  () => enrollmentsApi.resolvePrice(childId, enrollForm.activity_id, enrollForm.start_date),
+    enabled:  showForm && !!enrollForm.activity_id && !!enrollForm.start_date,
+    staleTime: 30_000,
+  })
+
   // Active individual tariff by activity_id
   const indTariffByActivity = individualTariffs.reduce<Record<string, IndividualTariff>>((acc, t) => {
     if (t.valid_to === null) acc[t.activity_id] = t
@@ -521,6 +528,15 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
             <input type="date" value={enrollForm.start_date} onChange={(e) => setEnrollForm({ ...enrollForm, start_date: e.target.value })}
               className="rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
           </div>
+          {priceCheck && priceCheck.rule === 'base_fee' && priceCheck.detail === null && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <span className="shrink-0 mt-0.5">⚠</span>
+              <span>
+                На вказану дату тариф для цієї активності не визначено.
+                Нарахування за цей період створені не будуть.
+              </span>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Нотатка</label>
             <input type="text" value={enrollForm.note} onChange={(e) => setEnrollForm({ ...enrollForm, note: e.target.value })}
@@ -671,7 +687,14 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                   /* Normal row */
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{e.activity_name}</p>
+                      <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                        {e.activity_name}
+                        {e.tariff_valid_from && e.start_date < e.tariff_valid_from && (
+                          <span
+                            title={`Тариф діє з ${new Date(e.tariff_valid_from).toLocaleDateString('uk-UA')}. Нарахування до цієї дати відсутні.`}
+                            className="text-amber-500 cursor-help text-xs">⚠</span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
                         <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
                         {indTariff ? (
@@ -1042,6 +1065,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     },
   })
 
+  const [filterAccountId, setFilterAccountId] = useState('')
   const [clearError, setClearError] = useState<string | null>(null)
   const clearMonthMutation = useMutation({
     mutationFn: ({ activityId, billingMonth, isPerLesson, reason }: { activityId: string; billingMonth: string; isPerLesson: boolean; reason?: string }) =>
@@ -1341,8 +1365,22 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
           </button>
           <span className="text-sm font-medium text-gray-700 capitalize">{monthLabel(ym)}</span>
           <div className="flex items-center gap-2">
+            {showAudit && (() => {
+              const txAccounts = [...new Map((ledger?.data ?? []).map((tx) => [tx.account_id, tx.account_name])).entries()]
+              if (txAccounts.length < 2) return null
+              return (
+                <select
+                  value={filterAccountId}
+                  onChange={(e) => setFilterAccountId(e.target.value)}
+                  className="text-xs border border-gray-200 rounded px-1.5 py-0.5 text-gray-600 bg-white focus:outline-none focus:border-iris-400"
+                >
+                  <option value="">Усі рахунки</option>
+                  {txAccounts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                </select>
+              )
+            })()}
             <button
-              onClick={() => setShowAudit((v) => !v)}
+              onClick={() => { setShowAudit((v) => !v); setFilterAccountId('') }}
               className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                 showAudit
                   ? 'border-amber-400 bg-amber-50 text-amber-700'
@@ -1364,7 +1402,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
         ) : showAudit ? (
           /* ── Audit view: flat list of all transactions ── */
           <AuditView
-            entries={ledger?.data ?? []}
+            entries={(ledger?.data ?? []).filter((tx) => !filterAccountId || tx.account_id === filterAccountId)}
             canEdit={canEdit}
             onCancel={(tx) => {
               if (tx.type === 'PAYMENT') {

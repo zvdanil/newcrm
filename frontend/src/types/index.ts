@@ -143,6 +143,7 @@ export interface Enrollment {
   frozen_from: string | null
   frozen_to: string | null
   base_fee: string | null
+  tariff_valid_from: string | null
   note: string | null
   created_at: string
 }
