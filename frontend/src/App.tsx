@@ -25,6 +25,9 @@ import { SalaryJournalPage } from './pages/Salary/SalaryJournalPage'
 import { CalendarPage } from './pages/Calendar/CalendarPage'
 import { DividendsPage } from './pages/Dividends/DividendsPage'
 import { ReportsPage } from './pages/Reports/ReportsPage'
+import UsersPage from './pages/Users/UsersPage'
+import AcceptInvitePage from './pages/Invite/AcceptInvitePage'
+import ResetPasswordPage from './pages/Invite/ResetPasswordPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,7 +41,9 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/invite/:token"  element={<AcceptInvitePage />} />
+          <Route path="/reset/:token"   element={<ResetPasswordPage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
@@ -87,6 +92,7 @@ export function App() {
               <Route path="dividends" element={<DividendsPage />} />
 
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="users"   element={<UsersPage />} />
             </Route>
           </Route>
 

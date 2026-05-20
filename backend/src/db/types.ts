@@ -7,9 +7,28 @@ export interface UsersTable {
   email: string
   password_hash: string
   role: UserRole
+  name: string | null
+  staff_id: string | null
+  parent_id: string | null
   is_active: Generated<boolean>
   created_at: Generated<Date>
   updated_at: Generated<Date>
+}
+
+export type InviteType = 'invite' | 'reset'
+
+export interface UserInvitesTable {
+  id: Generated<string>
+  token: string
+  email: string | null
+  role: UserRole | null
+  staff_id: string | null
+  parent_id: string | null
+  invited_by: string
+  type: InviteType
+  expires_at: ColumnType<Date, string, string>
+  used_at: ColumnType<Date | null, string | null, string | null>
+  created_at: Generated<Date>
 }
 
 export interface GroupsTable {
@@ -479,7 +498,7 @@ export interface Database {
   dividend_settings:          DividendSettingsTable
   dividend_payouts:           DividendPayoutsTable
   expense_edits:              ExpenseEditsTable
-
+  user_invites:               UserInvitesTable
 }
 
 export interface EquityParticipantsTable {

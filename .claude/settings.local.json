@@ -7,7 +7,28 @@
       "Bash(npx tsc *)",
       "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"ChildCardPage|children\\\\.api|AppLayout|types/index\" })",
       "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $out = npx tsc --noEmit 2>&1; $out | Where-Object { $_ -match \"ChildCard|children\\\\.api|AppLayout\" } | Out-String)",
-      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Out-String | Select-String -Pattern \"ChildCard|children\\\\.api|AppLayout\" -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value })"
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Out-String | Select-String -Pattern \"ChildCard|children\\\\.api|AppLayout\" -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value })",
+      "Bash(xargs grep -l \"auth\\\\|user\\\\|login\\\\|jwt\\\\|password\" -i)",
+      "Bash(ls \"C:\\\\Users\\\\User\\\\.claude\" 2>/dev/null || echo \"NOT FOUND\")",
+      "Read(//c/Users/User/.claude/**)",
+      "Bash(python3 -c \"import pathlib; p = pathlib.Path\\('C:/Users/User/.claude/plans/user-admin-module.md'\\); p.write_text\\('test', encoding='utf-8'\\); print\\(p.read_text\\(\\)\\)\")",
+      "Bash(ls /mnt/c/Users/User/.claude/plans/ 2>/dev/null || echo \"no wsl mount\")",
+      "Read(//mnt/c/Users/User/.claude/**)",
+      "Bash(echo \"test line\" > \"C:/Users/User/.claude/plans/user-admin-module.md\" && echo \"WRITE OK\" || echo \"WRITE FAILED\")",
+      "Bash(PLAN=\"C:/Users/User/.claude/plans/user-admin-module.md\" *)",
+      "Bash(printf '%s\\\\n' '## 4. Backend — маршрути API' '')",
+      "Bash(printf '%s\\\\n' '### 4.1 Файл: backend/src/routes/users.ts \\(новий\\)' '')",
+      "Bash(printf '%s\\\\n' 'Реалізує всі захищені маршрути `/api/users/*`. Імпорти на початку файлу:' '')",
+      "Bash(printf '%s\\\\n' '```typescript')",
+      "Bash(printf '%s\\\\n' \"import type { FastifyInstance } from 'fastify'\")",
+      "Bash(cat)",
+      "Bash(cat /tmp/sec10.md)",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"Users|Invite|users\\\\.api|AcceptInvite|ResetPassword\" })",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $out = npx tsc --noEmit 2>&1; $out -join \"`n\" | Out-String | Select-String -Pattern \"Users|Invite|users\\\\.api\" -AllMatches | ForEach-Object { $_.Matches } | Select-Object -First 5)",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $result = & npx tsc --noEmit 2>&1; $result | ForEach-Object { if \\($_ -match \"Users|Invite|users\\\\.api|AcceptInvite|Reset\"\\) { $_ } } | Select-Object -First 15)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\User\\.claude\\plans"
     ]
   }
 }

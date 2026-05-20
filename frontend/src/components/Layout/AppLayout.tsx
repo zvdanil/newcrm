@@ -19,6 +19,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const canManageGroups = useCanAccess('owner', 'admin')
+  const canManageUsers  = useCanAccess('owner', 'admin')
   const isOwner = useCanAccess('owner')
 
   // When embedded in an iframe (e.g. opened from calendar modal), hide navigation
@@ -76,6 +77,20 @@ export function AppLayout() {
                   }
                 >
                   Групи
+                </NavLink>
+              )}
+              {canManageUsers && (
+                <NavLink
+                  to="/users"
+                  className={({ isActive }) =>
+                    `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-iris-50 text-iris-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`
+                  }
+                >
+                  Користувачі
                 </NavLink>
               )}
               {isOwner && (
