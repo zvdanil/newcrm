@@ -705,14 +705,17 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
   // 1. Находим все уникальные даты, где есть активность (логи)
   let dates: Date[] = []
 
+  const fromStr = fromDate.toISOString().slice(0, 10)
+  const toStr   = toDate.toISOString().slice(0, 10)
+
   if (activityId) {
     const attendanceDates = await db
       .selectFrom('attendance_logs')
       .select('date')
       .distinct()
       .where('activity_id', '=', activityId)
-      .where('date', '>=', fromDate)
-      .where('date', '<=', toDate)
+      .where('date', '>=', sql<Date>`CAST(${fromStr} AS DATE)`)
+      .where('date', '<=', sql<Date>`CAST(${toStr} AS DATE)`)
       .execute()
 
     const groupDates = await db
@@ -720,8 +723,8 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
       .select('date')
       .distinct()
       .where('activity_id', '=', activityId)
-      .where('date', '>=', fromDate)
-      .where('date', '<=', toDate)
+      .where('date', '>=', sql<Date>`CAST(${fromStr} AS DATE)`)
+      .where('date', '<=', sql<Date>`CAST(${toStr} AS DATE)`)
       .execute()
 
     const allDates = [...attendanceDates, ...groupDates].map(d => new Date(d.date).toISOString().slice(0, 10))

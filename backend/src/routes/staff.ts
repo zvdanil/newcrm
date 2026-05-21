@@ -232,9 +232,9 @@ export async function staffRoutes(app: FastifyInstance) {
         }
       }
 
-      // Если ставка создана в прошлом, также создаем недостающие начисления
-      if (fromDateObj < todayObj) {
-        await triggerRetroAccruals(req.params.id, activity_id ?? null, fromDateObj, todayObj)
+      // Recalc all marks from valid_from through today (inclusive — string comparison avoids tz skew)
+      if (fromDate <= today) {
+        await triggerRetroAccruals(req.params.id, activity_id ?? null, fromDateObj, new Date(today))
       }
 
       return reply.status(201).send(rate)

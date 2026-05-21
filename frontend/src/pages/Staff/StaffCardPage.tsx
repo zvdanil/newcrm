@@ -893,27 +893,30 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const summary = data?.summary ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 }
   const days    = daysInMonth(month)
 
-  // Build grid: rows = unique activities, cols = days
+  // Build grid: rows = unique (activity × rate_type), cols = days
   const activities = useMemo(() => {
     const seen = new Map<string, string>()
     seen.set('', 'Загальне')
     for (const tx of txs) {
       if (tx.type === 'PAYMENT') continue
-      const key = tx.activity_id ?? ''
-      if (!seen.has(key)) seen.set(key, tx.activity_name ?? 'Невідома')
+      const rowKey = `${tx.activity_id ?? ''}::${tx.rate_type ?? ''}`
+      if (!seen.has(rowKey)) {
+        const typeSuffix = tx.rate_type ? ` · ${RATE_TYPE_LABELS[tx.rate_type]}` : ''
+        seen.set(rowKey, (tx.activity_name ?? 'Невідома') + typeSuffix)
+      }
     }
-    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
+    return Array.from(seen.entries()).map(([key, name]) => ({ key, name }))
   }, [txs])
 
-  // Map: activityId → day → transactions[]
+  // Map: activityId::rateType → day → transactions[]
   const grid = useMemo(() => {
     const map = new Map<string, Map<number, SalaryTransaction[]>>()
     for (const tx of txs) {
       if (tx.type === 'PAYMENT') continue
-      const actKey = tx.activity_id ?? ''
-      if (!map.has(actKey)) map.set(actKey, new Map())
+      const rowKey = `${tx.activity_id ?? ''}::${tx.rate_type ?? ''}`
+      if (!map.has(rowKey)) map.set(rowKey, new Map())
       const day = new Date(tx.transaction_date).getUTCDate()
-      const dayMap = map.get(actKey)!
+      const dayMap = map.get(rowKey)!
       if (!dayMap.has(day)) dayMap.set(day, [])
       dayMap.get(day)!.push(tx)
     }
@@ -1004,11 +1007,11 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {activities.map(({ id: actId, name: actName }) => {
-                  const dayMap = grid.get(actId) ?? new Map<number, SalaryTransaction[]>()
+                {activities.map(({ key: rowKey, name: actName }) => {
+                  const dayMap = grid.get(rowKey) ?? new Map<number, SalaryTransaction[]>()
                   let rowTotal = 0
                   return (
-                    <tr key={actId} className="hover:bg-gray-50">
+                    <tr key={rowKey} className="hover:bg-gray-50">
                       <td className="px-2 py-1.5 text-gray-700 font-medium whitespace-nowrap">{actName}</td>
                       {Array.from({ length: days }, (_, i) => i + 1).map(d => {
                         const cellTxs = dayMap.get(d) ?? []
