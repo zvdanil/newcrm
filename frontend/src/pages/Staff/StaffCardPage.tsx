@@ -873,6 +873,8 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
             <input type="number" min="0" step="0.01" placeholder="0.00"
               value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+              autoFocus
+              onFocus={e => e.target.select()}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
             {computedGross !== null && (
               <p className="text-xs text-gray-500 mt-0.5">= {computedGross.toFixed(2)} грн</p>
@@ -886,6 +888,8 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
             <input type="number" min="0" step="0.01" placeholder="0"
               value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+              autoFocus
+              onFocus={e => e.target.select()}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
             {computedGross !== null && (
               <p className="text-xs text-gray-500 mt-0.5">= {computedGross.toFixed(2)} грн</p>
@@ -897,6 +901,8 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
             <input type="number" min="0" step="0.01" placeholder="0.00"
               value={form.gross_amount}
               onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+              autoFocus
+              onFocus={e => e.target.select()}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
           </div>
         )}
