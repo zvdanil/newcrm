@@ -39,6 +39,7 @@ export interface StaffRate {
   attendance_threshold: number | null
   starter_rate:         string | null
   extra_lesson_price:   string | null
+  trial_lesson_price:   string | null
 }
 
 export interface SalaryTransaction {

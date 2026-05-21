@@ -58,33 +58,57 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     threshold_rate:       Number(config.threshold_rate),
     base_lessons:         Number(config.base_lessons),
     extra_lesson_price:   Number(config.extra_lesson_price),
+    trial_lesson_price:   Number(config.trial_lesson_price),
   }
 
-  // Count present marks per child for this activity in billing month
-  const rows = await db
+  // Fetch all present/special marks per child, split by trial (custom_amount set) vs regular
+  const allMarks = await db
     .selectFrom('attendance_logs as al')
     .innerJoin('children as c', 'c.id', 'al.child_id')
-    .select(['al.child_id', 'c.full_name'])
-    .select((eb) => eb.fn.countAll<number>().as('visits'))
+    .select(['al.child_id', 'c.full_name', 'al.custom_amount'])
     .where('al.activity_id', '=', rate.activity_id!)
     .where('al.date', '>=', billingObj)
     .where('al.date', '<', nextMonth)
     .where('al.status', 'in', ['present', 'special'])
-    .groupBy(['al.child_id', 'c.full_name'])
     .execute()
 
+  // Group by child
+  const byChild = new Map<string, { name: string; trial: number; regular: number }>()
+  for (const m of allMarks) {
+    if (!byChild.has(m.child_id)) byChild.set(m.child_id, { name: m.full_name, trial: 0, regular: 0 })
+    const entry = byChild.get(m.child_id)!
+    if (m.custom_amount !== null) {
+      entry.trial++
+    } else {
+      entry.regular++
+    }
+  }
+
+  type ChildMode = 'trial' | 'regular'
   type ChildRange = 'none' | 'starter' | 'base' | 'extra'
 
-  const children = rows.map(r => {
-    const visits  = Number(r.visits)
-    const amount  = calcSmartPerChildAmount(visits, cfg)
+  const children = Array.from(byChild.entries()).map(([child_id, { name, trial, regular }]) => {
+    let mode: ChildMode
+    let amount: number
     let range: ChildRange = 'none'
-    if (visits === 0)                             range = 'none'
-    else if (visits < cfg.attendance_threshold)   range = 'starter'
-    else if (visits <= cfg.base_lessons)          range = 'base'
-    else                                          range = 'extra'
 
-    return { child_id: r.child_id, child_name: r.full_name, visits, range, amount }
+    if (trial >= cfg.attendance_threshold) {
+      // Converted to regular — three-tier formula on all visits
+      mode = 'regular'
+      const total = trial + regular
+      amount = calcSmartPerChildAmount(total, cfg)
+      if (total === 0)                             range = 'none'
+      else if (total < cfg.attendance_threshold)   range = 'starter'
+      else if (total <= cfg.base_lessons)          range = 'base'
+      else                                         range = 'extra'
+    } else {
+      // Still in trial mode — pay per trial visit only
+      mode = 'trial'
+      amount = Math.round(trial * cfg.trial_lesson_price * 100) / 100
+      range = trial > 0 ? 'starter' : 'none'
+    }
+
+    return { child_id, child_name: name, trial, regular, mode, range, amount }
   })
 
   const totalGross = Math.round(children.reduce((s, c) => s + c.amount, 0) * 100) / 100
@@ -99,10 +123,11 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .where('is_deleted',  '=', false)
     .executeTakeFirst()
 
-  // Build note summary
   const childLines = children
-    .filter(c => c.visits > 0)
-    .map(c => `${c.child_name}: ${c.visits} відв. → ${c.amount.toFixed(0)} грн`)
+    .filter(c => c.amount > 0)
+    .map(c => c.mode === 'trial'
+      ? `${c.child_name}: ${c.trial} проб. → ${c.amount.toFixed(0)} грн`
+      : `${c.child_name}: ${c.trial + c.regular} відв. → ${c.amount.toFixed(0)} грн`)
     .join('; ')
   const noteStr = `Смарт за дитину. ${childLines}`
 
@@ -114,7 +139,6 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
   }
 
   if (totalGross <= 0) {
-    // Remove existing accrual if any
     if (existingAccrual) {
       await db.updateTable('salary_transactions')
         .set({ is_deleted: true, deleted_at: now })
@@ -138,7 +162,6 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
       metadata_json:    meta,
     }).execute()
   } else if (Math.abs(Number(existingAccrual.gross_amount) - totalGross) > 0.001) {
-    // Update: soft-delete old, insert new
     await db.updateTable('salary_transactions')
       .set({ is_deleted: true, deleted_at: now })
       .where('id', '=', existingAccrual.id)

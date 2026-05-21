@@ -341,6 +341,7 @@ export interface StaffSmartConfigsTable {
   attendance_threshold: Generated<number>
   starter_rate:         ColumnType<string, number | string, number | string>
   extra_lesson_price:   ColumnType<string, number | string, number | string>
+  trial_lesson_price:   ColumnType<string, number | string, number | string>
   updated_at:           Generated<Date>
 }
 

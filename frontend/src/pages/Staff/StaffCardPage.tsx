@@ -166,6 +166,7 @@ function AddRateForm({ staffId, activities, onDone }: {
     threshold_rate:       '',
     base_lessons:         '8',
     extra_lesson_price:   '0',
+    trial_lesson_price:   '0',
   })
   const [error, setError] = useState<string | null>(null)
 
@@ -190,6 +191,7 @@ function AddRateForm({ staffId, activities, onDone }: {
         attendance_threshold: parseInt(smartPCConfig.attendance_threshold) || 5,
         starter_rate:         parseFloat(smartPCConfig.starter_rate),
         extra_lesson_price:   parseFloat(smartPCConfig.extra_lesson_price) || 0,
+        trial_lesson_price:   parseFloat(smartPCConfig.trial_lesson_price) || 0,
       } : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['staff-rates', staffId] }); onDone() },
@@ -359,11 +361,19 @@ function AddRateForm({ staffId, activities, onDone }: {
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <p className="text-xs text-gray-400 mt-0.5">Після базових занять</p>
             </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ціна за пробне заняття</label>
+              <input type="number" min="0" step="0.01" placeholder="0" value={smartPCConfig.trial_lesson_price}
+                onChange={e => setSmartPCConfig(s => ({ ...s, trial_lesson_price: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Відмітки з ручною ціною (&lt;{smartPCConfig.attendance_threshold||5} відв.)</p>
+            </div>
           </div>
           <p className="text-xs text-gray-400 bg-gray-50 rounded p-2">
-            Приклад: 1–{(parseInt(smartPCConfig.attendance_threshold)||5)-1} відв → {smartPCConfig.starter_rate||'Старт'} грн ·
-            {' '}{smartPCConfig.attendance_threshold||5}–{smartPCConfig.base_lessons||8} відв → {smartPCConfig.threshold_rate||'База'} грн ·
-            {' '}&gt;{smartPCConfig.base_lessons||8} відв → {smartPCConfig.threshold_rate||'База'} + N×{smartPCConfig.extra_lesson_price||0} грн
+            Пробний режим (&lt;{smartPCConfig.attendance_threshold||5} відм. з ціною): {smartPCConfig.trial_lesson_price||0} грн/відм. ·
+            {' '}Стандарт (≥{smartPCConfig.attendance_threshold||5}): 1–{(parseInt(smartPCConfig.attendance_threshold)||5)-1} відв → {smartPCConfig.starter_rate||'Старт'} грн ·
+            {' '}{smartPCConfig.attendance_threshold||5}–{smartPCConfig.base_lessons||8} → {smartPCConfig.threshold_rate||'База'} грн ·
+            {' '}&gt;{smartPCConfig.base_lessons||8} → {smartPCConfig.threshold_rate||'База'} + N×{smartPCConfig.extra_lesson_price||0} грн
           </p>
         </div>
       )}
@@ -412,12 +422,16 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
     const isActive = !rate.valid_to || new Date(rate.valid_to) >= new Date()
     const [editing, setEditing] = useState(false)
     const [editForm, setEditForm] = useState({
-      deduction_pct:    fmt(rate.deduction_pct),
-      valid_to:         rate.valid_to ? String(rate.valid_to).slice(0, 10) : '',
-      note:             rate.note ?? '',
-      base_lessons:     String(rate.base_lessons ?? ''),
-      absence_threshold: String(rate.absence_threshold ?? ''),
-      threshold_rate:   rate.threshold_rate ? fmt(rate.threshold_rate) : '',
+      deduction_pct:      fmt(rate.deduction_pct),
+      valid_to:           rate.valid_to ? String(rate.valid_to).slice(0, 10) : '',
+      note:               rate.note ?? '',
+      base_lessons:       String(rate.base_lessons ?? ''),
+      absence_threshold:  String(rate.absence_threshold ?? ''),
+      threshold_rate:     rate.threshold_rate ? fmt(rate.threshold_rate) : '',
+      attendance_threshold: String(rate.attendance_threshold ?? '5'),
+      starter_rate:       rate.starter_rate ? fmt(rate.starter_rate) : '',
+      extra_lesson_price: rate.extra_lesson_price ? fmt(rate.extra_lesson_price) : '0',
+      trial_lesson_price: rate.trial_lesson_price ? fmt(rate.trial_lesson_price) : '0',
     })
     const [editError, setEditError] = useState<string | null>(null)
 
@@ -433,6 +447,17 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
             base_lessons:      parseInt(editForm.base_lessons),
             absence_threshold: parseInt(editForm.absence_threshold),
             threshold_rate:    parseFloat(editForm.threshold_rate),
+          }
+        }
+        if (rate.rate_type === 'smart_per_child' && editForm.base_lessons) {
+          payload.smart_config = {
+            base_lessons:         parseInt(editForm.base_lessons),
+            absence_threshold:    0,
+            threshold_rate:       parseFloat(editForm.threshold_rate),
+            attendance_threshold: parseInt(editForm.attendance_threshold) || 5,
+            starter_rate:         parseFloat(editForm.starter_rate) || 0,
+            extra_lesson_price:   parseFloat(editForm.extra_lesson_price) || 0,
+            trial_lesson_price:   parseFloat(editForm.trial_lesson_price) || 0,
           }
         }
         return staffApi.updateRate(staffId, rate.id, payload)
@@ -499,6 +524,46 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
               </div>
             </div>
           )}
+          {rate.rate_type === 'smart_per_child' && (
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Ціна пробного заняття</label>
+                <input type="number" min="0" step="0.01" value={editForm.trial_lesson_price}
+                  onChange={e => setEditForm(f => ({ ...f, trial_lesson_price: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Мін. відвідувань (поріг)</label>
+                <input type="number" min="1" value={editForm.attendance_threshold}
+                  onChange={e => setEditForm(f => ({ ...f, attendance_threshold: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Стартова ставка</label>
+                <input type="number" min="0" step="0.01" value={editForm.starter_rate}
+                  onChange={e => setEditForm(f => ({ ...f, starter_rate: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Базова ставка</label>
+                <input type="number" min="0" step="0.01" value={editForm.threshold_rate}
+                  onChange={e => setEditForm(f => ({ ...f, threshold_rate: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Базових занять</label>
+                <input type="number" min="1" value={editForm.base_lessons}
+                  onChange={e => setEditForm(f => ({ ...f, base_lessons: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Ціна надпл. заняття</label>
+                <input type="number" min="0" step="0.01" value={editForm.extra_lesson_price}
+                  onChange={e => setEditForm(f => ({ ...f, extra_lesson_price: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+            </div>
+          )}
           {editError && <p className="text-xs text-red-600">{editError}</p>}
           <div className="flex gap-2">
             <button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}
@@ -549,7 +614,7 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
           )}
           {rate.rate_type === 'smart_per_child' && rate.base_lessons !== null && (
             <div className="mt-1 text-xs text-gray-400">
-              Старт: {fmt(rate.starter_rate ?? 0)} грн · Поріг: {rate.attendance_threshold} відв · База: {fmt(rate.threshold_rate ?? 0)} грн · Max: {rate.base_lessons} занять · Надпл: {fmt(rate.extra_lesson_price ?? 0)} грн/зан
+              Проб: {fmt(rate.trial_lesson_price ?? 0)} грн (&lt;{rate.attendance_threshold} відм.) · Старт: {fmt(rate.starter_rate ?? 0)} грн · Поріг: {rate.attendance_threshold} відв · База: {fmt(rate.threshold_rate ?? 0)} грн · Max: {rate.base_lessons} зан · Надпл: {fmt(rate.extra_lesson_price ?? 0)} грн/зан
             </div>
           )}
           {rate.note && <p className="text-xs text-gray-400 mt-0.5">{rate.note}</p>}
