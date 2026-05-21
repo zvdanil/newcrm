@@ -221,14 +221,15 @@ export function AccrualGroupPopup({ txs, onClose, onSelectTx }: {
 
 // ── Single transaction popup ───────────────────────────────────────────────
 
-export function TxPopup({ tx, staffId, onClose, invalidateKeys }: {
+export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false }: {
   tx:             SalaryTransaction
   staffId:        string
   onClose:        () => void
   invalidateKeys?: string[][]
+  autoEdit?:       boolean
 }) {
   const qc = useQueryClient()
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(autoEdit)
   const [form, setForm] = useState({
     gross_amount:  fmt(tx.gross_amount),
     deduction_pct: fmt(tx.deduction_pct),
@@ -330,6 +331,8 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys }: {
                 <label className="block text-xs text-gray-600 mb-1">Сума (gross)</label>
                 <input type="number" min="0.01" step="0.01" value={form.gross_amount}
                   onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+                  autoFocus
+                  onFocus={e => e.target.select()}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
               </div>
               <div>

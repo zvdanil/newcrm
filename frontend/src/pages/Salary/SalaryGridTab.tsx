@@ -370,6 +370,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
           staffId={dialog.staffId}
           onClose={closeDialog}
           invalidateKeys={[gridKey, ['salary-journal']]}
+          autoEdit
         />
       )}
       {dialog?.type === 'accrualGroup' && (
