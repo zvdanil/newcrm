@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
-import { recalcRetroAccruals, triggerRetroAccruals } from '../services/salaryService.js'
+import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
 
 export async function staffRoutes(app: FastifyInstance) {
 
@@ -320,6 +320,64 @@ export async function staffRoutes(app: FastifyInstance) {
 
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
       return { ok: true }
+    }
+  )
+
+  // POST /api/staff/:id/recalc — принудительный пересчёт начислений за месяц
+  app.post<{
+    Params: { id: string }
+    Body: { month?: string }
+  }>(
+    '/:id/recalc',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const staffId = req.params.id
+      const month   = req.body?.month ?? new Date().toISOString().slice(0, 7)
+
+      const fromDate = new Date(month + '-01')
+      const toDate   = new Date(fromDate)
+      toDate.setMonth(toDate.getMonth() + 1)
+
+      // Все уникальные активности с авто-ставками типа per_lesson / per_child / group_lesson
+      const activityRows = await db
+        .selectFrom('staff_rates')
+        .select('activity_id')
+        .distinct()
+        .where('staff_id',      '=', staffId)
+        .where('rate_category', '=', 'auto')
+        .where('activity_id',   'is not', null)
+        .where((eb) => eb.or([
+          eb('rate_type', '=', 'per_lesson'),
+          eb('rate_type', '=', 'per_child'),
+          eb('rate_type', '=', 'group_lesson'),
+        ]))
+        .execute()
+
+      for (const { activity_id } of activityRows) {
+        if (activity_id) {
+          await triggerRetroAccruals(staffId, activity_id, fromDate, toDate)
+        }
+      }
+
+      // Пересчёт смарт-ставок за месяц
+      const billingMonth = month + '-01'
+      const smartRates = await db
+        .selectFrom('staff_rates')
+        .select(['id', 'rate_type'])
+        .where('staff_id',      '=', staffId)
+        .where('rate_category', '=', 'auto')
+        .where('rate_type', 'in', ['smart', 'smart_per_child'])
+        .execute()
+
+      for (const r of smartRates) {
+        if (r.rate_type === 'smart') {
+          await recalcSmartStaffBenefit(r.id, billingMonth)
+        } else {
+          await recalcSmartPerChildBenefit(r.id, billingMonth)
+        }
+      }
+
+      return reply.send({ ok: true })
     }
   )
 }

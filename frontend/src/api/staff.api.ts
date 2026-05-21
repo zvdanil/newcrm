@@ -210,6 +210,10 @@ export const staffApi = {
     return data
   },
 
+  recalc: async (staffId: string, month: string): Promise<void> => {
+    await apiClient.post(`/staff/${staffId}/recalc`, { month })
+  },
+
   deleteAccrual: async (staffId: string, txId: string): Promise<void> => {
     await apiClient.delete(`/staff/${staffId}/salary/${txId}`)
   },

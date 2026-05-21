@@ -878,11 +878,24 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const [selectedAccrualGroup, setSelectedAccrualGroup] = useState<SalaryTransaction[] | null>(null)
   const [showPay, setShowPay]             = useState(false)
   const [showManual, setShowManual]       = useState(false)
+  const [recalcPending, setRecalcPending] = useState(false)
+
+  const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['salary', staffId, month],
     queryFn: () => staffApi.getSalary(staffId, month),
   })
+
+  async function handleRecalc() {
+    setRecalcPending(true)
+    try {
+      await staffApi.recalc(staffId, month)
+      await qc.invalidateQueries({ queryKey: ['salary', staffId, month] })
+    } finally {
+      setRecalcPending(false)
+    }
+  }
 
   const { data: rates = [] } = useQuery({
     queryKey: ['staff-rates', staffId],
@@ -937,6 +950,16 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           </span>
           <button onClick={() => setMonth(m => monthNav(m, 1))} disabled={month >= currentMonth}
             className="text-gray-400 hover:text-gray-700 disabled:opacity-30 px-2 py-1">→</button>
+          {isAdmin && (
+            <button
+              onClick={handleRecalc}
+              disabled={recalcPending}
+              title="Перерахувати всі нарахування за місяць"
+              className="text-xs px-2 py-1 text-gray-400 hover:text-iris-600 disabled:opacity-40 transition-colors border border-gray-200 rounded-lg hover:border-iris-300"
+            >
+              {recalcPending ? '...' : '↻'}
+            </button>
+          )}
         </div>
         {isAdmin && (
           <div className="flex gap-2">
