@@ -385,12 +385,12 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .orderBy('created_at', 'desc')
     .execute()
 
-  // Ensure only ONE auto rate per activity is processed to avoid double rows.
-  // We pick the latest one based on the order above.
+  // One rate per (staff_id, rate_type) — picks the most recent valid one per combination.
   const ratesMap = new Map<string, typeof allRates[0]>()
   for (const r of allRates) {
-    if (r.activity_id && !ratesMap.has(r.activity_id)) {
-      ratesMap.set(r.activity_id, r)
+    const key = `${r.staff_id}::${r.rate_type}`
+    if (!ratesMap.has(key)) {
+      ratesMap.set(key, r)
     }
   }
   const rates = Array.from(ratesMap.values())
