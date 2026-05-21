@@ -162,11 +162,7 @@ export async function staffRoutes(app: FastifyInstance) {
 
       if (activity_id) {
         q = q.where('activity_id', '=', activity_id)
-        // Для автоматических ставок блокируем все остальные авто-ставки по этой активности.
-        // Для ручных — только того же типа.
-        if (rate_category === 'manual') {
-          q = q.where('rate_type', '=', rate_type)
-        }
+             .where('rate_type', '=', rate_type)
       } else {
         q = q.where('activity_id', 'is', null)
              .where('rate_type', '=', rate_type)
