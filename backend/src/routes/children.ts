@@ -42,7 +42,6 @@ export async function childrenRoutes(app: FastifyInstance) {
         ])
 
       if (role === 'parent') {
-        // Ограничиваем видимость: только дети семей, в которых состоит родитель
         const parentRow = await db
           .selectFrom('parents')
           .select('id')
@@ -51,16 +50,30 @@ export async function childrenRoutes(app: FastifyInstance) {
 
         if (!parentRow) return { data: [], total: 0, limit, offset }
 
+        // Direct child→parent links (new)
+        const directLinks = await db
+          .selectFrom('child_parents')
+          .select('child_id')
+          .where('parent_id', '=', parentRow.id)
+          .execute()
+        const directChildIds = directLinks.map((r) => r.child_id)
+
+        // Fallback: via family_members (backward compat)
         const familyIds = await db
           .selectFrom('family_members')
           .select('family_id')
           .where('parent_id', '=', parentRow.id)
           .execute()
+        const fids = familyIds.map((r) => r.family_id)
 
-        const ids = familyIds.map((r) => r.family_id)
-        if (ids.length === 0) return { data: [], total: 0, limit, offset }
+        if (directChildIds.length === 0 && fids.length === 0) return { data: [], total: 0, limit, offset }
 
-        query = query.where('c.family_id', 'in', ids)
+        query = query.where((eb) => {
+          const conds = []
+          if (directChildIds.length > 0) conds.push(eb('c.id', 'in', directChildIds))
+          if (fids.length > 0) conds.push(eb('c.family_id', 'in', fids))
+          return eb.or(conds)
+        })
       }
 
       if (search) {
@@ -115,37 +128,40 @@ export async function childrenRoutes(app: FastifyInstance) {
 
       if (!child) return reply.status(404).send({ error: 'NotFound' })
 
-      // Parent: проверяем, что ребёнок принадлежит его семье
+      // Parent: check access via child_parents (new) or family_members (backward compat)
       if (request.user.role === 'parent') {
-        const access = await db
-          .selectFrom('parents as p')
-          .innerJoin('family_members as fm', 'fm.parent_id', 'p.id')
-          .where('p.user_id', '=', request.user.sub)
-          .where('fm.family_id', '=', child.family_id ?? '')
+        const parentRow = await db
+          .selectFrom('parents').select('id')
+          .where('user_id', '=', request.user.sub)
           .executeTakeFirst()
 
-        if (!access) return reply.status(403).send({ error: 'Forbidden' })
+        if (!parentRow) return reply.status(403).send({ error: 'Forbidden' })
+
+        const directLink = await db.selectFrom('child_parents').select('child_id')
+          .where('child_id', '=', request.params.id)
+          .where('parent_id', '=', parentRow.id)
+          .executeTakeFirst()
+
+        if (!directLink) {
+          const familyAccess = await db
+            .selectFrom('parents as p')
+            .innerJoin('family_members as fm', 'fm.parent_id', 'p.id')
+            .where('p.user_id', '=', request.user.sub)
+            .where('fm.family_id', '=', child.family_id ?? '')
+            .executeTakeFirst()
+          if (!familyAccess) return reply.status(403).send({ error: 'Forbidden' })
+        }
       }
 
-      const [familyMembers, familySiblings] = child.family_id
-        ? await Promise.all([
-            db.selectFrom('family_members as fm')
-              .innerJoin('parents as p', 'p.id', 'fm.parent_id')
-              .select(['fm.role', 'p.id', 'p.full_name', 'p.phone', 'p.email', 'p.edrpou', 'p.iban'])
-              .where('fm.family_id', '=', child.family_id)
-              .orderBy('p.full_name', 'asc')
-              .execute(),
-            db.selectFrom('children as c')
-              .leftJoin('groups as g', 'g.id', 'c.group_id')
-              .select(['c.id', 'c.full_name', 'c.is_active', 'g.name as group_name'])
-              .where('c.family_id', '=', child.family_id)
-              .where('c.id', '!=', request.params.id)
-              .orderBy('c.full_name', 'asc')
-              .execute(),
-          ])
-        : [[], []]
+      const childParents = await db
+        .selectFrom('child_parents as cp')
+        .innerJoin('parents as p', 'p.id', 'cp.parent_id')
+        .select(['cp.role', 'p.id', 'p.full_name', 'p.phone', 'p.email', 'p.edrpou', 'p.iban'])
+        .where('cp.child_id', '=', request.params.id)
+        .orderBy('p.full_name', 'asc')
+        .execute()
 
-      return { ...child, family_members: familyMembers, family_siblings: familySiblings }
+      return { ...child, child_parents: childParents }
     }
   )
 
@@ -791,6 +807,39 @@ export async function childrenRoutes(app: FastifyInstance) {
         pool = 0
       }
       return result
+    }
+  )
+
+  // POST /api/children/:id/parents — link a parent to this child
+  app.post<{ Params: { id: string }; Body: { parent_id: string; role?: string | null } }>(
+    '/:id/parents',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const child = await db.selectFrom('children').select('id').where('id', '=', req.params.id).executeTakeFirst()
+      if (!child) return reply.status(404).send({ error: 'NotFound' })
+
+      const parent = await db.selectFrom('parents').select('id').where('id', '=', req.body.parent_id).executeTakeFirst()
+      if (!parent) return reply.status(404).send({ error: 'ParentNotFound' })
+
+      await db.insertInto('child_parents')
+        .values({ child_id: req.params.id, parent_id: req.body.parent_id, role: req.body.role ?? null })
+        .onConflict((oc) => oc.columns(['child_id', 'parent_id']).doUpdateSet({ role: req.body.role ?? null }))
+        .execute()
+
+      return { ok: true }
+    }
+  )
+
+  // DELETE /api/children/:id/parents/:parentId — unlink a parent from this child
+  app.delete<{ Params: { id: string; parentId: string } }>(
+    '/:id/parents/:parentId',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      await db.deleteFrom('child_parents')
+        .where('child_id', '=', req.params.id)
+        .where('parent_id', '=', req.params.parentId)
+        .execute()
+      return reply.status(204).send()
     }
   )
 

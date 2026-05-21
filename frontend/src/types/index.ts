@@ -16,6 +16,16 @@ export interface FamilyMember {
   role: string | null
 }
 
+export interface ChildParent {
+  id: string
+  full_name: string
+  phone: string | null
+  email: string | null
+  edrpou: string | null
+  iban: string | null
+  role: string | null
+}
+
 export interface FamilySibling {
   id: string
   full_name: string
@@ -40,6 +50,7 @@ export interface Child {
   primary_parent_phone?: string | null
   family_members?: FamilyMember[]
   family_siblings?: FamilySibling[]
+  child_parents?: ChildParent[]
 }
 
 export interface Group {

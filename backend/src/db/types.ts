@@ -390,6 +390,13 @@ export interface ChildSmartTariffConfigsTable {
   updated_at:            Generated<Date>
 }
 
+export interface ChildParentsTable {
+  child_id:   string
+  parent_id:  string
+  role:       string | null
+  created_at: Generated<Date>
+}
+
 export interface MergedJournalsTable {
   id:         Generated<string>
   name:       string
@@ -499,6 +506,7 @@ export interface Database {
   dividend_payouts:           DividendPayoutsTable
   expense_edits:              ExpenseEditsTable
   user_invites:               UserInvitesTable
+  child_parents:              ChildParentsTable
 }
 
 export interface EquityParticipantsTable {

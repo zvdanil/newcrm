@@ -114,4 +114,12 @@ export const childrenApi = {
     const { data } = await apiClient.post('/enrollments', { ...payload, child_id: childId })
     return data
   },
+
+  addParent: async (childId: string, parentId: string, role?: string | null) => {
+    await apiClient.post(`/children/${childId}/parents`, { parent_id: parentId, role: role ?? null })
+  },
+
+  removeParent: async (childId: string, parentId: string) => {
+    await apiClient.delete(`/children/${childId}/parents/${parentId}`)
+  },
 }

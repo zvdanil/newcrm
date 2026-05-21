@@ -3,9 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { childrenApi } from '../../api/children.api'
 import type { IndividualTariff, IndTariffType, OpenAccrual } from '../../api/children.api'
-import type { FamilyMember, FamilySibling, Child } from '../../types'
+import type { ChildParent, Child } from '../../types'
 import { groupsApi } from '../../api/groups.api'
-import { familiesApi } from '../../api/families.api'
+import { parentsApi } from '../../api/parents.api'
 import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { enrollmentsApi } from '../../api/enrollments.api'
@@ -36,7 +36,6 @@ export function ChildCardPage() {
     full_name: '',
     birth_date: '',
     group_id: '',
-    family_id: '',
     note: '',
     is_active: true,
   })
@@ -51,13 +50,6 @@ export function ChildCardPage() {
     queryKey: ['groups'],
     queryFn: () => groupsApi.list(),
     staleTime: 5 * 60 * 1000,
-  })
-
-  const { data: familiesData } = useQuery({
-    queryKey: ['families-list'],
-    queryFn: () => familiesApi.list({ limit: 500 }),
-    staleTime: 5 * 60 * 1000,
-    enabled: editing,
   })
 
   const updateMutation = useMutation({
@@ -80,7 +72,6 @@ export function ChildCardPage() {
       full_name:  child.full_name,
       birth_date: toDateInputValue(child.birth_date),
       group_id:   child.group_id  ?? '',
-      family_id:  child.family_id ?? '',
       note:       child.note      ?? '',
       is_active:  child.is_active,
     })
@@ -96,7 +87,6 @@ export function ChildCardPage() {
       full_name:  form.full_name.trim(),
       birth_date: form.birth_date || null,
       group_id:   form.group_id  || null,
-      family_id:  form.family_id || null,
       note:       form.note      || null,
       is_active:  form.is_active,
     })
@@ -118,7 +108,7 @@ export function ChildCardPage() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900">{child.full_name}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {child.group_name ?? 'Без групи'} · {child.family_name ?? 'Без сімʼї'}
+              {child.group_name ?? 'Без групи'}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -139,30 +129,13 @@ export function ChildCardPage() {
         </div>
 
         {/* View mode */}
-        {!editing && (() => {
-          const mama = child.family_members?.find((m) => m.role === 'мама')
-          const tato = child.family_members?.find((m) => m.role === 'тато')
-          return (
-            <dl className="grid grid-cols-2 gap-4">
-              <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
-              <InfoRow label="Група"           value={child.group_name  ?? '—'} />
-              <InfoRow label="Сімʼя"           value={child.family_name ?? '—'} />
-              <div /> {/* spacer */}
-              {mama || tato ? (
-                <>
-                  <InfoRow label="Мама" value={mama ? `${mama.full_name}${mama.phone ? `  ·  ${mama.phone}` : ''}` : '—'} />
-                  <InfoRow label="Тато" value={tato ? `${tato.full_name}${tato.phone ? `  ·  ${tato.phone}` : ''}` : '—'} />
-                </>
-              ) : (
-                <>
-                  <InfoRow label="Відповідальний" value={child.primary_parent_name  ?? '—'} />
-                  <InfoRow label="Контакт"        value={child.primary_parent_phone ?? '—'} />
-                </>
-              )}
-              {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
-            </dl>
-          )
-        })()}
+        {!editing && (
+          <dl className="grid grid-cols-2 gap-4">
+            <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
+            <InfoRow label="Група"           value={child.group_name ?? '—'} />
+            {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
+          </dl>
+        )}
 
         {/* Edit mode */}
         {editing && (
@@ -194,19 +167,6 @@ export function ChildCardPage() {
                 <option value="">— без групи —</option>
                 {groups?.map((g) => (
                   <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Сімʼя">
-              <select
-                value={form.family_id}
-                onChange={(e) => setForm({ ...form, family_id: e.target.value })}
-                className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-              >
-                <option value="">— без сімʼї —</option>
-                {familiesData?.data.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
             </Field>
@@ -255,8 +215,8 @@ export function ChildCardPage() {
         )}
       </div>
 
-      {/* Family */}
-      {child.family_id && <FamilyBlock child={child} />}
+      {/* Parents */}
+      <ParentsBlock child={child} />
 
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} />}
@@ -1669,72 +1629,149 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   )
 }
 
-// ─── Family Block ────────────────────────────────────────────────────────────
+// ─── Parents Block ───────────────────────────────────────────────────────────
 
 const ROLE_OPTIONS = [
   { value: '',     label: '— роль —' },
   { value: 'мама', label: 'Мама' },
   { value: 'тато', label: 'Тато' },
+  { value: 'опікун', label: 'Опікун' },
 ]
 
-function FamilyBlock({ child }: { child: Child }) {
+function ParentsBlock({ child }: { child: Child }) {
   const qc = useQueryClient()
   const canEdit = useCanAccess('owner', 'admin', 'manager')
-  const members: FamilyMember[] = child.family_members ?? []
-  const siblings: FamilySibling[] = child.family_siblings ?? []
+  const parents: ChildParent[] = child.child_parents ?? []
+  const [showAdd, setShowAdd] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedParentId, setSelectedParentId] = useState('')
+  const [selectedRole, setSelectedRole] = useState('')
 
-  const roleMutation = useMutation({
-    mutationFn: ({ parentId, role }: { parentId: string; role: string | null }) =>
-      familiesApi.updateMemberRole(child.family_id!, parentId, role),
+  const { data: parentsData } = useQuery({
+    queryKey: ['parents-search', search],
+    queryFn: () => parentsApi.list({ search: search || undefined }),
+    staleTime: 30_000,
+    enabled: showAdd,
+  })
+
+  const addMutation = useMutation({
+    mutationFn: () => childrenApi.addParent(child.id, selectedParentId, selectedRole || null),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['child', child.id] })
+      setShowAdd(false)
+      setSelectedParentId('')
+      setSelectedRole('')
+      setSearch('')
+    },
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: (parentId: string) => childrenApi.removeParent(child.id, parentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['child', child.id] }),
   })
 
-  if (members.length === 0 && siblings.length === 0) return null
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ parentId, role }: { parentId: string; role: string | null }) =>
+      childrenApi.addParent(child.id, parentId, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['child', child.id] }),
+  })
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-      <h2 className="font-medium text-gray-900">Сімʼя</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-medium text-gray-900">Батьки / Опікуни</h2>
+        {canEdit && !showAdd && (
+          <button
+            onClick={() => setShowAdd(true)}
+            className="text-sm text-iris-600 hover:text-iris-700 font-medium"
+          >
+            + Додати
+          </button>
+        )}
+      </div>
 
-      {members.length > 0 && (
+      {parents.length === 0 && !showAdd && (
+        <p className="text-sm text-gray-400">Батьків не вказано</p>
+      )}
+
+      {parents.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Батьки</p>
-          {members.map((m) => (
-            <div key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {parents.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               {canEdit ? (
                 <select
-                  value={m.role ?? ''}
-                  onChange={(e) => roleMutation.mutate({ parentId: m.id, role: e.target.value || null })}
+                  value={p.role ?? ''}
+                  onChange={(e) => updateRoleMutation.mutate({ parentId: p.id, role: e.target.value || null })}
                   className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
                 >
                   {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               ) : (
-                m.role && <span className="text-xs font-medium text-iris-600 w-10">{m.role}</span>
+                p.role && <span className="text-xs font-medium text-iris-600">{p.role}</span>
               )}
-              <span className="font-medium text-gray-900">{m.full_name}</span>
-              {m.phone && <span className="text-gray-500">{m.phone}</span>}
-              {m.email && <span className="text-gray-400">{m.email}</span>}
+              <span className="font-medium text-gray-900">{p.full_name}</span>
+              {p.phone && <span className="text-gray-500">{p.phone}</span>}
+              {p.email && <span className="text-gray-400">{p.email}</span>}
+              {canEdit && (
+                <button
+                  onClick={() => { if (confirm(`Відʼєднати ${p.full_name}?`)) removeMutation.mutate(p.id) }}
+                  className="ml-auto text-xs text-red-400 hover:text-red-600"
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {siblings.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Брати / Сестри</p>
-          {siblings.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 text-sm">
-              <Link to={`/children/${s.id}`} className="font-medium text-iris-600 hover:text-iris-700 transition-colors">
-                {s.full_name}
-              </Link>
-              {s.group_name && <span className="text-gray-500">{s.group_name}</span>}
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                s.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
-              }`}>
-                {s.is_active ? 'Активна' : 'Архів'}
-              </span>
-            </div>
-          ))}
+      {showAdd && (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+          <input
+            type="text"
+            placeholder="Пошук батька/матері..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setSelectedParentId('') }}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          {parentsData && parentsData.data.length > 0 && (
+            <select
+              size={Math.min(parentsData.data.length, 5)}
+              value={selectedParentId}
+              onChange={(e) => setSelectedParentId(e.target.value)}
+              className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+            >
+              {parentsData.data
+                .filter((p) => !parents.some((cp) => cp.id === p.id))
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name}{p.phone ? ` · ${p.phone}` : ''}
+                  </option>
+                ))}
+            </select>
+          )}
+          <select
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          >
+            {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <button
+              onClick={() => addMutation.mutate()}
+              disabled={!selectedParentId || addMutation.isPending}
+              className="px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm rounded-lg"
+            >
+              Додати
+            </button>
+            <button
+              onClick={() => { setShowAdd(false); setSearch(''); setSelectedParentId('') }}
+              className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
+            >
+              Скасувати
+            </button>
+          </div>
         </div>
       )}
     </div>
