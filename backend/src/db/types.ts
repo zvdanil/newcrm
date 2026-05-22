@@ -413,21 +413,22 @@ export interface MergedJournalActivitiesTable {
 }
 
 export interface ActivitySchedulesTable {
-  id:           Generated<string>
-  activity_id:  string
-  staff_id:     string | null
-  room:         string | null
-  name:         string | null
-  start_time:   string           // TIME stored as string HH:MM:SS
-  duration_min: Generated<number>
-  rrule:        string
-  dtstart:      ColumnType<Date, string, string>
-  dtend:        ColumnType<Date | null, string | null, string | null>
-  color:        string | null
-  is_active:    Generated<boolean>
-  note:         string | null
-  created_at:   Generated<Date>
-  updated_at:   Generated<Date>
+  id:                Generated<string>
+  activity_id:       string | null
+  merged_journal_id: string | null
+  staff_id:          string | null
+  room:              string | null
+  name:              string | null
+  start_time:        string           // TIME stored as string HH:MM:SS
+  duration_min:      Generated<number>
+  rrule:             string
+  dtstart:           ColumnType<Date, string, string>
+  dtend:             ColumnType<Date | null, string | null, string | null>
+  color:             string | null
+  is_active:         Generated<boolean>
+  note:              string | null
+  created_at:        Generated<Date>
+  updated_at:        Generated<Date>
 }
 
 export interface ScheduleExceptionsTable {

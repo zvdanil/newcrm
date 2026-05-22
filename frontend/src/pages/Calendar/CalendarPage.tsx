@@ -9,6 +9,7 @@ import { calendarApi } from '../../api/calendar.api'
 import type { CalendarEvent, CalendarSchedule } from '../../api/calendar.api'
 import { staffApi } from '../../api/staff.api'
 import { activitiesApi } from '../../api/activities.api'
+import { mergedJournalsApi } from '../../api/mergedJournals.api'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -46,31 +47,35 @@ function daysToLabel(rrule: string): string {
 // ─── Schedule Form ─────────────────────────────────────────────────────────────
 
 type ScheduleFormData = {
-  name:         string
-  activity_id:  string
-  color:        string
-  staff_id:     string
-  room:         string
-  start_time:   string
-  duration_min: string
-  days:         number[]
-  dtstart:      string
-  dtend:        string
-  note:         string
+  journal_type:        'activity' | 'merged'
+  name:                string
+  activity_id:         string
+  merged_journal_id:   string
+  color:               string
+  staff_id:            string
+  room:                string
+  start_time:          string
+  duration_min:        string
+  days:                number[]
+  dtstart:             string
+  dtend:               string
+  note:                string
 }
 
 const EMPTY_FORM: ScheduleFormData = {
-  name:         '',
-  activity_id:  '',
-  color:        '#6366f1',
-  staff_id:     '',
-  room:         '',
-  start_time:   '09:00',
-  duration_min: '60',
-  days:         [],
-  dtstart:      todayStr(),
-  dtend:        '',
-  note:         '',
+  journal_type:        'activity',
+  name:                '',
+  activity_id:         '',
+  merged_journal_id:   '',
+  color:               '#6366f1',
+  staff_id:            '',
+  room:                '',
+  start_time:          '09:00',
+  duration_min:        '60',
+  days:                [],
+  dtstart:             todayStr(),
+  dtend:               '',
+  note:                '',
 }
 
 interface ScheduleFormProps {
@@ -92,6 +97,10 @@ function ScheduleForm({ form, setForm, isEdit, error, isSaving, onSave, onCancel
     queryKey: ['staff-list-active'],
     queryFn:  () => staffApi.list({ is_active: true }),
   })
+  const { data: mergedJournals = [] } = useQuery({
+    queryKey: ['merged-journals-list'],
+    queryFn:  () => mergedJournalsApi.list(),
+  })
 
   const toggleDay = (d: number) =>
     setForm(f => ({ ...f, days: f.days.includes(d) ? f.days.filter(x => x !== d) : [...f.days, d] }))
@@ -107,23 +116,61 @@ function ScheduleForm({ form, setForm, isEdit, error, isSaving, onSave, onCancel
     } catch { /* ignore */ }
   }
 
+  const isMerged = form.journal_type === 'merged'
+
   return (
     <div className="space-y-3">
-      {/* Activity + color picker */}
+      {/* Journal type toggle + color picker */}
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Активність *</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          {isMerged ? 'Об\'єднаний журнал *' : 'Активність *'}
+        </label>
         <div className="flex items-center gap-2">
-          <select
-            value={form.activity_id}
-            onChange={e => handleActivityChange(e.target.value)}
-            disabled={isEdit}
-            className="flex-1 min-w-0 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
-          >
-            <option value="">— оберіть активність —</option>
-            {activities.map((a: { id: string; name: string }) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          {/* Type toggle */}
+          {!isEdit && (
+            <div className="flex rounded border border-gray-200 shrink-0 text-xs">
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, journal_type: 'activity', merged_journal_id: '' }))}
+                className={`px-2 py-1 rounded-l transition-colors ${!isMerged ? 'bg-iris-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                Активність
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, journal_type: 'merged', activity_id: '' }))}
+                className={`px-2 py-1 rounded-r transition-colors ${isMerged ? 'bg-iris-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                ОЖ
+              </button>
+            </div>
+          )}
+          {/* Selector */}
+          {isMerged ? (
+            <select
+              value={form.merged_journal_id}
+              onChange={e => setForm(f => ({ ...f, merged_journal_id: e.target.value }))}
+              disabled={isEdit}
+              className="flex-1 min-w-0 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              <option value="">— оберіть журнал —</option>
+              {mergedJournals.map((mj: { id: string; name: string }) => (
+                <option key={mj.id} value={mj.id}>{mj.name}</option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={form.activity_id}
+              onChange={e => handleActivityChange(e.target.value)}
+              disabled={isEdit}
+              className="flex-1 min-w-0 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              <option value="">— оберіть активність —</option>
+              {activities.map((a: { id: string; name: string }) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          )}
           <input
             type="color"
             value={form.color}
@@ -284,12 +331,20 @@ interface ScheduleItemProps {
 }
 
 function ScheduleItem({ sched, isEditing, onEdit, onDelete, isDeleting }: ScheduleItemProps) {
+  const journalLabel = sched.merged_journal_id
+    ? (sched.merged_journal_name ?? 'Об\'єднаний журнал')
+    : (sched.activity_name ?? '')
   return (
     <div className={`rounded-lg border p-3 space-y-1 transition-colors ${isEditing ? 'border-iris-400 bg-iris-50' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">{sched.name || sched.activity_name}</p>
-          {sched.name && <p className="text-xs text-gray-400 truncate">{sched.activity_name}</p>}
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-gray-900 truncate">{sched.name || journalLabel}</p>
+            {sched.merged_journal_id && (
+              <span className="shrink-0 text-[10px] font-medium px-1 py-0.5 rounded bg-purple-100 text-purple-600">ОЖ</span>
+            )}
+          </div>
+          {sched.name && <p className="text-xs text-gray-400 truncate">{journalLabel}</p>}
           <p className="text-xs text-gray-600 mt-0.5">
             {daysToLabel(sched.rrule)}
             <span className="mx-1.5 text-gray-300">·</span>
@@ -330,7 +385,15 @@ function ScheduleItem({ sched, isEditing, onEdit, onDelete, isDeleting }: Schedu
 
 // ─── Journal Modal ─────────────────────────────────────────────────────────────
 
-function JournalModal({ activityId, date, onClose }: { activityId: string; date: string; onClose: () => void }) {
+function JournalModal({ type, id, date, onClose }: {
+  type:    'activity' | 'merged'
+  id:      string
+  date:    string
+  onClose: () => void
+}) {
+  const src = type === 'merged'
+    ? `/journals/merged/${id}?mode=day&date=${date}&layout=none`
+    : `/journals/${id}?mode=day&date=${date}&layout=none`
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
@@ -343,7 +406,7 @@ function JournalModal({ activityId, date, onClose }: { activityId: string; date:
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">✕</button>
         </div>
         <iframe
-          src={`/journals/${activityId}?mode=day&date=${date}&layout=none`}
+          src={src}
           className="flex-1 w-full border-0 rounded-b-xl"
           title="Журнал"
         />
@@ -488,7 +551,7 @@ export function CalendarPage() {
   const [formError, setFormError]   = useState<string | null>(null)
 
   // Modals
-  const [journalModal,  setJournalModal]  = useState<{ activityId: string; date: string } | null>(null)
+  const [journalModal,  setJournalModal]  = useState<{ type: 'activity' | 'merged'; id: string; date: string } | null>(null)
   const [moveDialog,    setMoveDialog]    = useState<{ scheduleId: string; origDate: string; newDate: string; newTime?: string } | null>(null)
   const [subDialog,     setSubDialog]     = useState<{ scheduleId: string; date: string; origStaffId: string | null } | null>(null)
   const [eventPopup,    setEventPopup]    = useState<{ event: CalendarEvent; pos: { x: number; y: number } } | null>(null)
@@ -519,17 +582,18 @@ export function CalendarPage() {
   // Mutations
   const createMutation = useMutation({
     mutationFn: () => calendarApi.createSchedule({
-      activity_id:  form.activity_id,
-      name:         form.name         || undefined,
-      staff_id:     form.staff_id     || undefined,
-      room:         form.room         || undefined,
-      start_time:   form.start_time,
-      duration_min: Number(form.duration_min),
-      days:         form.days,
-      dtstart:      form.dtstart,
-      dtend:        form.dtend        || undefined,
-      color:        form.color        || undefined,
-      note:         form.note         || undefined,
+      activity_id:        form.journal_type === 'activity' ? (form.activity_id || undefined) : undefined,
+      merged_journal_id:  form.journal_type === 'merged'   ? (form.merged_journal_id || undefined) : undefined,
+      name:               form.name         || undefined,
+      staff_id:           form.staff_id     || undefined,
+      room:               form.room         || undefined,
+      start_time:         form.start_time,
+      duration_min:       Number(form.duration_min),
+      days:               form.days,
+      dtstart:            form.dtstart,
+      dtend:              form.dtend        || undefined,
+      color:              form.color        || undefined,
+      note:               form.note         || undefined,
     }),
     onSuccess: () => { refetchAll(); setPanelMode('list'); setForm(EMPTY_FORM); setFormError(null) },
     onError:   () => setFormError('Помилка при збереженні'),
@@ -575,7 +639,8 @@ export function CalendarPage() {
 
   // Form validation & submit
   const handleSave = () => {
-    if (!form.activity_id) { setFormError('Оберіть активність'); return }
+    if (form.journal_type === 'activity' && !form.activity_id)   { setFormError('Оберіть активність'); return }
+    if (form.journal_type === 'merged'   && !form.merged_journal_id) { setFormError('Оберіть об\'єднаний журнал'); return }
     if (form.days.length === 0) { setFormError('Оберіть хоча б один день тижня'); return }
     if (!form.start_time)       { setFormError('Вкажіть час початку'); return }
     if (!form.dtstart)          { setFormError('Вкажіть дату початку'); return }
@@ -585,17 +650,19 @@ export function CalendarPage() {
 
   const startEdit = (sched: CalendarSchedule) => {
     setForm({
-      name:         sched.name         ?? '',
-      activity_id:  sched.activity_id,
-      color:        sched.color        ?? '#6366f1',
-      staff_id:     sched.staff_id     ?? '',
-      room:         sched.room         ?? '',
-      start_time:   String(sched.start_time).slice(0, 5),
-      duration_min: String(sched.duration_min),
-      days:         parseRRuleDays(sched.rrule),
-      dtstart:      String(sched.dtstart).slice(0, 10),
-      dtend:        sched.dtend ? String(sched.dtend).slice(0, 10) : '',
-      note:         sched.note         ?? '',
+      journal_type:      sched.merged_journal_id ? 'merged' : 'activity',
+      name:              sched.name              ?? '',
+      activity_id:       sched.activity_id       ?? '',
+      merged_journal_id: sched.merged_journal_id ?? '',
+      color:             sched.color             ?? '#6366f1',
+      staff_id:          sched.staff_id          ?? '',
+      room:              sched.room              ?? '',
+      start_time:        String(sched.start_time).slice(0, 5),
+      duration_min:      String(sched.duration_min),
+      days:              parseRRuleDays(sched.rrule),
+      dtstart:           String(sched.dtstart).slice(0, 10),
+      dtend:             sched.dtend ? String(sched.dtend).slice(0, 10) : '',
+      note:              sched.note              ?? '',
     })
     setEditingSched(sched)
     setPanelMode('edit')
@@ -669,7 +736,7 @@ export function CalendarPage() {
           {isFormOpen && (
             <div className="mb-4">
               <p className="text-xs font-semibold text-iris-700 mb-3 uppercase tracking-wide">
-                {panelMode === 'new' ? 'Новий розклад' : `Редагування: ${editingSched?.activity_name}`}
+                {panelMode === 'new' ? 'Новий розклад' : `Редагування: ${editingSched?.merged_journal_id ? (editingSched.merged_journal_name ?? 'ОЖ') : (editingSched?.activity_name ?? '')}`}
               </p>
               <ScheduleForm
                 form={form}
@@ -780,7 +847,7 @@ export function CalendarPage() {
       {/* ── Modals ── */}
 
       {journalModal && (
-        <JournalModal activityId={journalModal.activityId} date={journalModal.date} onClose={() => setJournalModal(null)} />
+        <JournalModal type={journalModal.type} id={journalModal.id} date={journalModal.date} onClose={() => setJournalModal(null)} />
       )}
 
       {moveDialog && (
@@ -796,13 +863,14 @@ export function CalendarPage() {
               if (sched) {
                 await calendarApi.updateSchedule(moveDialog.scheduleId, { dtend: prevDay })
                 await calendarApi.createSchedule({
-                  activity_id:  sched.activity_id,
-                  staff_id:     sched.staff_id    ?? undefined,
-                  room:         sched.room        ?? undefined,
-                  start_time:   moveDialog.newTime ?? String(sched.start_time).slice(0, 5),
-                  duration_min: sched.duration_min,
-                  days:         parseRRuleDays(sched.rrule),
-                  dtstart:      moveDialog.newDate,
+                  activity_id:       sched.activity_id       ?? undefined,
+                  merged_journal_id: sched.merged_journal_id ?? undefined,
+                  staff_id:          sched.staff_id          ?? undefined,
+                  room:              sched.room              ?? undefined,
+                  start_time:        moveDialog.newTime ?? String(sched.start_time).slice(0, 5),
+                  duration_min:      sched.duration_min,
+                  days:              parseRRuleDays(sched.rrule),
+                  dtstart:           moveDialog.newDate,
                 })
               }
             } finally { setMoveDialog(null); refetchAll() }
@@ -824,7 +892,15 @@ export function CalendarPage() {
           event={eventPopup.event}
           pos={eventPopup.pos}
           onClose={closePopup}
-          onOpenJournal={() => { setJournalModal({ activityId: eventPopup.event.activityId, date: eventPopup.event.date }); closePopup() }}
+          onOpenJournal={() => {
+            const ev = eventPopup.event
+            if (ev.mergedJournalId) {
+              setJournalModal({ type: 'merged', id: ev.mergedJournalId, date: ev.date })
+            } else if (ev.activityId) {
+              setJournalModal({ type: 'activity', id: ev.activityId, date: ev.date })
+            }
+            closePopup()
+          }}
           onAddSubstitution={() => { setSubDialog({ scheduleId: eventPopup.event.scheduleId, date: eventPopup.event.date, origStaffId: eventPopup.event.staffId }); closePopup() }}
           onCancelOccurrence={() => {
             exceptionMutation.mutate({ scheduleId: eventPopup.event.scheduleId, payload: { original_date: eventPopup.event.originalDate ?? eventPopup.event.date, exception_type: 'cancelled' } })

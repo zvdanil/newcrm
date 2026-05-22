@@ -63,12 +63,15 @@ export async function calendarRoutes(app: FastifyInstance) {
       // 1. Load all active schedules in range (start before to, end after from or null)
       const schedules = await db
         .selectFrom('activity_schedules as s')
-        .innerJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('merged_journals as mj', 'mj.id', 's.merged_journal_id')
         .leftJoin('staff as st', 'st.id', 's.staff_id')
         .select([
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.merged_journal_id',
+          'mj.name as merged_journal_name',
           's.name',
           's.staff_id',
           'st.full_name as staff_name',
@@ -131,35 +134,82 @@ export async function calendarRoutes(app: FastifyInstance) {
         subMap.set(`${sub.schedule_id}_${toDateStr(sub.occurrence_date as unknown as Date)}`, sub)
       }
 
-      // 4. Load attendance presence counts per activity+date in range (batch)
-      const activityIds = [...new Set(schedules.map(s => s.activity_id))]
+      // 4. Build full activity ID set (direct + via merged journals)
+      const directActivityIds = schedules.map(s => s.activity_id).filter(Boolean) as string[]
+      const mergedJournalIds  = [...new Set(schedules.map(s => s.merged_journal_id).filter(Boolean) as string[])]
 
-      const attendanceCounts = await db
-        .selectFrom('attendance_logs')
-        .select(['activity_id', 'date'])
-        .where('activity_id', 'in', activityIds)
-        .where('date', '>=', new Date(from))
-        .where('date', '<=', new Date(to))
-        .where('status', 'in', ['present', 'special', 'absent_excused', 'absent_unexcused'])
-        .execute()
+      // Fetch activity IDs belonging to merged journals
+      const mjActivityMap = new Map<string, string[]>() // mjId → activityIds
+      if (mergedJournalIds.length > 0) {
+        const mjActivities = await db
+          .selectFrom('merged_journal_activities')
+          .select(['merged_journal_id', 'activity_id'])
+          .where('merged_journal_id', 'in', mergedJournalIds)
+          .execute()
+        for (const row of mjActivities) {
+          if (!mjActivityMap.has(row.merged_journal_id)) mjActivityMap.set(row.merged_journal_id, [])
+          mjActivityMap.get(row.merged_journal_id)!.push(row.activity_id)
+        }
+      }
 
-      // Key: activityId_date → true means at least one record exists (journal touched)
+      const allActivityIds = [...new Set([...directActivityIds, ...[...mjActivityMap.values()].flat()])]
+
+      // Load attendance counts for all relevant activities
+      const attendanceCounts = allActivityIds.length > 0
+        ? await db
+            .selectFrom('attendance_logs')
+            .select(['activity_id', 'date'])
+            .where('activity_id', 'in', allActivityIds)
+            .where('date', '>=', new Date(from))
+            .where('date', '<=', new Date(to))
+            .where('status', 'in', ['present', 'special', 'absent_excused', 'absent_unexcused'])
+            .execute()
+        : []
+
+      // Key: activityId_date → true
       const attendanceSet = new Set<string>()
       for (const row of attendanceCounts) {
         attendanceSet.add(`${row.activity_id}_${toDateStr(row.date as unknown as Date)}`)
       }
 
-      const groupLogs = await db
-        .selectFrom('group_lesson_logs')
-        .select(['activity_id', 'date', 'status'])
-        .where('activity_id', 'in', activityIds)
-        .where('date', '>=', new Date(from))
-        .where('date', '<=', new Date(to))
-        .execute()
+      // Per-merged-journal: which dates have any attendance
+      const mjDateSet = new Map<string, Set<string>>()
+      for (const [mjId, actIds] of mjActivityMap) {
+        const dates = new Set<string>()
+        for (const row of attendanceCounts) {
+          if (actIds.includes(row.activity_id as string)) {
+            dates.add(toDateStr(row.date as unknown as Date))
+          }
+        }
+        mjDateSet.set(mjId, dates)
+      }
+
+      const groupLogs = allActivityIds.length > 0
+        ? await db
+            .selectFrom('group_lesson_logs')
+            .select(['activity_id', 'date', 'status'])
+            .where('activity_id', 'in', allActivityIds)
+            .where('date', '>=', new Date(from))
+            .where('date', '<=', new Date(to))
+            .execute()
+        : []
 
       const groupLogMap = new Map<string, string>()
       for (const gl of groupLogs) {
         groupLogMap.set(`${gl.activity_id}_${toDateStr(gl.date as unknown as Date)}`, gl.status)
+      }
+
+      // Per-merged-journal: group lesson status per date (conducted wins over cancelled)
+      const mjGroupLogMap = new Map<string, Map<string, string>>()
+      for (const [mjId, actIds] of mjActivityMap) {
+        const dateMap = new Map<string, string>()
+        for (const gl of groupLogs) {
+          if (actIds.includes(gl.activity_id as string)) {
+            const dateStr = toDateStr(gl.date as unknown as Date)
+            if (!dateMap.has(dateStr) || gl.status === 'conducted') dateMap.set(dateStr, gl.status)
+          }
+        }
+        mjGroupLogMap.set(mjId, dateMap)
       }
 
       // 5. Expand and build events
@@ -188,7 +238,6 @@ export async function calendarRoutes(app: FastifyInstance) {
           } else if (movedMap.has(rawDate)) {
             const mv = movedMap.get(rawDate)!
             const newDate = mv.newDate ?? rawDate
-            // Only include if new date falls in range
             if (newDate >= from && newDate <= to) {
               occurrences.push({
                 date: newDate,
@@ -203,10 +252,20 @@ export async function calendarRoutes(app: FastifyInstance) {
           }
         }
 
+        const mjId = sched.merged_journal_id
+
         for (const occ of occurrences) {
-          const attKey   = `${sched.activity_id}_${occ.date}`
-          const glStatus = groupLogMap.get(attKey)
-          const hasAtt   = attendanceSet.has(attKey)
+          let hasAtt: boolean
+          let glStatus: string | undefined
+
+          if (mjId) {
+            hasAtt   = mjDateSet.get(mjId)?.has(occ.date) ?? false
+            glStatus = mjGroupLogMap.get(mjId)?.get(occ.date)
+          } else {
+            const attKey = `${sched.activity_id}_${occ.date}`
+            hasAtt   = attendanceSet.has(attKey)
+            glStatus = groupLogMap.get(attKey)
+          }
 
           let journalStatus: string
           if (occ.isCancelled || glStatus === 'cancelled') {
@@ -222,31 +281,36 @@ export async function calendarRoutes(app: FastifyInstance) {
           const subKey = `${sched.id}_${occ.date}`
           const sub    = subMap.get(subKey)
 
-          // Determine displayed staff (substitute overrides original)
           const displayStaffId   = sub ? sub.substitute_staff_id : sched.staff_id
           const displayStaffName = sub ? sub.substitute_name     : sched.staff_name
 
+          const displayName = mjId
+            ? (sched.merged_journal_name ?? 'Об\'єднаний журнал')
+            : (sched.activity_name ?? '')
+
           events.push({
-            id:            `${sched.id}_${occ.date}`,
-            scheduleId:    sched.id,
-            activityId:    sched.activity_id,
-            activityName:  sched.activity_name,
-            scheduleName:  sched.name ?? null,
-            date:          occ.date,
-            startTime:     occ.startTime.slice(0, 5),   // HH:MM
-            durationMin:   sched.duration_min,
-            room:          sched.room,
-            staffId:       displayStaffId,
-            staffName:     displayStaffName,
+            id:                `${sched.id}_${occ.date}`,
+            scheduleId:        sched.id,
+            activityId:        sched.activity_id ?? null,
+            activityName:      displayName,
+            mergedJournalId:   mjId ?? null,
+            mergedJournalName: sched.merged_journal_name ?? null,
+            scheduleName:      sched.name ?? null,
+            date:              occ.date,
+            startTime:         occ.startTime.slice(0, 5),
+            durationMin:       sched.duration_min,
+            room:              sched.room,
+            staffId:           displayStaffId,
+            staffName:         displayStaffName,
             journalStatus,
-            isException:   occ.isException,
-            originalDate:  occ.originalDate ?? null,
-            color:         sched.color,
-            substitute:    sub ? {
-              staffId:      sub.substitute_staff_id,
-              staffName:    sub.substitute_name,
+            isException:       occ.isException,
+            originalDate:      occ.originalDate ?? null,
+            color:             sched.color,
+            substitute:        sub ? {
+              staffId:         sub.substitute_staff_id,
+              staffName:       sub.substitute_name,
               originalStaffId: sub.original_staff_id,
-              rateOverride: Number(sub.rate_override),
+              rateOverride:    Number(sub.rate_override),
             } : null,
           })
         }
@@ -263,12 +327,15 @@ export async function calendarRoutes(app: FastifyInstance) {
     async () => {
       return db
         .selectFrom('activity_schedules as s')
-        .innerJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('merged_journals as mj', 'mj.id', 's.merged_journal_id')
         .leftJoin('staff as st', 'st.id', 's.staff_id')
         .select([
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.merged_journal_id',
+          'mj.name as merged_journal_name',
           's.name',
           's.staff_id',
           'st.full_name as staff_name',
@@ -297,12 +364,15 @@ export async function calendarRoutes(app: FastifyInstance) {
     async (req) => {
       let q = db
         .selectFrom('activity_schedules as s')
-        .innerJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('activities as a', 'a.id', 's.activity_id')
+        .leftJoin('merged_journals as mj', 'mj.id', 's.merged_journal_id')
         .leftJoin('staff as st', 'st.id', 's.staff_id')
         .select([
           's.id',
           's.activity_id',
           'a.name as activity_name',
+          's.merged_journal_id',
+          'mj.name as merged_journal_name',
           's.name',
           's.staff_id',
           'st.full_name as staff_name',
@@ -330,26 +400,30 @@ export async function calendarRoutes(app: FastifyInstance) {
   // ── POST /api/calendar/schedules ─────────────────────────────────────────
   app.post<{
     Body: {
-      activity_id: string
-      name?:       string
-      staff_id?:   string
-      room?:       string
-      start_time:  string
-      duration_min?: number
-      days:        number[]   // 0=Sun,1=Mon,...6=Sat
-      dtstart:     string
-      dtend?:      string
-      color?:      string
-      note?:       string
+      activity_id?:        string
+      merged_journal_id?:  string
+      name?:               string
+      staff_id?:           string
+      room?:               string
+      start_time:          string
+      duration_min?:       number
+      days:                number[]   // 0=Sun,1=Mon,...6=Sat
+      dtstart:             string
+      dtend?:              string
+      color?:              string
+      note?:               string
     }
   }>(
     '/schedules',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { activity_id, name, staff_id, room, start_time, duration_min = 60, days, dtstart, dtend, color, note } = req.body
+      const { activity_id, merged_journal_id, name, staff_id, room, start_time, duration_min = 60, days, dtstart, dtend, color, note } = req.body
 
-      if (!activity_id || !start_time || !dtstart || !days?.length) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, start_time, dtstart, days є обовʼязковими' })
+      if (!activity_id && !merged_journal_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Потрібна activity_id або merged_journal_id' })
+      }
+      if (!start_time || !dtstart || !days?.length) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'start_time, dtstart, days є обовʼязковими' })
       }
 
       const rrule = buildRRule(days)
@@ -357,17 +431,18 @@ export async function calendarRoutes(app: FastifyInstance) {
       const row = await db
         .insertInto('activity_schedules')
         .values({
-          activity_id,
-          name:        name        ?? null,
-          staff_id:    staff_id    ?? null,
-          room:        room        ?? null,
+          activity_id:        activity_id        ?? null,
+          merged_journal_id:  merged_journal_id  ?? null,
+          name:               name               ?? null,
+          staff_id:           staff_id           ?? null,
+          room:               room               ?? null,
           start_time,
           duration_min,
           rrule,
           dtstart,
-          dtend:       dtend       ?? null,
-          color:       color       ?? null,
-          note:        note        ?? null,
+          dtend:              dtend              ?? null,
+          color:              color              ?? null,
+          note:               note               ?? null,
         })
         .returningAll()
         .executeTakeFirstOrThrow()

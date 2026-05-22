@@ -1,22 +1,24 @@
 import { apiClient } from './client'
 
 export interface CalendarEvent {
-  id:           string
-  scheduleId:   string
-  activityId:   string
-  activityName: string
-  scheduleName: string | null
-  date:         string
-  startTime:    string   // HH:MM
-  durationMin:  number
-  room:         string | null
-  staffId:      string | null
-  staffName:    string | null
-  journalStatus: 'future' | 'filled' | 'empty' | 'cancelled'
-  isException:  boolean
-  originalDate: string | null
-  color:        string | null
-  substitute:   {
+  id:                string
+  scheduleId:        string
+  activityId:        string | null
+  activityName:      string
+  mergedJournalId:   string | null
+  mergedJournalName: string | null
+  scheduleName:      string | null
+  date:              string
+  startTime:         string   // HH:MM
+  durationMin:       number
+  room:              string | null
+  staffId:           string | null
+  staffName:         string | null
+  journalStatus:     'future' | 'filled' | 'empty' | 'cancelled'
+  isException:       boolean
+  originalDate:      string | null
+  color:             string | null
+  substitute:        {
     staffId:         string
     staffName:       string
     originalStaffId: string | null
@@ -25,21 +27,23 @@ export interface CalendarEvent {
 }
 
 export interface CalendarSchedule {
-  id:           string
-  activity_id:  string
-  activity_name: string
-  name:         string | null
-  staff_id:     string | null
-  staff_name:   string | null
-  room:         string | null
-  start_time:   string
-  duration_min: number
-  rrule:        string
-  dtstart:      string
-  dtend:        string | null
-  color:        string | null
-  is_active:    boolean
-  note:         string | null
+  id:                  string
+  activity_id:         string | null
+  activity_name:       string | null
+  merged_journal_id:   string | null
+  merged_journal_name: string | null
+  name:                string | null
+  staff_id:            string | null
+  staff_name:          string | null
+  room:                string | null
+  start_time:          string
+  duration_min:        number
+  rrule:               string
+  dtstart:             string
+  dtend:               string | null
+  color:               string | null
+  is_active:           boolean
+  note:                string | null
 }
 
 export interface ConflictResult {
@@ -73,17 +77,18 @@ export const calendarApi = {
   },
 
   createSchedule: async (payload: {
-    activity_id:  string
-    name?:        string
-    staff_id?:    string
-    room?:        string
-    start_time:   string
-    duration_min?: number
-    days:         number[]
-    dtstart:      string
-    dtend?:       string
-    color?:       string
-    note?:        string
+    activity_id?:       string
+    merged_journal_id?: string
+    name?:              string
+    staff_id?:          string
+    room?:              string
+    start_time:         string
+    duration_min?:      number
+    days:               number[]
+    dtstart:            string
+    dtend?:             string
+    color?:             string
+    note?:              string
   }): Promise<CalendarSchedule> => {
     const { data } = await apiClient.post<CalendarSchedule>('/calendar/schedules', payload)
     return data
