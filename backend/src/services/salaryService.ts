@@ -542,6 +542,25 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       }).execute()
     }
   }
+
+  // Also trigger recalculation for any "smart" rates associated with this activity
+  // since they depend on monthly attendance totals.
+  const smartRates = await db
+    .selectFrom('staff_rates')
+    .select('id')
+    .where('activity_id', '=', activityId)
+    .where('rate_type', '=', 'smart')
+    .where('valid_from', '<=', sql<Date>`CAST(${date} AS DATE)`)
+    .where((eb) => eb.or([
+      eb('valid_to', 'is', null),
+      eb('valid_to', '>', sql<Date>`CAST(${date} AS DATE)`),
+    ]))
+    .execute()
+
+  await Promise.all(smartRates.map(async (sr) => {
+    await recalcSmartPerChildBenefit(sr.id, billing)
+    await recalcSmartStaffBenefit(sr.id, billing)
+  }))
 }
 
 /**
