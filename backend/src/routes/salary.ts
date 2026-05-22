@@ -226,7 +226,7 @@ export async function salaryRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
       const tx = await db.selectFrom('salary_transactions')
-        .select(['id', 'staff_id', 'is_deleted', 'dividend_payout_id'])
+        .select(['id', 'staff_id', 'is_deleted', 'dividend_payout_id', 'withdrawal_transfer_id', 'note', 'staff_id'])
         .where('id', '=', req.params.txId)
         .where('staff_id', '=', req.params.id)
         .executeTakeFirst()
@@ -239,6 +239,32 @@ export async function salaryRoutes(app: FastifyInstance) {
           await trx.updateTable('dividend_payouts')
             .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
             .where('id', '=', tx.dividend_payout_id)
+            .execute()
+        }
+
+        // Cleanup withdrawal side effects
+        if (tx.withdrawal_transfer_id) {
+          const transfer = await trx.selectFrom('account_transfers')
+            .select(['to_account_id'])
+            .where('id', '=', tx.withdrawal_transfer_id)
+            .executeTakeFirst()
+
+          if (transfer) {
+            // Need staff name for the expected note
+            const staff = await trx.selectFrom('staff').select('full_name').where('id', '=', tx.staff_id).executeTakeFirst()
+            const label = tx.note ?? staff?.full_name ?? tx.id
+            const expectedNotePrefix = `% за вывод ${label}`
+
+            await trx.updateTable('expenses')
+              .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+              .where('account_id', '=', transfer.to_account_id)
+              .where('note', 'like', `${expectedNotePrefix}%`)
+              .where('is_deleted', '=', false)
+              .execute()
+          }
+
+          await trx.deleteFrom('account_transfers')
+            .where('id', '=', tx.withdrawal_transfer_id)
             .execute()
         }
 
@@ -511,16 +537,21 @@ export async function salaryRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму транзакції' })
       }
 
-      const dateStr      = transfer_date ?? new Date().toISOString().slice(0, 10)
-      const returnAmount = Math.round((amount - commission) * 100) / 100
-      const label        = tx.note ?? tx.staff_name ?? tx.id
+      const dateStr = transfer_date ?? new Date().toISOString().slice(0, 10)
+      const label   = tx.note ?? tx.staff_name ?? tx.id
 
-      // 1. Transfer: money comes back (amount - commission) to target account
+      const withdrawalCategory = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+      const categoryId = withdrawalCategory ? withdrawalCategory.id : null
+
+      // 1. Transfer: money comes back (FULL amount) to target account
       const transfer = await db.insertInto('account_transfers')
         .values({
           from_account_id: tx.account_id,
           to_account_id:   target_account_id,
-          amount:          returnAmount,
+          amount:          amount,
           commission:      0,
           transfer_date:   dateStr,
           note: `Обналичування ЗП: ${label}`,
@@ -529,20 +560,20 @@ export async function salaryRoutes(app: FastifyInstance) {
         .returningAll()
         .executeTakeFirstOrThrow()
 
-      // 2. Commission as a separate expense (if commission > 0)
+      // 2. Commission as a separate expense on target account (if commission > 0)
       let commissionExpense = null
       if (commission > 0) {
         commissionExpense = await db.insertInto('expenses')
           .values({
-            account_id:   tx.account_id,
-            category_id:  null,
+            account_id:   target_account_id,
+            category_id:  categoryId,
             amount:       commission,
             accrual_date: dateStr,
             payment_date: dateStr,
             status:       'paid',
             is_instant:   true,
             is_dividend:  false,
-            note: `Комісія за обналичування ЗП "${label}" на суму ${amount}`,
+            note: `% за вывод ${label}`,
             created_by:   req.user.sub,
           })
           .returningAll()

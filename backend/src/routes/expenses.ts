@@ -297,7 +297,7 @@ export async function expensesRoutes(app: FastifyInstance) {
     '/:id',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const expense = await db.selectFrom('expenses').select(['id', 'dividend_payout_id']).where('id', '=', req.params.id).where('is_deleted', '=', false).executeTakeFirst()
+      const expense = await db.selectFrom('expenses').select(['id', 'dividend_payout_id', 'withdrawal_transfer_id', 'note']).where('id', '=', req.params.id).where('is_deleted', '=', false).executeTakeFirst()
       if (!expense) return reply.status(404).send({ error: 'NotFound' })
 
       await db.transaction().execute(async (trx) => {
@@ -306,6 +306,28 @@ export async function expensesRoutes(app: FastifyInstance) {
           await trx.updateTable('dividend_payouts')
             .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
             .where('id', '=', expense.dividend_payout_id)
+            .execute()
+        }
+
+        // Cleanup withdrawal side effects
+        if (expense.withdrawal_transfer_id) {
+          const transfer = await trx.selectFrom('account_transfers')
+            .select(['to_account_id'])
+            .where('id', '=', expense.withdrawal_transfer_id)
+            .executeTakeFirst()
+
+          if (transfer) {
+            const expectedNotePrefix = `% за вывод ${expense.note ?? expense.id}`
+            await trx.updateTable('expenses')
+              .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+              .where('account_id', '=', transfer.to_account_id)
+              .where('note', 'like', `${expectedNotePrefix}%`)
+              .where('is_deleted', '=', false)
+              .execute()
+          }
+
+          await trx.deleteFrom('account_transfers')
+            .where('id', '=', expense.withdrawal_transfer_id)
             .execute()
         }
 
@@ -349,7 +371,7 @@ export async function expensesRoutes(app: FastifyInstance) {
     }
   )
 
-  // POST /api/expenses/:id/withdraw — cash-out: transfer (amount - commission) back to target account
+  // POST /api/expenses/:id/withdraw — cash-out: transfer full amount back to target account
   app.post<{
     Params: { id: string }
     Body: { target_account_id: string; commission: number; transfer_date?: string }
@@ -382,14 +404,19 @@ export async function expensesRoutes(app: FastifyInstance) {
       }
 
       const dateStr = transfer_date ?? new Date().toISOString().slice(0, 10)
-      const returnAmount = Math.round((amount - commission) * 100) / 100
 
-      // 1. Transfer: money comes back (amount - commission) to target account
+      const withdrawalCategory = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+      const categoryId = withdrawalCategory ? withdrawalCategory.id : null
+
+      // 1. Transfer: money comes back (FULL amount) to target account
       const transfer = await db.insertInto('account_transfers')
         .values({
           from_account_id: expense.account_id,
           to_account_id:   target_account_id,
-          amount:          returnAmount,
+          amount:          amount,
           commission:      0,
           transfer_date:   dateStr,
           note: `Обналичування: ${expense.note ?? expense.id}`,
@@ -398,20 +425,20 @@ export async function expensesRoutes(app: FastifyInstance) {
         .returningAll()
         .executeTakeFirstOrThrow()
 
-      // 2. Commission as a separate expense (if commission > 0)
+      // 2. Commission as a separate expense on target account (if commission > 0)
       let commissionExpense = null
       if (commission > 0) {
         commissionExpense = await db.insertInto('expenses')
           .values({
-            account_id:   expense.account_id,
-            category_id:  null,
+            account_id:   target_account_id,
+            category_id:  categoryId,
             amount:       commission,
             accrual_date: dateStr,
             payment_date: dateStr,
             status:       'paid',
             is_instant:   true,
             is_dividend:  false,
-            note: `Комісія за обналичування "${expense.note ?? expense.id}" на суму ${amount}`,
+            note: `% за вывод ${expense.note ?? expense.id}`,
             created_by:   req.user.sub,
           })
           .returningAll()

@@ -1143,7 +1143,7 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
           <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-gray-500">Буде зараховано на рахунок</span>
-              <span className="font-mono font-medium text-green-700">{returnAmount.toFixed(2)}</span>
+              <span className="font-mono font-medium text-green-700">{amount.toFixed(2)}</span>
             </div>
             {commission > 0 && (
               <div className="flex justify-between">

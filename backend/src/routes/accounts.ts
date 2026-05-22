@@ -32,7 +32,11 @@ const balanceSql = sql<string>`(
   - COALESCE((SELECT SUM(amount) FROM expenses             WHERE account_id = a.id AND status = 'paid' AND is_deleted = false), 0)
   - COALESCE((SELECT SUM(gross_amount) FROM salary_transactions WHERE account_id = a.id AND type = 'PAYMENT' AND is_deleted = false), 0)
   + COALESCE((SELECT SUM(amount) FROM account_transfers WHERE to_account_id   = a.id), 0)
-  - COALESCE((SELECT SUM(amount) FROM account_transfers WHERE from_account_id = a.id), 0)
+  - COALESCE((
+      SELECT SUM(amount) FROM account_transfers WHERE from_account_id = a.id
+      AND NOT EXISTS (SELECT 1 FROM expenses WHERE withdrawal_transfer_id = account_transfers.id AND is_deleted = false)
+      AND NOT EXISTS (SELECT 1 FROM salary_transactions WHERE withdrawal_transfer_id = account_transfers.id AND is_deleted = false)
+    ), 0)
 )`
 
 export async function accountsRoutes(app: FastifyInstance) {
@@ -153,6 +157,8 @@ export async function accountsRoutes(app: FastifyInstance) {
         WHERE at.from_account_id = ${id}
           AND (${f}::date IS NULL OR at.transfer_date::date >= ${f}::date)
           AND (${t}::date IS NULL OR at.transfer_date::date <= ${t}::date)
+          AND NOT EXISTS (SELECT 1 FROM expenses e WHERE e.withdrawal_transfer_id = at.id AND e.is_deleted = false)
+          AND NOT EXISTS (SELECT 1 FROM salary_transactions st WHERE st.withdrawal_transfer_id = at.id AND st.is_deleted = false)
 
         UNION ALL
 
