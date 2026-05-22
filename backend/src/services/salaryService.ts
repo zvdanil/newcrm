@@ -463,34 +463,33 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const groupLessonCount = groupLog?.lessons_count ?? 1
   const billing        = billingMonthOf(date)
 
+  const existingAccruals = await db
+    .selectFrom('salary_transactions as st')
+    .innerJoin('staff_rates as sr', 'sr.id', 'st.rate_id')
+    .select(['st.id', 'st.rate_id', 'st.gross_amount'])
+    .where('st.activity_id',      '=', activityId)
+    .where('st.transaction_date', '=', new Date(date))
+    .where('st.type',             '=', 'ACCRUAL')
+    .where('st.is_deleted',       '=', false)
+    .where('sr.rate_category',    '=', 'auto') // Только автоматические
+    .execute()
+
+  // Clean up any other "competing" AUTO accruals for this activity on this date
+  // that are not part of the current active rates loop.
+  for (const ext of existingAccruals) {
+    if (!rates.some(r => r.id === ext.rate_id)) {
+      await db.updateTable('salary_transactions')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('id', '=', ext.id)
+        .execute()
+    }
+  }
+
   for (const rate of rates) {
     // Skip auto-accrual for the teacher replaced by a substitution
     if (blockedStaffId && rate.staff_id === blockedStaffId) continue
 
-    const existingAccruals = await db
-      .selectFrom('salary_transactions as st')
-      .innerJoin('staff_rates as sr', 'sr.id', 'st.rate_id')
-      .select(['st.id', 'st.rate_id', 'st.gross_amount'])
-      .where('st.staff_id',         '=', rate.staff_id)
-      .where('st.activity_id',      '=', activityId)
-      .where('st.transaction_date', '=', new Date(date))
-      .where('st.type',             '=', 'ACCRUAL')
-      .where('st.is_deleted',       '=', false)
-      .where('sr.rate_category',    '=', 'auto') // Только автоматические
-      .execute()
-
     const existing = existingAccruals.find(a => a.rate_id === rate.id)
-
-    // Clean up any other "competing" AUTO accruals for this activity on this date
-    // that are not part of the current active rates loop.
-    for (const ext of existingAccruals) {
-      if (!rates.some(r => r.id === ext.rate_id)) {
-        await db.updateTable('salary_transactions')
-          .set({ is_deleted: true, deleted_at: now })
-          .where('id', '=', ext.id)
-          .execute()
-      }
-    }
 
     const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount)
     let hasLesson = false
