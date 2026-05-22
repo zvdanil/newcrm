@@ -398,7 +398,7 @@ function JournalModal({ type, id, date, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-2xl flex flex-col"
-        style={{ width: '92vw', maxWidth: 1100, height: '88vh' }}
+        style={{ width: '98vw', maxWidth: '98vw', height: '96vh' }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
