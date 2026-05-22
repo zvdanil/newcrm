@@ -73,42 +73,61 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .execute()
 
   // Group by child
-  const byChild = new Map<string, { name: string; trial: number; regular: number }>()
+  const byChild = new Map<string, { name: string; standardCount: number; customSum: number; customCount: number }>()
   for (const m of allMarks) {
-    if (!byChild.has(m.child_id)) byChild.set(m.child_id, { name: m.full_name, trial: 0, regular: 0 })
+    if (!byChild.has(m.child_id)) {
+      byChild.set(m.child_id, { name: m.full_name, standardCount: 0, customSum: 0, customCount: 0 })
+    }
     const entry = byChild.get(m.child_id)!
     if (m.custom_amount !== null) {
-      entry.trial++
+      const val = Number(m.custom_amount)
+      entry.customSum += isNaN(val) ? 0 : val
+      entry.customCount++
     } else {
-      entry.regular++
+      entry.standardCount++
     }
   }
 
-  type ChildMode = 'trial' | 'regular'
+  type ChildMode = 'trial' | 'regular' | 'none'
   type ChildRange = 'none' | 'starter' | 'base' | 'extra'
 
-  const children = Array.from(byChild.entries()).map(([child_id, { name, trial, regular }]) => {
+  const children = Array.from(byChild.entries()).map(([child_id, { name, standardCount, customSum, customCount }]) => {
     let mode: ChildMode
     let amount: number
     let range: ChildRange = 'none'
 
-    if (trial >= cfg.attendance_threshold) {
-      // Converted to regular — three-tier formula on all visits
-      mode = 'regular'
-      const total = trial + regular
-      amount = calcSmartPerChildAmount(total, cfg)
-      if (total === 0)                             range = 'none'
-      else if (total < cfg.attendance_threshold)   range = 'starter'
-      else if (total <= cfg.base_lessons)          range = 'base'
-      else                                         range = 'extra'
-    } else {
-      // Still in trial mode — pay per trial visit only
+    const totalVisits = standardCount + customCount
+
+    if (customCount > 0) {
+      // Any manual mark triggers trial mode for the whole child
       mode = 'trial'
-      amount = Math.round(trial * cfg.trial_lesson_price * 100) / 100
-      range = trial > 0 ? 'starter' : 'none'
+      amount = totalVisits * cfg.trial_lesson_price
+      range = totalVisits > 0 ? 'starter' : 'none'
+    } else if (standardCount > 0) {
+      // Only standard marks -> regular tiered formula
+      mode = 'regular'
+      amount = calcSmartPerChildAmount(standardCount, cfg)
+      
+      if (totalVisits === 0)                             range = 'none'
+      else if (totalVisits < cfg.attendance_threshold)   range = 'starter'
+      else if (totalVisits <= cfg.base_lessons)          range = 'base'
+      else                                               range = 'extra'
+    } else {
+      mode = 'none'
+      amount = 0
+      range = 'none'
     }
 
-    return { child_id, child_name: name, trial, regular, mode, range, amount }
+    return { 
+      child_id, 
+      child_name: name, 
+      standardCount, 
+      customCount, 
+      customSum, 
+      mode, 
+      range, 
+      amount: Math.round(amount * 100) / 100 
+    }
   })
 
   const totalGross = Math.round(children.reduce((s, c) => s + c.amount, 0) * 100) / 100
@@ -125,9 +144,13 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
 
   const childLines = children
     .filter(c => c.amount > 0)
-    .map(c => c.mode === 'trial'
-      ? `${c.child_name}: ${c.trial} проб. → ${c.amount.toFixed(0)} грн`
-      : `${c.child_name}: ${c.trial + c.regular} відв. → ${c.amount.toFixed(0)} грн`)
+    .map(c => {
+      const total = c.standardCount + c.customCount
+      const detail = c.customCount > 0 
+        ? `${c.standardCount} ст. + ${c.customCount} спец.` 
+        : `${total} відв.`
+      return `${c.child_name}: ${detail} → ${c.amount.toFixed(0)} грн`
+    })
     .join('; ')
   const noteStr = `Смарт за дитину. ${childLines}`
 
