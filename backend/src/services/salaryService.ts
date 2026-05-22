@@ -68,26 +68,45 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
   const allMarks = await db
     .selectFrom('attendance_logs as al')
     .innerJoin('children as c', 'c.id', 'al.child_id')
-    .select(['al.child_id', 'c.full_name', 'al.custom_amount'])
+    .select(['al.child_id', 'c.full_name', 'al.custom_amount', 'al.date'])
     .where('al.activity_id', '=', rate.activity_id!)
     .where('al.date', '>=', new Date(billingStart))
     .where('al.date', '<', new Date(billingEnd))
     .where('al.status', 'in', ['present', 'special'])
     .execute()
 
-  // Group by child
+  // Group by child and date to ensure we count distinct visits (days attended)
   const byChild = new Map<string, { name: string; standardCount: number; customSum: number; customCount: number }>()
+  const childDates = new Map<string, Map<string, { customAmount: string | null }>>()
+
   for (const m of allMarks) {
     if (!byChild.has(m.child_id)) {
       byChild.set(m.child_id, { name: m.full_name, standardCount: 0, customSum: 0, customCount: 0 })
     }
-    const entry = byChild.get(m.child_id)!
-    if (m.custom_amount !== null) {
-      const val = Number(m.custom_amount)
-      entry.customSum += isNaN(val) ? 0 : val
-      entry.customCount++
-    } else {
-      entry.standardCount++
+    
+    if (!childDates.has(m.child_id)) {
+      childDates.set(m.child_id, new Map())
+    }
+    const dates = childDates.get(m.child_id)!
+    const dateKey = m.date instanceof Date ? m.date.toISOString().slice(0, 10) : String(m.date).slice(0, 10)
+    
+    // If multiple marks on the same day, prioritize the one with custom_amount
+    if (!dates.has(dateKey) || (m.custom_amount !== null && dates.get(dateKey)?.customAmount === null)) {
+      dates.set(dateKey, { customAmount: m.custom_amount })
+    }
+  }
+
+  // Now aggregate the distinct daily visits into the byChild map
+  for (const [childId, dates] of childDates.entries()) {
+    const entry = byChild.get(childId)!
+    for (const visit of dates.values()) {
+      if (visit.customAmount !== null) {
+        const val = Number(visit.customAmount)
+        entry.customSum += isNaN(val) ? 0 : val
+        entry.customCount++
+      } else {
+        entry.standardCount++
+      }
     }
   }
 
