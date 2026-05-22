@@ -1,7 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './components/Layout/AppLayout'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { useAuthStore } from './store/auth.store'
 import { LoginPage } from './pages/Login/LoginPage'
 import { ChildrenListPage } from './pages/Children/ChildrenListPage'
 import { ChildCardPage } from './pages/Children/ChildCardPage'
@@ -35,6 +36,16 @@ const queryClient = new QueryClient({
   },
 })
 
+function RootRedirect() {
+  const { user } = useAuthStore()
+  return <Navigate to={user?.role === 'duty_admin' ? '/journals' : '/children'} replace />
+}
+
+function NonDutyAdminRoute() {
+  const { user } = useAuthStore()
+  if (user?.role === 'duty_admin') return <Navigate to="/journals" replace />
+  return <Outlet />
+}
 
 export function App() {
   return (
@@ -47,52 +58,56 @@ export function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route index element={<Navigate to="/children" replace />} />
+              <Route index element={<RootRedirect />} />
 
-              {/* Діти */}
-              <Route path="children"      element={<ChildrenListPage />} />
-              <Route path="children/new"  element={<ChildCreatePage />} />
-              <Route path="children/:id"  element={<ChildCardPage />} />
+              {/* Журнали — доступні для всіх ролей включно з duty_admin */}
+              <Route path="journals"             element={<JournalsListPage />} />
+              <Route path="journals/merged/:id"  element={<MergedJournalPage />} />
+              <Route path="journals/:activityId" element={<JournalPage />} />
 
-              {/* Сім'ї */}
-              <Route path="families"      element={<FamiliesListPage />} />
-              <Route path="families/new"  element={<FamilyCreatePage />} />
-              <Route path="families/:id"  element={<FamilyCardPage />} />
-
-              {/* Групи */}
-              <Route path="groups" element={<GroupsPage />} />
-
-              {/* Рахунки */}
-              <Route path="accounts" element={<AccountsPage />} />
-              <Route path="accounts/:id" element={<AccountCardPage />} />
-
-              {/* Активності */}
-              <Route path="activities"      element={<ActivitiesListPage />} />
-              <Route path="activities/new"  element={<ActivityCreatePage />} />
-              <Route path="activities/:id"  element={<ActivityCardPage />} />
-
-              {/* Журнали */}
-              <Route path="journals"                    element={<JournalsListPage />} />
-              <Route path="journals/merged/:id"         element={<MergedJournalPage />} />
-              <Route path="journals/:activityId"        element={<JournalPage />} />
-              {/* Витрати */}
-              <Route path="expenses" element={<ExpensesPage />} />
-
-              {/* Персонал */}
-              <Route path="staff"       element={<StaffListPage />} />
-              <Route path="staff/:id"   element={<StaffCardPage />} />
-
-              {/* Зарплата */}
-              <Route path="salary/journal" element={<SalaryJournalPage />} />
-
-              {/* Календар */}
+              {/* Календар — доступний для всіх ролей включно з duty_admin */}
               <Route path="calendar" element={<CalendarPage />} />
 
-              {/* Дивіденди */}
-              <Route path="dividends" element={<DividendsPage />} />
+              {/* Всі інші розділи — недоступні для duty_admin */}
+              <Route element={<NonDutyAdminRoute />}>
+                {/* Діти */}
+                <Route path="children"      element={<ChildrenListPage />} />
+                <Route path="children/new"  element={<ChildCreatePage />} />
+                <Route path="children/:id"  element={<ChildCardPage />} />
 
-              <Route path="reports" element={<ReportsPage />} />
-              <Route path="users"   element={<UsersPage />} />
+                {/* Сім'ї */}
+                <Route path="families"      element={<FamiliesListPage />} />
+                <Route path="families/new"  element={<FamilyCreatePage />} />
+                <Route path="families/:id"  element={<FamilyCardPage />} />
+
+                {/* Групи */}
+                <Route path="groups" element={<GroupsPage />} />
+
+                {/* Рахунки */}
+                <Route path="accounts" element={<AccountsPage />} />
+                <Route path="accounts/:id" element={<AccountCardPage />} />
+
+                {/* Активності */}
+                <Route path="activities"      element={<ActivitiesListPage />} />
+                <Route path="activities/new"  element={<ActivityCreatePage />} />
+                <Route path="activities/:id"  element={<ActivityCardPage />} />
+
+                {/* Витрати */}
+                <Route path="expenses" element={<ExpensesPage />} />
+
+                {/* Персонал */}
+                <Route path="staff"       element={<StaffListPage />} />
+                <Route path="staff/:id"   element={<StaffCardPage />} />
+
+                {/* Зарплата */}
+                <Route path="salary/journal" element={<SalaryJournalPage />} />
+
+                {/* Дивіденди */}
+                <Route path="dividends" element={<DividendsPage />} />
+
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="users"   element={<UsersPage />} />
+              </Route>
             </Route>
           </Route>
 

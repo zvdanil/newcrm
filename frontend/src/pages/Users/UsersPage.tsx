@@ -15,6 +15,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   accountant: 'Бухгалтер',
   teacher:    'Вчитель',
   parent:     'Батьки',
+  duty_admin: 'Адмін зміни',
 }
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -24,6 +25,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
   accountant: 'bg-yellow-100 text-yellow-700',
   teacher:    'bg-green-100 text-green-700',
   parent:     'bg-gray-100 text-gray-700',
+  duty_admin: 'bg-orange-100 text-orange-700',
 }
 
 export default function UsersPage() {

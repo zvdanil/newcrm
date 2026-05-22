@@ -14,13 +14,20 @@ const NAV_LINKS = [
   { to: '/reports',         label: 'Звіти' },
 ]
 
+const DUTY_ADMIN_LINKS = new Set(['/journals', '/calendar'])
+
 export function AppLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
   const location = useLocation()
+  const isDutyAdmin     = user?.role === 'duty_admin'
   const canManageGroups = useCanAccess('owner', 'admin')
   const canManageUsers  = useCanAccess('owner', 'admin')
   const isOwner = useCanAccess('owner')
+
+  const visibleLinks = isDutyAdmin
+    ? NAV_LINKS.filter(l => DUTY_ADMIN_LINKS.has(l.to))
+    : NAV_LINKS
 
   // When embedded in an iframe (e.g. opened from calendar modal), hide navigation
   const isEmbedded = new URLSearchParams(location.search).get('layout') === 'none'
@@ -50,7 +57,7 @@ export function AppLayout() {
 
             {/* Nav */}
             <nav className="hidden md:flex items-center gap-1">
-              {NAV_LINKS.map(({ to, label }) => (
+              {visibleLinks.map(({ to, label }) => (
                 <NavLink
                   key={to}
                   to={to}

@@ -5,7 +5,7 @@ import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
 import type { UserRole } from '../db/types.js'
 
-const ADMIN_MANAGEABLE_ROLES: UserRole[] = ['manager', 'accountant', 'teacher', 'parent']
+const ADMIN_MANAGEABLE_ROLES: UserRole[] = ['manager', 'accountant', 'teacher', 'parent', 'duty_admin']
 
 function canManageTarget(requestorRole: UserRole, targetRole: UserRole): boolean {
   if (requestorRole === 'owner') return true

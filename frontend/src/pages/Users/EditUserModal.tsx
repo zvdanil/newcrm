@@ -7,8 +7,8 @@ import { useAuthStore } from '../../store/auth.store'
 import type { UserRole } from '../../types'
 import { ROLE_LABELS } from './UsersPage'
 
-const ALL_ROLES: UserRole[] = ['owner', 'admin', 'manager', 'accountant', 'teacher', 'parent']
-const ADMIN_ROLES: UserRole[] = ['manager', 'accountant', 'teacher', 'parent']
+const ALL_ROLES: UserRole[] = ['owner', 'admin', 'manager', 'accountant', 'teacher', 'parent', 'duty_admin']
+const ADMIN_ROLES: UserRole[] = ['manager', 'accountant', 'teacher', 'parent', 'duty_admin']
 
 interface Props {
   user: CrmUser

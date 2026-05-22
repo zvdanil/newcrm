@@ -53,7 +53,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   // Returns expanded occurrences with journal_status for each event
   app.get<{ Querystring: { from: string; to: string } }>(
     '/events',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'accountant', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'accountant', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const { from, to } = req.query
       if (!from || !to) return reply.status(400).send({ error: 'BadRequest', message: 'from і to є обовʼязковими' })
@@ -259,7 +259,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   // ── GET /api/calendar/schedules ──────────────────────────────────────────
   app.get(
     '/schedules',
-    { preHandler: requireRole('owner', 'admin', 'manager') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'duty_admin') },
     async () => {
       return db
         .selectFrom('activity_schedules as s')
@@ -293,7 +293,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   // GET /api/calendar/schedules by activity
   app.get<{ Querystring: { activity_id?: string } }>(
     '/schedules/by-activity',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req) => {
       let q = db
         .selectFrom('activity_schedules as s')
@@ -448,7 +448,7 @@ export async function calendarRoutes(app: FastifyInstance) {
     }
   }>(
     '/schedules/:id/exceptions',
-    { preHandler: requireRole('owner', 'admin', 'manager') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'duty_admin') },
     async (req, reply) => {
       const { id } = req.params
       const { original_date, exception_type, new_date, new_start_time, note } = req.body
@@ -483,7 +483,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   // ── DELETE /api/calendar/schedules/:id/exceptions/:originalDate ──────────
   app.delete<{ Params: { id: string; originalDate: string } }>(
     '/schedules/:id/exceptions/:originalDate',
-    { preHandler: requireRole('owner', 'admin', 'manager') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'duty_admin') },
     async (req, reply) => {
       await db
         .deleteFrom('schedule_exceptions')
@@ -696,7 +696,7 @@ export async function calendarRoutes(app: FastifyInstance) {
   // Returns staff members who have an active rate for the given activity
   app.get<{ Querystring: { activity_id: string } }>(
     '/staff-for-activity',
-    { preHandler: requireRole('owner', 'admin', 'manager') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'duty_admin') },
     async (req, reply) => {
       const { activity_id } = req.query
       if (!activity_id) return reply.status(400).send({ error: 'BadRequest', message: 'activity_id є обовʼязковим' })

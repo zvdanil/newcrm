@@ -1,6 +1,6 @@
 import type { Generated, ColumnType } from 'kysely'
 
-export type UserRole = 'owner' | 'admin' | 'manager' | 'accountant' | 'teacher' | 'parent'
+export type UserRole = 'owner' | 'admin' | 'manager' | 'accountant' | 'teacher' | 'parent' | 'duty_admin'
 
 export interface UsersTable {
   id: Generated<string>

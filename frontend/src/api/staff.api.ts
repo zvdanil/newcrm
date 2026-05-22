@@ -157,13 +157,14 @@ export const staffApi = {
     deduction_pct?: number
     valid_from?: string
     note?: string
-    smart_config?: { 
+    smart_config?: {
       base_lessons: number
       absence_threshold: number
       threshold_rate: number
       attendance_threshold?: number
       starter_rate?: number
       extra_lesson_price?: number
+      trial_lesson_price?: number
     }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.post<StaffRate>(`/staff/${staffId}/rates`, payload)
@@ -174,13 +175,14 @@ export const staffApi = {
     deduction_pct?: number
     valid_to?: string | null
     note?: string | null
-    smart_config?: { 
+    smart_config?: {
       base_lessons: number
       absence_threshold: number
       threshold_rate: number
       attendance_threshold?: number
       starter_rate?: number
       extra_lesson_price?: number
+      trial_lesson_price?: number
     }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.put<StaffRate>(`/staff/${staffId}/rates/${rateId}`, payload)

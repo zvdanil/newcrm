@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'admin' | 'manager' | 'accountant' | 'teacher' | 'parent'
+export type UserRole = 'owner' | 'admin' | 'manager' | 'accountant' | 'teacher' | 'parent' | 'duty_admin'
 
 export interface AuthUser {
   id: string

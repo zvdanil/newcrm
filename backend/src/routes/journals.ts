@@ -294,7 +294,7 @@ export async function journalsRoutes(app: FastifyInstance) {
     }
   }>(
     '/attendance',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const { enrollment_id, date, status, custom_amount, note } = req.body
       if (!enrollment_id || !date || !status) {
@@ -463,7 +463,7 @@ export async function journalsRoutes(app: FastifyInstance) {
     }
   }>(
     '/attendance/:id',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const { status, custom_amount, note } = req.body
       const createdBy = (req.user as { sub: string }).sub
@@ -568,7 +568,7 @@ export async function journalsRoutes(app: FastifyInstance) {
   // DELETE /api/attendance/:id — зняти відмітку
   app.delete<{ Params: { id: string } }>(
     '/attendance/:id',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const deletedBy = (req.user as { sub: string }).sub
 
@@ -637,7 +637,7 @@ export async function journalsRoutes(app: FastifyInstance) {
     }
   }>(
     '/group-attendance',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const { activity_id, date, status, lessons_count } = req.body
       if (!activity_id || !date || !status) {
@@ -674,7 +674,7 @@ export async function journalsRoutes(app: FastifyInstance) {
   // DELETE /api/journals/group-attendance/:id
   app.delete<{ Params: { id: string } }>(
     '/group-attendance/:id',
-    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher') },
+    { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
       const log = await db.selectFrom('group_lesson_logs').selectAll().where('id', '=', req.params.id).executeTakeFirst()
       if (!log) return reply.status(404).send({ error: 'NotFound' })
