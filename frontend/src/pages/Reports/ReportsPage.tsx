@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { reportsApi } from '../../api/reports.api'
 import type { ARFilters, DebtorRow } from '../../api/reports.api'
 import { accountsApi } from '../../api/accounts.api'
+import { PnLReport } from './PnLReport'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ const EMPTY_FILTERS: ARFilters = {
 // ─── component ──────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
+  const [activeTab, setActiveTab] = useState<'ar' | 'pnl'>('ar')
   const [filters, setFilters]         = useState<ARFilters>(EMPTY_FILTERS)
   const [committed, setCommitted]     = useState<ARFilters | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -99,6 +101,32 @@ export function ReportsPage() {
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Звіти</h1>
       </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {([
+            { id: 'ar',  label: 'Дебіторська заборгованість' },
+            { id: 'pnl', label: 'PnL' },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap py-3 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === tab.id
+                  ? 'border-iris-500 text-iris-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {activeTab === 'pnl' && <PnLReport />}
+
+      {activeTab === 'ar' && <>
 
       {/* Report card */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
@@ -302,6 +330,8 @@ export function ReportsPage() {
           )}
         </div>
       )}
+
+      </>}
     </div>
   )
 }

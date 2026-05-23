@@ -28,6 +28,21 @@ export interface ARFilters {
   sort: 'desc' | 'asc'
 }
 
+export interface PnLRow {
+  month: string              // 'YYYY-MM-01'
+  expected_revenue: number
+  accrued_expense: number
+  real_income: number
+  expense_turnover: number
+  expense_turnover_no_div: number
+  balance_no_div: number
+  account_balance: number
+}
+
+export interface PnLReport {
+  rows: PnLRow[]
+}
+
 export const reportsApi = {
   getAccountsReceivable: async (filters: ARFilters): Promise<ARReport> => {
     const params = new URLSearchParams()
@@ -38,6 +53,14 @@ export const reportsApi = {
     if (filters.min_debt)             params.set('min_debt', filters.min_debt)
     params.set('sort', filters.sort)
     const { data } = await apiClient.get<ARReport>(`/reports/accounts-receivable?${params}`)
+    return data
+  },
+
+  getPnL: async (from?: string, to?: string): Promise<PnLReport> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to)   params.set('to', to)
+    const { data } = await apiClient.get<PnLReport>(`/reports/pnl?${params}`)
     return data
   },
 }
