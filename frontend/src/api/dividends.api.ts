@@ -81,13 +81,19 @@ export const dividendsApi = {
     return data
   },
 
-  getLedger: async () => {
-    const { data } = await apiClient.get<DividendLedger>('/dividends/ledger')
+  getLedger: async (filters?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams()
+    if (filters?.from) params.set('from', filters.from)
+    if (filters?.to) params.set('to', filters.to)
+    const { data } = await apiClient.get<DividendLedger>(`/dividends/ledger${params.toString() ? '?' + params.toString() : ''}`)
     return data
   },
 
-  getPayouts: async () => {
-    const { data } = await apiClient.get<DividendPayout[]>('/dividends/payouts')
+  getPayouts: async (filters?: { from?: string; to?: string }) => {
+    const params = new URLSearchParams()
+    if (filters?.from) params.set('from', filters.from)
+    if (filters?.to) params.set('to', filters.to)
+    const { data } = await apiClient.get<DividendPayout[]>(`/dividends/payouts${params.toString() ? '?' + params.toString() : ''}`)
     return data
   },
 

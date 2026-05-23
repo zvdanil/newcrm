@@ -3,12 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { CreatePayoutModal } from './CreatePayoutModal'
 
-export function PayoutsTab({ 
-  prefillExpenseId, 
-  onClearPrefill 
-}: { 
+export function PayoutsTab({
+  prefillExpenseId,
+  onClearPrefill,
+  periodFrom,
+  periodTo,
+}: {
   prefillExpenseId?: string | null
-  onClearPrefill?: () => void 
+  onClearPrefill?: () => void
+  periodFrom?: string
+  periodTo?: string
 }) {
   const queryClient = useQueryClient()
   const [isModalOpen, setIsModalOpen] = useState(!!prefillExpenseId)
@@ -20,9 +24,11 @@ export function PayoutsTab({
     }
   }, [prefillExpenseId])
 
+  const filters = { from: periodFrom || undefined, to: periodTo || undefined }
+
   const { data: payouts = [], isLoading } = useQuery({
-    queryKey: ['dividends', 'payouts'],
-    queryFn: dividendsApi.getPayouts,
+    queryKey: ['dividends', 'payouts', periodFrom, periodTo],
+    queryFn: () => dividendsApi.getPayouts(filters),
   })
 
   const deleteMut = useMutation({

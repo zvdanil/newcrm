@@ -110,17 +110,23 @@ export async function dividendsRoutes(app: FastifyInstance) {
 
   // ── 3. Ledger & Balances ───────────────────────────────────────────────────
 
-  app.get('/ledger', { preHandler: requireRole('owner') }, async () => {
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    '/ledger',
+    { preHandler: requireRole('owner') },
+    async (req) => {
+    const { from, to } = req.query
+
     const participants = await db.selectFrom('equity_participants')
       .selectAll()
       .where('is_active', '=', true)
       .execute()
 
-    const payouts = await db.selectFrom('dividend_payouts')
+    let payoutsQuery = db.selectFrom('dividend_payouts')
       .select(['participant_id', sql<number>`SUM(net_amount)`.as('actual_net')])
       .where('is_deleted', '=', false)
-      .groupBy('participant_id')
-      .execute()
+    if (from) payoutsQuery = payoutsQuery.where('date', '>=', from as any)
+    if (to) payoutsQuery = payoutsQuery.where('date', '<=', to as any)
+    const payouts = await payoutsQuery.groupBy('participant_id').execute()
 
     let totalNet = 0
     const participantStats = participants.map(p => {
@@ -166,14 +172,22 @@ export async function dividendsRoutes(app: FastifyInstance) {
 
   // ── 4. Payouts ─────────────────────────────────────────────────────────────
 
-  app.get('/payouts', { preHandler: requireRole('owner') }, async () => {
-    const payouts = await db.selectFrom('dividend_payouts as dp')
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    '/payouts',
+    { preHandler: requireRole('owner') },
+    async (req) => {
+    const { from, to } = req.query
+
+    let payoutsQuery = db.selectFrom('dividend_payouts as dp')
       .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
       .select([
         'dp.id', 'dp.date', 'dp.type', 'dp.tax_pct', 'dp.gross_amount', 'dp.net_amount', 'dp.note', 'dp.created_at',
         'dp.participant_id', 'ep.name as participant_name'
       ])
       .where('dp.is_deleted', '=', false)
+    if (from) payoutsQuery = payoutsQuery.where('dp.date', '>=', from as any)
+    if (to) payoutsQuery = payoutsQuery.where('dp.date', '<=', to as any)
+    const payouts = await payoutsQuery
       .orderBy('dp.date', 'desc')
       .orderBy('dp.created_at', 'desc')
       .execute()
