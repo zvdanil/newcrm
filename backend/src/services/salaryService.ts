@@ -182,7 +182,11 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
           ? `${c.standardCount} ст. + ${c.customCount} спец.` 
           : `${c.customCount} спец.`
       } else {
-        detail = `${total} відв.`
+        if (total < cfg.attendance_threshold) {
+          detail = `відвід <= ${cfg.attendance_threshold} (ставка ${cfg.starter_rate})`
+        } else {
+          detail = `відвід >= ${cfg.attendance_threshold} (ставка ${cfg.threshold_rate})`
+        }
       }
       return `${c.child_name}: ${detail} → ${c.amount.toFixed(2)} грн`
     })
