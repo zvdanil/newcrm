@@ -26,7 +26,7 @@ interface CandidateFamily {
 
 export interface PreviewRow extends BankRow {
   status: 'matched' | 'conflict' | 'unmatched' | 'duplicate' | 'partial'
-  match_method: 'edrpou' | 'iban' | 'name_fuzzy' | 'name_partial' | null
+  match_method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | 'name_fuzzy' | 'name_partial' | null
   matched_family_id: string | null
   matched_child_id: string | null
   matched_family_name: string | null
@@ -81,7 +81,7 @@ function makeBankRef(row: BankRow): string {
 // ─── Matching ─────────────────────────────────────────────────────────────────
 
 interface MatchResult {
-  method: 'edrpou' | 'iban' | 'name_fuzzy' | 'name_partial' | null
+  method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | 'name_fuzzy' | 'name_partial' | null
   families: CandidateFamily[]
 }
 
@@ -120,7 +120,47 @@ async function matchRow(
     }
   }
 
-  // 3. Fuzzy name match across all searchable fields
+  // 3. INN in bank_payer_profiles (learned payer → child mapping)
+  if (row.edrpou) {
+    const profiles = await db
+      .selectFrom('bank_payer_profiles as bpp')
+      .innerJoin('children as c', 'c.id', 'bpp.child_id')
+      .select(['c.id as child_id', 'c.full_name', 'c.family_id'])
+      .where('bpp.inn', '=', row.edrpou)
+      .execute()
+
+    if (profiles.length > 0) {
+      const families: CandidateFamily[] = profiles.map((p) => ({
+        family_id: p.family_id,
+        child_id: p.family_id ? null : p.child_id,
+        family_name: p.full_name,
+        parent_name: p.full_name,
+      }))
+      return { method: 'profile_inn', families: deduplicateFamilies(families) }
+    }
+  }
+
+  // 4. IBAN in bank_payer_profiles
+  if (row.iban) {
+    const profiles = await db
+      .selectFrom('bank_payer_profiles as bpp')
+      .innerJoin('children as c', 'c.id', 'bpp.child_id')
+      .select(['c.id as child_id', 'c.full_name', 'c.family_id'])
+      .where('bpp.iban', '=', row.iban)
+      .execute()
+
+    if (profiles.length > 0) {
+      const families: CandidateFamily[] = profiles.map((p) => ({
+        family_id: p.family_id,
+        child_id: p.family_id ? null : p.child_id,
+        family_name: p.full_name,
+        parent_name: p.full_name,
+      }))
+      return { method: 'profile_iban', families: deduplicateFamilies(families) }
+    }
+  }
+
+  // 5. Fuzzy name match across all searchable fields
   const needle = tokens(row.counterparty_name)
   if (needle.length === 0) return { method: null, families: [] }
 
@@ -179,7 +219,7 @@ async function matchRow(
 
   if (candidates.length > 0) return { method: 'name_fuzzy', families: candidates }
 
-  // 4. Partial match — some but not all tokens found (e.g. shared surname, different given name)
+  // 6. Partial match — some but not all tokens found (e.g. shared surname, different given name)
   const partialMap = new Map<string, { candidate: CandidateFamily; score: number }>()
 
   function tryPartial(candidate: CandidateFamily, score: number) {
@@ -225,6 +265,39 @@ function deduplicateFamilies(input: CandidateFamily[]): CandidateFamily[] {
     seen.add(key)
     return true
   })
+}
+
+async function upsertPayerProfile(
+  childId: string,
+  counterpartyName: string,
+  inn: string | null | undefined,
+  iban: string | null | undefined,
+  importDate: string,
+) {
+  if (inn) {
+    await sql`
+      INSERT INTO bank_payer_profiles (child_id, counterparty_name, inn, iban, last_import_date)
+      VALUES (${childId}, ${counterpartyName}, ${inn}, ${iban ?? null}, ${importDate}::date)
+      ON CONFLICT (child_id, inn) WHERE inn IS NOT NULL
+      DO UPDATE SET
+        counterparty_name = EXCLUDED.counterparty_name,
+        iban              = COALESCE(EXCLUDED.iban, bank_payer_profiles.iban),
+        import_count      = bank_payer_profiles.import_count + 1,
+        last_import_date  = EXCLUDED.last_import_date,
+        updated_at        = now()
+    `.execute(db)
+  } else if (iban) {
+    await sql`
+      INSERT INTO bank_payer_profiles (child_id, counterparty_name, iban, last_import_date)
+      VALUES (${childId}, ${counterpartyName}, ${iban}, ${importDate}::date)
+      ON CONFLICT (child_id, iban) WHERE iban IS NOT NULL AND inn IS NULL
+      DO UPDATE SET
+        counterparty_name = EXCLUDED.counterparty_name,
+        import_count      = bank_payer_profiles.import_count + 1,
+        last_import_date  = EXCLUDED.last_import_date,
+        updated_at        = now()
+    `.execute(db)
+  }
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -505,6 +578,8 @@ export async function importRoutes(app: FastifyInstance) {
               created_by: createdBy,
             })
 
+            await upsertPayerProfile(child.id, row.counterparty_name, row.edrpou, null, row.date)
+
             allocationsOut.push({
               row_index: row.row_index,
               family_id: null,
@@ -551,6 +626,8 @@ export async function importRoutes(app: FastifyInstance) {
                 created_by: createdBy,
               })
 
+              await upsertPayerProfile(firstChild.id, row.counterparty_name, row.edrpou, null, row.date)
+
               const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
               allocationsOut.push({
                 row_index: row.row_index,
@@ -560,6 +637,7 @@ export async function importRoutes(app: FastifyInstance) {
               })
             } else {
               const rowAllocations: AllocationEntry[] = []
+              const profiledChildren = new Set<string>()
               for (const alloc of waterfall.allocations) {
                 const tx_id = await createTransaction({
                   type: 'PAYMENT',
@@ -577,6 +655,10 @@ export async function importRoutes(app: FastifyInstance) {
                   created_by: createdBy,
                 })
                 rowAllocations.push({ child_id: alloc.child_id, child_name: alloc.child_name, amount: alloc.amount, tx_id })
+                if (!profiledChildren.has(alloc.child_id)) {
+                  profiledChildren.add(alloc.child_id)
+                  await upsertPayerProfile(alloc.child_id, row.counterparty_name, row.edrpou, null, row.date)
+                }
               }
 
               // If there's a remainder (payment > total debt), allocate it as advance to first child

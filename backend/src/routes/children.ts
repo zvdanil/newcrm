@@ -988,4 +988,19 @@ export async function childrenRoutes(app: FastifyInstance) {
       return { ok: true }
     }
   )
+
+  // GET /api/children/:id/bank-payers
+  app.get<{ Params: { id: string } }>(
+    '/:id/bank-payers',
+    { preHandler: authenticate },
+    async (request) => {
+      const { id } = request.params
+      return db
+        .selectFrom('bank_payer_profiles')
+        .select(['id', 'counterparty_name', 'inn', 'iban', 'import_count', 'last_import_date', 'note'])
+        .where('child_id', '=', id)
+        .orderBy('last_import_date', 'desc')
+        .execute()
+    }
+  )
 }

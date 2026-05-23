@@ -1,3 +1,4 @@
+import { BankPayersBlock } from './BankPayersBlock'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -217,6 +218,9 @@ export function ChildCardPage() {
 
       {/* Parents */}
       <ParentsBlock child={child} />
+
+      {/* Known payers from bank statements */}
+      {id && <BankPayersBlock childId={id} />}
 
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} />}

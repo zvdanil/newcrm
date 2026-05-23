@@ -25,7 +25,13 @@
       "Bash(cat /tmp/sec10.md)",
       "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"Users|Invite|users\\\\.api|AcceptInvite|ResetPassword\" })",
       "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $out = npx tsc --noEmit 2>&1; $out -join \"`n\" | Out-String | Select-String -Pattern \"Users|Invite|users\\\\.api\" -AllMatches | ForEach-Object { $_.Matches } | Select-Object -First 5)",
-      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $result = & npx tsc --noEmit 2>&1; $result | ForEach-Object { if \\($_ -match \"Users|Invite|users\\\\.api|AcceptInvite|Reset\"\\) { $_ } } | Select-Object -First 15)"
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; $result = & npx tsc --noEmit 2>&1; $result | ForEach-Object { if \\($_ -match \"Users|Invite|users\\\\.api|AcceptInvite|Reset\"\\) { $_ } } | Select-Object -First 15)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|tsx\\)$\")",
+      "Bash(xargs grep -l \"import\\\\|bank\\\\|statement\")",
+      "Bash(Get-Content \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\backend\\\\src\\\\routes\\\\children.ts\")",
+      "Bash(Select-Object -Last 30)",
+      "Bash(node -e ' *)",
+      "Bash(node migrate.js)"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"

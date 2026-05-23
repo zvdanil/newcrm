@@ -466,6 +466,39 @@ export interface SubstitutionsTable {
   created_at:          Generated<Date>
 }
 
+export interface ImportTemplatesTable {
+  id:                   Generated<string>
+  name:                 string
+  description:          string | null
+  header_row_index:     Generated<number>
+  data_start_row_index: Generated<number>
+  col_date:             string
+  col_amount:           string
+  col_type:             string | null
+  col_type_credit_value: string | null
+  col_counterparty:     string | null
+  col_inn:              string | null
+  col_iban:             string | null
+  col_description:      string | null
+  amount_negate:        Generated<boolean>
+  created_by:           string | null
+  created_at:           Generated<Date>
+  updated_at:           Generated<Date>
+}
+
+export interface BankPayerProfilesTable {
+  id:                Generated<string>
+  child_id:          string
+  counterparty_name: string
+  inn:               string | null
+  iban:              string | null
+  import_count:      Generated<number>
+  last_import_date:  ColumnType<Date, string, string>
+  note:              string | null
+  created_at:        Generated<Date>
+  updated_at:        Generated<Date>
+}
+
 export interface Database {
   users:                 UsersTable
   groups:                GroupsTable
@@ -509,6 +542,8 @@ export interface Database {
   expense_edits:              ExpenseEditsTable
   user_invites:               UserInvitesTable
   child_parents:              ChildParentsTable
+  import_templates:           ImportTemplatesTable
+  bank_payer_profiles:        BankPayerProfilesTable
 }
 
 export interface EquityParticipantsTable {
