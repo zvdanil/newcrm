@@ -5,6 +5,14 @@ function billingMonthOf(date: string): string {
   return date.slice(0, 7) + '-01'
 }
 
+function toLocalDateString(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 /**
  * Computes the salary amount for one child given visit count and smart_per_child config.
  *
@@ -88,7 +96,7 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
       childDates.set(m.child_id, new Map())
     }
     const dates = childDates.get(m.child_id)!
-    const dateKey = m.date instanceof Date ? m.date.toISOString().slice(0, 10) : String(m.date).slice(0, 10)
+    const dateKey = toLocalDateString(m.date)
     
     // If multiple marks on the same day, prioritize the one with custom_amount
     if (!dates.has(dateKey) || (m.custom_amount !== null && dates.get(dateKey)?.customAmount === null)) {
@@ -168,10 +176,15 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .filter(c => c.amount > 0)
     .map(c => {
       const total = c.standardCount + c.customCount
-      const detail = c.customCount > 0 
-        ? `${c.standardCount} ст. + ${c.customCount} спец.` 
-        : `${total} відв.`
-      return `${c.child_name}: ${detail} → ${c.amount.toFixed(0)} грн`
+      let detail = ''
+      if (c.customCount > 0) {
+        detail = c.standardCount > 0 
+          ? `${c.standardCount} ст. + ${c.customCount} спец.` 
+          : `${c.customCount} спец.`
+      } else {
+        detail = `${total} відв.`
+      }
+      return `${c.child_name}: ${detail} → ${c.amount.toFixed(2)} грн`
     })
     .join('; ')
   const noteStr = `Смарт за дитину. ${childLines}`
@@ -294,9 +307,7 @@ export async function recalcRetroAccruals(
     if (Math.abs(delta) < 0.001) continue
 
     const billingRaw = accrual.billing_month as unknown
-    const billing = billingRaw instanceof Date 
-      ? billingRaw.toISOString().slice(0, 10) 
-      : String(billingRaw).slice(0, 10)
+    const billing = toLocalDateString(billingRaw as Date | string)
     monthDelta.set(billing, (monthDelta.get(billing) ?? 0) + delta)
   }
 
@@ -598,7 +609,7 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
   const startDate = new Date(billingMonth)
   const endDate = new Date(startDate)
   endDate.setMonth(endDate.getMonth() + 1)
-  const billingEnd = endDate.toISOString().slice(0, 10)
+  const billingEnd = toLocalDateString(endDate)
 
   const absenceResult = await db
     .selectFrom('attendance_logs')
@@ -791,8 +802,8 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
   // 1. Находим все уникальные даты, где есть активность (логи)
   let dates: Date[] = []
 
-  const fromStr = fromDate.toISOString().slice(0, 10)
-  const toStr   = toDate.toISOString().slice(0, 10)
+  const fromStr = toLocalDateString(fromDate)
+  const toStr   = toLocalDateString(toDate)
 
   if (activityId) {
     const attendanceDates = await db
@@ -813,13 +824,13 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
       .where('date', '<=', new Date(toStr))
       .execute()
 
-    const allDates = [...attendanceDates, ...groupDates].map(d => new Date(d.date).toISOString().slice(0, 10))
+    const allDates = [...attendanceDates, ...groupDates].map(d => toLocalDateString(new Date(d.date)))
     dates = Array.from(new Set(allDates)).map(d => new Date(d))
   }
 
   // 2. Для каждой даты запускаем стандартный перерасчет
   for (const d of dates) {
-    const dateStr = d.toISOString().slice(0, 10)
+    const dateStr = toLocalDateString(d)
     await recalcStaffAccruals(activityId!, dateStr)
   }
 
