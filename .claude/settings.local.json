@@ -31,7 +31,13 @@
       "Bash(Get-Content \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\backend\\\\src\\\\routes\\\\children.ts\")",
       "Bash(Select-Object -Last 30)",
       "Bash(node -e ' *)",
-      "Bash(node migrate.js)"
+      "Bash(node migrate.js)",
+      "Bash(git reset *)",
+      "Bash(xargs grep -l \"is_advance\\\\|utilized_advance\\\\|advance\")",
+      "Bash(xargs grep -l \"staff\\\\|Staff\")",
+      "Bash(xargs grep -l \"is_advance\\\\|utilized_advance\\\\|return-advance\")",
+      "Bash(git fetch *)",
+      "Bash(xargs grep -l \"ALTER TABLE expenses\\\\|dividend_payout\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"

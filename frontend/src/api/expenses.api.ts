@@ -23,11 +23,26 @@ export interface Expense {
   status: 'pending' | 'paid'
   is_instant: boolean
   is_dividend: boolean
+  is_advance: boolean
+  is_advance_return: boolean
+  staff_id: string | null
+  staff_name: string | null
+  utilized_advance_id: string | null
+  utilized_advance_amount: number | null
   withdrawal_transfer_id: string | null
   dividend_payout_id: string | null
   note: string | null
   created_by_email: string | null
   created_at: string
+}
+
+export interface ExpenseAdvance {
+  id: string
+  amount: string
+  staff_id: string | null
+  staff_name: string | null
+  accrual_date: string
+  remaining_balance: number
 }
 
 export interface ExpensesResponse {
@@ -105,6 +120,10 @@ export const expensesApi = {
     is_instant?: boolean
     is_dividend?: boolean
     note?: string
+    is_advance?: boolean
+    staff_id?: string
+    utilized_advance_id?: string
+    utilized_advance_amount?: number
   }) => {
     const { data } = await apiClient.post<Expense>('/expenses', payload)
     return data
@@ -155,6 +174,17 @@ export const expensesApi = {
     transfer_date?: string
   }) => {
     const { data } = await apiClient.post(`/expenses/${id}/withdraw`, payload)
+    return data
+  },
+
+  // Advances
+  getAdvances: async (categoryId: string): Promise<ExpenseAdvance[]> => {
+    const { data } = await apiClient.get<ExpenseAdvance[]>(`/expenses/advances?category_id=${categoryId}`)
+    return data
+  },
+
+  returnAdvance: async (id: string, payload: { amount: number; account_id: string; date?: string; note?: string }) => {
+    const { data } = await apiClient.post<Expense>(`/expenses/${id}/return-advance`, payload)
     return data
   },
 

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type SalaryPayment } from '../../api/expenses.api'
+import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type ExpenseAdvance, type SalaryPayment } from '../../api/expenses.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
@@ -448,23 +448,17 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     is_instant:   initial?.is_instant ?? true,
     is_dividend:  initial?.is_dividend ?? false,
     note:         initial?.note ?? '',
-    is_advance:   (initial as any)?.is_advance ?? false,
-    staff_id:     (initial as any)?.staff_id ?? '',
-    utilized_advance_id: (initial as any)?.utilized_advance_id ?? '',
+    is_advance:   initial?.is_advance ?? false,
+    staff_id:     initial?.staff_id ?? '',
+    utilized_advance_id: initial?.utilized_advance_id ?? '',
   })
   const [editNote, setEditNote] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // Завантажуємо доступні аванси для обраної категорії
-  const { data: advancesRaw = [] } = useQuery({
+  const { data: advances = [] } = useQuery<ExpenseAdvance[]>({
     queryKey: ['advances', form.category_id],
-    queryFn: () => fetch(`/api/expenses/advances?category_id=${form.category_id}`, {
-      headers: { Authorization: `Bearer ${getAuthToken()}` }
-    }).then(async r => {
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.message || 'API Error')
-      return data
-    }),
+    queryFn: () => expensesApi.getAdvances(form.category_id),
     enabled: !!form.category_id && !form.is_advance && !isEdit,
   })
 
@@ -481,11 +475,9 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     enabled: form.is_advance && !isEdit,
   })
 
-  // Безпечний фоллбек, щоб уникнути падіння `map is not a function`, якщо API повернуло об'єкт помилки
-  const advances = Array.isArray(advancesRaw) ? advancesRaw : (advancesRaw?.data || [])
   const staffList = Array.isArray(staffListRaw) ? staffListRaw : (staffListRaw?.data || [])
 
-  const selectedAdvance = advances.find((a: any) => a.id === form.utilized_advance_id)
+  const selectedAdvance = advances.find(a => a.id === form.utilized_advance_id)
   const totalBill = Number(form.amount) || 0
   const advanceCoverage = selectedAdvance ? Math.min(totalBill, selectedAdvance.remaining_balance) : 0
   const amountFromAccount = totalBill - advanceCoverage
@@ -537,7 +529,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         staff_id:     form.is_advance ? (form.staff_id || undefined) : undefined,
         utilized_advance_id: !form.is_advance ? (form.utilized_advance_id || undefined) : undefined,
         utilized_advance_amount: (!form.is_advance && form.utilized_advance_id) ? advanceCoverage : undefined,
-      } as any)
+      })
     }
   }
 
@@ -619,7 +611,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
             <input type="checkbox" checked={form.is_advance}
               onChange={e => setForm(f => ({ ...f, is_advance: e.target.checked, utilized_advance_id: '' }))}
               className="rounded text-iris-600 focus:ring-iris-500" />
-            💰 Це видача авансу підзвіт на майбутні витрати
+            💰 Це видача авансу на майбутні витрати
           </label>
 
           {form.is_advance && (
@@ -639,9 +631,9 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
               <select value={form.utilized_advance_id} onChange={e => setForm(f => ({ ...f, utilized_advance_id: e.target.value }))}
                 className="w-full text-sm border border-blue-200 rounded-md px-2 py-1.5 mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">— не використовувати аванс —</option>
-                {advances.map((a: any) => (
+                {advances.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.staff_name || 'Без співробітника'} — Залишок: {a.remaining_balance} ₴
+                    {a.staff_name ? `${a.staff_name} — ` : ''}Залишок: {a.remaining_balance} ₴
                   </option>
                 ))}
               </select>
@@ -983,18 +975,20 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           {expense.is_dividend && (
             <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">дивіденд</span>
           )}
-          {(expense as any).is_advance && (
-            <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">аванс видано</span>
+          {expense.is_advance && (
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">
+              {expense.staff_name ? 'аванс підзвіт' : 'аванс на категорію'}
+            </span>
           )}
-          {(expense as any).utilized_advance_id && (
-            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">з авансу ({(expense as any).utilized_advance_amount} ₴)</span>
+          {expense.utilized_advance_id && (
+            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">з авансу ({expense.utilized_advance_amount} ₴)</span>
           )}
-          {(expense as any).is_advance_return && (
+          {expense.is_advance_return && (
             <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>
           )}
           <span>{categoryLabel(expense)}</span>
         </div>
-        {expense.note && <p className="text-xs text-gray-400 mt-0.5">{expense.note} {(expense as any).staff_name ? `(${(expense as any).staff_name})` : ''}</p>}
+        {expense.note && <p className="text-xs text-gray-400 mt-0.5">{expense.note} {expense.staff_name ? `(${expense.staff_name})` : ''}</p>}
       </td>
       <td className="px-4 py-2.5 text-sm text-gray-500">{expense.account_name}</td>
       <td className="px-4 py-2.5 text-sm font-mono font-medium text-gray-900 text-right">
@@ -1013,17 +1007,15 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
       </td>
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2 justify-end">
-          {(expense as any).is_advance && (
-            <button onClick={() => {
-              const amountStr = window.prompt('Введіть суму повернення залишку (₴):');
-              if (!amountStr) return;
-              const amount = parseFloat(amountStr);
+          {expense.is_advance && (
+            <button onClick={async () => {
+              const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
+              if (!amountStr) return
+              const amount = parseFloat(amountStr)
               if (amount > 0) {
-                fetch(`/api/expenses/${expense.id}/return-advance`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` },
-                  body: JSON.stringify({ amount, account_id: expense.account_id })
-                }).then(() => onRefresh());
+                await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
+                qc.invalidateQueries({ queryKey: ['expenses'] })
+                onRefresh()
               }
             }}
               className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-1.5 py-1 rounded transition-colors"
