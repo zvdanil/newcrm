@@ -94,6 +94,8 @@ export async function accountsRoutes(app: FastifyInstance) {
         amount: string
         note: string | null
         detail: string | null
+        is_advance: boolean | null
+        utilized_advance_amount: string | null
       }>`
         SELECT
           id,
@@ -101,7 +103,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'payment'              AS kind,
           amount::numeric        AS amount,
           note,
-          (SELECT full_name FROM children WHERE id = child_id) AS detail
+          (SELECT full_name FROM children WHERE id = child_id) AS detail,
+          false                  AS is_advance,
+          NULL::numeric          AS utilized_advance_amount
         FROM transactions
         WHERE account_id = ${id}
           AND type       = 'PAYMENT'
@@ -121,7 +125,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'expense'          AS kind,
           (amount - COALESCE(utilized_advance_amount, 0))::numeric AS amount,
           note,
-          (SELECT name FROM expense_categories WHERE id = category_id) AS detail
+          (SELECT name FROM expense_categories WHERE id = category_id) AS detail,
+          is_advance,
+          utilized_advance_amount
         FROM expenses
         WHERE account_id = ${id}
           AND status     = 'paid'
@@ -139,7 +145,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'transfer_in'      AS kind,
           amount::numeric    AS amount,
           note,
-          (SELECT name FROM expense_categories WHERE id = category_id) AS detail
+          (SELECT name FROM expense_categories WHERE id = category_id) AS detail,
+          false              AS is_advance,
+          NULL::numeric      AS utilized_advance_amount
         FROM expenses
         WHERE account_id = ${id}
           AND status     = 'paid'
@@ -156,7 +164,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'transfer_in'          AS kind,
           at.amount::numeric     AS amount,
           at.note,
-          a_from.name            AS detail
+          a_from.name            AS detail,
+          false                  AS is_advance,
+          NULL::numeric          AS utilized_advance_amount
         FROM account_transfers at
         LEFT JOIN accounts a_from ON a_from.id = at.from_account_id
         WHERE at.to_account_id = ${id}
@@ -171,7 +181,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'transfer_out'         AS kind,
           at.amount::numeric     AS amount,
           at.note,
-          a_to.name              AS detail
+          a_to.name              AS detail,
+          false                  AS is_advance,
+          NULL::numeric          AS utilized_advance_amount
         FROM account_transfers at
         LEFT JOIN accounts a_to ON a_to.id = at.to_account_id
         WHERE at.from_account_id = ${id}
@@ -188,7 +200,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           'salary_payment'          AS kind,
           st.gross_amount::numeric  AS amount,
           st.note,
-          (SELECT full_name FROM staff WHERE id = st.staff_id) AS detail
+          (SELECT full_name FROM staff WHERE id = st.staff_id) AS detail,
+          false                     AS is_advance,
+          NULL::numeric             AS utilized_advance_amount
         FROM salary_transactions st
         WHERE st.account_id = ${id}
           AND st.type       = 'PAYMENT'
@@ -212,7 +226,9 @@ export async function accountsRoutes(app: FastifyInstance) {
             JOIN children ch    ON ch.id     = tx.child_id
             JOIN accounts a_debt ON a_debt.id = tx.account_id
             WHERE tx.id = iai.transaction_id
-          ) AS detail
+          ) AS detail,
+          false                AS is_advance,
+          NULL::numeric        AS utilized_advance_amount
         FROM inter_account_imbalances iai
         WHERE iai.from_account_id = ${id}
           AND iai.transaction_id IS NOT NULL

@@ -223,7 +223,15 @@ export function AccountCardPage() {
                     {new Date(row.date).toLocaleDateString('uk-UA')}
                   </td>
                   <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
-                    {KIND_LABEL[row.kind]}
+                    <div className="flex items-center gap-1.5">
+                      {KIND_LABEL[row.kind]}
+                      {row.is_advance && (
+                        <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">аванс</span>
+                      )}
+                      {!row.is_advance && row.utilized_advance_amount && Number(row.utilized_advance_amount) > 0 && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded whitespace-nowrap">з авансу {Number(row.utilized_advance_amount).toFixed(2)} ₴</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-2.5 text-gray-700">
                     {row.detail ?? <span className="text-gray-400">—</span>}

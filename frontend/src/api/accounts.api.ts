@@ -15,6 +15,8 @@ export interface LedgerRow {
   amount: string
   note:   string | null
   detail: string | null
+  is_advance: boolean | null
+  utilized_advance_amount: string | null
 }
 
 export interface LedgerFilters {

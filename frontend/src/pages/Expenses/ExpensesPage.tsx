@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type ExpenseAdvance, type SalaryPayment } from '../../api/expenses.api'
@@ -477,6 +477,13 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
 
   const staffList = Array.isArray(staffListRaw) ? staffListRaw : (staffListRaw?.data || [])
 
+  // Авто-вибір першого авансу при завантаженні
+  useEffect(() => {
+    if (!form.is_advance && advances.length > 0 && !form.utilized_advance_id) {
+      setForm(f => ({ ...f, utilized_advance_id: advances[0].id }))
+    }
+  }, [advances])
+
   const selectedAdvance = advances.find(a => a.id === form.utilized_advance_id)
   const totalBill = Number(form.amount) || 0
   const advanceCoverage = selectedAdvance ? Math.min(totalBill, selectedAdvance.remaining_balance) : 0
@@ -560,9 +567,50 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         <CategoryPicker
           categories={categories}
           value={form.category_id}
-          onChange={id => setForm(f => ({ ...f, category_id: id }))}
+          onChange={id => setForm(f => ({ ...f, category_id: id, utilized_advance_id: '' }))}
           onNewSubcategory={handleNewSubcategory}
         />
+
+        {/* Аванс під категорією */}
+        {!isEdit && !form.is_advance && advances.length > 0 && (
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-semibold text-blue-800">💳 Є аванс на цій категорії</h4>
+              {selectedAdvance && (
+                <span className="text-xs text-blue-600 font-medium">залишок: {selectedAdvance.remaining_balance} ₴</span>
+              )}
+            </div>
+            <select
+              value={form.utilized_advance_id}
+              onChange={e => setForm(f => ({ ...f, utilized_advance_id: e.target.value }))}
+              className="w-full text-sm border border-blue-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— не використовувати аванс —</option>
+              {advances.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.staff_name ? `${a.staff_name} — ` : ''}Залишок: {a.remaining_balance} ₴
+                </option>
+              ))}
+            </select>
+
+            {selectedAdvance && totalBill > 0 && (
+              <div className="mt-2 text-xs text-blue-900 space-y-1 bg-white/60 p-2 rounded border border-blue-100">
+                <div className="flex justify-between">
+                  <span>Сума чеку:</span>
+                  <span className="font-medium">{totalBill} ₴</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>З авансу:</span>
+                  <span className="font-medium text-green-700">−{advanceCoverage} ₴</span>
+                </div>
+                <div className="flex justify-between border-t border-blue-200/50 pt-1 font-semibold">
+                  <span>З рахунку:</span>
+                  <span className={amountFromAccount > 0 ? 'text-red-600' : 'text-gray-500'}>{amountFromAccount} ₴</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -622,32 +670,6 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
                 <option value="">— без співробітника —</option>
                 {staffList.map((s: any) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
               </select>
-            </div>
-          )}
-
-          {!form.is_advance && advances.length > 0 && (
-            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mt-2">
-              <h4 className="text-xs font-medium text-blue-800 mb-2">На цій категорії є залишки авансів:</h4>
-              <select value={form.utilized_advance_id} onChange={e => setForm(f => ({ ...f, utilized_advance_id: e.target.value }))}
-                className="w-full text-sm border border-blue-200 rounded-md px-2 py-1.5 mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">— не використовувати аванс —</option>
-                {advances.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.staff_name ? `${a.staff_name} — ` : ''}Залишок: {a.remaining_balance} ₴
-                  </option>
-                ))}
-              </select>
-
-              {selectedAdvance && totalBill > 0 && (
-                <div className="text-xs text-blue-900 space-y-1 bg-white/50 p-2 rounded border border-blue-100/50">
-                  <div className="flex justify-between"><span>Сума чеку:</span><span className="font-medium">{totalBill} ₴</span></div>
-                  <div className="flex justify-between"><span>Буде списано з авансу:</span><span className="font-medium text-green-700">-{advanceCoverage} ₴</span></div>
-                  <div className="flex justify-between border-t border-blue-200/50 pt-1 font-semibold mt-1">
-                    <span>Доплатити з рахунку:</span>
-                    <span className={amountFromAccount > 0 ? "text-red-600" : "text-gray-500"}>{amountFromAccount} ₴</span>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
