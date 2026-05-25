@@ -105,6 +105,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .leftJoin('expense_categories as cp', 'cp.id', 'c.parent_id')
         .leftJoin('accounts as a',            'a.id',  'e.account_id')
         .leftJoin('users as u',               'u.id',  'e.created_by')
+        .leftJoin('staff as s',               's.id',  'e.staff_id')
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
           'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
@@ -115,6 +116,8 @@ export async function expensesRoutes(app: FastifyInstance) {
           'c.parent_id',
           'cp.name as parent_category_name',
           'u.email as created_by_email',
+          'e.is_advance', 'e.is_advance_return', 'e.staff_id', 's.full_name as staff_name',
+          'e.utilized_advance_id', 'e.utilized_advance_amount'
         ])
         .where('e.is_deleted', '=', false)
 
@@ -182,12 +185,16 @@ export async function expensesRoutes(app: FastifyInstance) {
       is_instant?: boolean
       is_dividend?: boolean
       note?: string
+      is_advance?: boolean
+      staff_id?: string
+      utilized_advance_id?: string
+      utilized_advance_amount?: number
     }
   }>(
     '/',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
-      const { account_id, category_id, amount, accrual_date, payment_date, is_instant = false, is_dividend = false, note } = req.body
+      const { account_id, category_id, amount, accrual_date, payment_date, is_instant = false, is_dividend = false, note, is_advance = false, staff_id, utilized_advance_id, utilized_advance_amount } = req.body
       if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'account_id є обовʼязковим' })
       if (!amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
 
@@ -207,6 +214,10 @@ export async function expensesRoutes(app: FastifyInstance) {
           is_dividend,
           note: note ?? null,
           created_by: req.user.sub,
+          is_advance,
+          staff_id: staff_id ?? null,
+          utilized_advance_id: utilized_advance_id ?? null,
+          utilized_advance_amount: utilized_advance_amount ?? null,
         })
         .returningAll()
         .executeTakeFirstOrThrow()
@@ -289,6 +300,75 @@ export async function expensesRoutes(app: FastifyInstance) {
         .orderBy('ee.edited_at', 'desc')
         .execute()
       return edits
+    }
+  )
+
+  // GET /api/expenses/advances?category_id=UUID
+  app.get<{ Querystring: { category_id: string } }>(
+    '/advances',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req, reply) => {
+      const { category_id } = req.query
+      if (!category_id) return reply.status(400).send({ error: 'BadRequest', message: 'category_id є обовʼязковим' })
+
+      const advances = await db
+        .selectFrom('expenses as e')
+        .leftJoin('staff as s', 's.id', 'e.staff_id')
+        .select([
+          'e.id', 'e.amount', 'e.staff_id',
+          's.full_name as staff_name', 'e.accrual_date',
+        ])
+        .where('e.is_advance', '=', true)
+        .where('e.category_id', '=', category_id)
+        .where('e.is_deleted', '=', false)
+        .execute()
+
+      const activeAdvances = []
+      for (const adv of advances) {
+        const utilRes = await db.selectFrom('expenses')
+          .select((eb) => eb.fn.sum<string>('utilized_advance_amount').as('spent'))
+          .where('utilized_advance_id', '=', adv.id)
+          .where('is_advance_return', '=', false)
+          .where('is_deleted', '=', false).executeTakeFirst()
+
+        const retRes = await db.selectFrom('expenses')
+          .select((eb) => eb.fn.sum<string>('amount').as('returned'))
+          .where('utilized_advance_id', '=', adv.id)
+          .where('is_advance_return', '=', true)
+          .where('is_deleted', '=', false).executeTakeFirst()
+
+        const spent = Number(utilRes?.spent ?? 0)
+        const returned = Number(retRes?.returned ?? 0)
+        const remaining = Number(adv.amount) - spent - returned
+
+        if (remaining > 0) {
+          activeAdvances.push({ ...adv, remaining_balance: Math.round(remaining * 100) / 100 })
+        }
+      }
+      return activeAdvances
+    }
+  )
+
+  // POST /api/expenses/:id/return-advance
+  app.post<{ Params: { id: string }; Body: { amount: number; account_id: string; date?: string; note?: string } }>(
+    '/:id/return-advance',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req, reply) => {
+      const { id } = req.params
+      const { amount, account_id, date, note } = req.body
+      if (!account_id || !amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Неправильні дані' })
+      
+      const advance = await db.selectFrom('expenses').select('category_id').where('id', '=', id).executeTakeFirst()
+      if (!advance) return reply.status(404).send({ error: 'NotFound' })
+
+      const returnDate = date ?? new Date().toISOString().slice(0, 10)
+      const row = await db.insertInto('expenses').values({
+        account_id, category_id: advance.category_id, amount, accrual_date: returnDate, payment_date: returnDate,
+        status: 'paid', is_instant: true, is_advance_return: true, utilized_advance_id: id,
+        note: note || 'Повернення невикористаного залишку авансу', created_by: req.user.sub
+      }).returningAll().executeTakeFirstOrThrow()
+      
+      return reply.status(201).send(row)
     }
   )
 

@@ -263,6 +263,11 @@ export interface ExpensesTable {
   deleted_at:             ColumnType<Date | null, string | null, string | null>
   deleted_by:             string | null
   created_at:             Generated<Date>
+  staff_id:               string | null
+  is_advance:             Generated<boolean>
+  is_advance_return:      Generated<boolean>
+  utilized_advance_id:    string | null
+  utilized_advance_amount: ColumnType<string | null, number | string | null, number | string | null>
 }
 
 export interface AccountTransfersTable {

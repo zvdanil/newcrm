@@ -29,7 +29,8 @@ const balanceSql = sql<string>`(
         AND i.transaction_id IS NOT NULL
         AND EXISTS (SELECT 1 FROM transactions t WHERE t.id = i.transaction_id AND t.is_deleted = false)
     ), 0)
-  - COALESCE((SELECT SUM(amount) FROM expenses             WHERE account_id = a.id AND status = 'paid' AND is_deleted = false), 0)
+  - COALESCE((SELECT SUM(amount - COALESCE(utilized_advance_amount, 0)) FROM expenses WHERE account_id = a.id AND status = 'paid' AND is_deleted = false AND is_advance_return = false), 0)
+  + COALESCE((SELECT SUM(amount) FROM expenses WHERE account_id = a.id AND status = 'paid' AND is_deleted = false AND is_advance_return = true), 0)
   - COALESCE((SELECT SUM(gross_amount) FROM salary_transactions WHERE account_id = a.id AND type = 'PAYMENT' AND is_deleted = false), 0)
   + COALESCE((SELECT SUM(amount) FROM account_transfers WHERE to_account_id   = a.id), 0)
   - COALESCE((
@@ -118,6 +119,24 @@ export async function accountsRoutes(app: FastifyInstance) {
           id,
           payment_date::date AS date,
           'expense'          AS kind,
+          (amount - COALESCE(utilized_advance_amount, 0))::numeric AS amount,
+          note,
+          (SELECT name FROM expense_categories WHERE id = category_id) AS detail
+        FROM expenses
+        WHERE account_id = ${id}
+          AND status     = 'paid'
+          AND is_deleted = false
+          AND is_advance_return = false
+          AND (amount - COALESCE(utilized_advance_amount, 0)) > 0
+          AND (${f}::date IS NULL OR payment_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR payment_date::date <= ${t}::date)
+
+        UNION ALL
+
+        SELECT
+          id,
+          payment_date::date AS date,
+          'transfer_in'      AS kind,
           amount::numeric    AS amount,
           note,
           (SELECT name FROM expense_categories WHERE id = category_id) AS detail
@@ -125,6 +144,7 @@ export async function accountsRoutes(app: FastifyInstance) {
         WHERE account_id = ${id}
           AND status     = 'paid'
           AND is_deleted = false
+          AND is_advance_return = true
           AND (${f}::date IS NULL OR payment_date::date >= ${f}::date)
           AND (${t}::date IS NULL OR payment_date::date <= ${t}::date)
 

@@ -434,9 +434,35 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     is_instant:   initial?.is_instant ?? true,
     is_dividend:  initial?.is_dividend ?? false,
     note:         initial?.note ?? '',
+    is_advance:   (initial as any)?.is_advance ?? false,
+    staff_id:     (initial as any)?.staff_id ?? '',
+    utilized_advance_id: (initial as any)?.utilized_advance_id ?? '',
   })
   const [editNote, setEditNote] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  // Завантажуємо доступні аванси для обраної категорії
+  const { data: advances = [] } = useQuery({
+    queryKey: ['advances', form.category_id],
+    queryFn: () => fetch(`/api/expenses/advances?category_id=${form.category_id}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    }).then(r => r.json()),
+    enabled: !!form.category_id && !form.is_advance && !isEdit,
+  })
+
+  // Завантажуємо активних співробітників для видачі авансу
+  const { data: staffList = [] } = useQuery({
+    queryKey: ['staff', 'active'],
+    queryFn: () => fetch('/api/staff?is_active=true', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    }).then(r => r.json()),
+    enabled: form.is_advance && !isEdit,
+  })
+
+  const selectedAdvance = advances.find((a: any) => a.id === form.utilized_advance_id)
+  const totalBill = Number(form.amount) || 0
+  const advanceCoverage = selectedAdvance ? Math.min(totalBill, selectedAdvance.remaining_balance) : 0
+  const amountFromAccount = totalBill - advanceCoverage
 
   async function handleNewSubcategory(parentId: string, name: string): Promise<ExpenseCategory> {
     const created = await expensesApi.createCategory({ name, parent_id: parentId })
@@ -476,12 +502,16 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
       createMutation.mutate({
         account_id:   form.account_id,
         category_id:  form.category_id || undefined,
-        amount,
+        amount:       totalBill,
         accrual_date: form.accrual_date,
         is_instant:   form.is_instant,
         is_dividend:  form.is_dividend,
         note: form.note || undefined,
-      })
+        is_advance:   form.is_advance,
+        staff_id:     form.is_advance ? (form.staff_id || undefined) : undefined,
+        utilized_advance_id: !form.is_advance ? (form.utilized_advance_id || undefined) : undefined,
+        utilized_advance_amount: (!form.is_advance && form.utilized_advance_id) ? advanceCoverage : undefined,
+      } as any)
     }
   }
 
@@ -554,6 +584,54 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
               className="rounded" />
             Дивіденд / вивід коштів
           </label>
+        </div>
+      )}
+
+      {!isEdit && (
+        <div className="pt-2 border-t border-iris-100">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium mb-3">
+            <input type="checkbox" checked={form.is_advance}
+              onChange={e => setForm(f => ({ ...f, is_advance: e.target.checked, utilized_advance_id: '' }))}
+              className="rounded text-iris-600 focus:ring-iris-500" />
+            💰 Це видача авансу підзвіт на майбутні витрати
+          </label>
+
+          {form.is_advance && (
+            <div className="mb-2">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Співробітник (кому видано аванс)</label>
+              <select value={form.staff_id} onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
+                <option value="">— без співробітника —</option>
+                {staffList.map((s: any) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {!form.is_advance && advances.length > 0 && (
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg mt-2">
+              <h4 className="text-xs font-medium text-blue-800 mb-2">На цій категорії є залишки авансів:</h4>
+              <select value={form.utilized_advance_id} onChange={e => setForm(f => ({ ...f, utilized_advance_id: e.target.value }))}
+                className="w-full text-sm border border-blue-200 rounded-md px-2 py-1.5 mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">— не використовувати аванс —</option>
+                {advances.map((a: any) => (
+                  <option key={a.id} value={a.id}>
+                    {a.staff_name || 'Без співробітника'} — Залишок: {a.remaining_balance} ₴
+                  </option>
+                ))}
+              </select>
+
+              {selectedAdvance && totalBill > 0 && (
+                <div className="text-xs text-blue-900 space-y-1 bg-white/50 p-2 rounded border border-blue-100/50">
+                  <div className="flex justify-between"><span>Сума чеку:</span><span className="font-medium">{totalBill} ₴</span></div>
+                  <div className="flex justify-between"><span>Буде списано з авансу:</span><span className="font-medium text-green-700">-{advanceCoverage} ₴</span></div>
+                  <div className="flex justify-between border-t border-blue-200/50 pt-1 font-semibold mt-1">
+                    <span>Доплатити з рахунку:</span>
+                    <span className={amountFromAccount > 0 ? "text-red-600" : "text-gray-500"}>{amountFromAccount} ₴</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -879,9 +957,18 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           {expense.is_dividend && (
             <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">дивіденд</span>
           )}
+          {(expense as any).is_advance && (
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">аванс видано</span>
+          )}
+          {(expense as any).utilized_advance_id && (
+            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">з авансу ({(expense as any).utilized_advance_amount} ₴)</span>
+          )}
+          {(expense as any).is_advance_return && (
+            <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>
+          )}
           <span>{categoryLabel(expense)}</span>
         </div>
-        {expense.note && <p className="text-xs text-gray-400 mt-0.5">{expense.note}</p>}
+        {expense.note && <p className="text-xs text-gray-400 mt-0.5">{expense.note} {(expense as any).staff_name ? `(${(expense as any).staff_name})` : ''}</p>}
       </td>
       <td className="px-4 py-2.5 text-sm text-gray-500">{expense.account_name}</td>
       <td className="px-4 py-2.5 text-sm font-mono font-medium text-gray-900 text-right">
@@ -900,6 +987,23 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
       </td>
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2 justify-end">
+          {(expense as any).is_advance && (
+            <button onClick={() => {
+              const amountStr = window.prompt('Введіть суму повернення залишку (₴):');
+              if (!amountStr) return;
+              const amount = parseFloat(amountStr);
+              if (amount > 0) {
+                fetch(`/api/expenses/${expense.id}/return-advance`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                  body: JSON.stringify({ amount, account_id: expense.account_id })
+                }).then(() => onRefresh());
+              }
+            }}
+              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-1.5 py-1 rounded transition-colors"
+              title="Повернути залишок у касу">⮌ повернення
+            </button>
+          )}
           {expense.status === 'pending' && (isOwner || isAdmin) && (
             <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
               disabled={payMutation.isPending}

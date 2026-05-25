@@ -189,6 +189,8 @@ export async function reportsRoutes(app: FastifyInstance) {
             sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
           ])
           .where('is_deleted', '=', false)
+          .where('is_advance', '=', false)
+          .where('is_advance_return', '=', false)
           .groupBy(sql`date_trunc('month', accrual_date)`)
           .execute(),
 
@@ -196,8 +198,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         db.selectFrom('expenses')
           .select([
             sql<string>`to_char(date_trunc('month', payment_date), 'YYYY-MM-01')`.as('month'),
-            sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
-            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN amount ELSE 0 END), 0)`.as('total_no_div'),
+            sql<string>`COALESCE(SUM(CASE WHEN is_advance_return THEN -amount ELSE amount - COALESCE(utilized_advance_amount, 0) END), 0)`.as('total'),
+            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN (CASE WHEN is_advance_return THEN -amount ELSE amount - COALESCE(utilized_advance_amount, 0) END) ELSE 0 END), 0)`.as('total_no_div'),
           ])
           .where('status', '=', 'paid')
           .where('is_deleted', '=', false)
