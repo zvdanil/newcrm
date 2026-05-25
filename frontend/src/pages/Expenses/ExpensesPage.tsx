@@ -25,6 +25,20 @@ function categoryLabel(expense: Expense) {
   return expense.category_name ?? '—'
 }
 
+// Розумний пошук токену Supabase у localStorage
+function getAuthToken() {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.endsWith('-auth-token')) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+        if (parsed?.access_token) return parsed.access_token;
+      } catch (e) {}
+    }
+  }
+  return localStorage.getItem('token') || '';
+}
+
 // ── Default account (localStorage) ────────────────────────────────────────
 
 const LS_KEY = 'iris_expenses_default_account'
@@ -442,22 +456,34 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
   const [error, setError] = useState<string | null>(null)
 
   // Завантажуємо доступні аванси для обраної категорії
-  const { data: advances = [] } = useQuery({
+  const { data: advancesRaw = [] } = useQuery({
     queryKey: ['advances', form.category_id],
     queryFn: () => fetch(`/api/expenses/advances?category_id=${form.category_id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    }).then(r => r.json()),
+      headers: { Authorization: `Bearer ${getAuthToken()}` }
+    }).then(async r => {
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.message || 'API Error')
+      return data
+    }),
     enabled: !!form.category_id && !form.is_advance && !isEdit,
   })
 
   // Завантажуємо активних співробітників для видачі авансу
-  const { data: staffList = [] } = useQuery({
+  const { data: staffListRaw = [] } = useQuery({
     queryKey: ['staff', 'active'],
     queryFn: () => fetch('/api/staff?is_active=true', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    }).then(r => r.json()),
+      headers: { Authorization: `Bearer ${getAuthToken()}` }
+    }).then(async r => {
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.message || 'API Error')
+      return data
+    }),
     enabled: form.is_advance && !isEdit,
   })
+
+  // Безпечний фоллбек, щоб уникнути падіння `map is not a function`, якщо API повернуло об'єкт помилки
+  const advances = Array.isArray(advancesRaw) ? advancesRaw : (advancesRaw?.data || [])
+  const staffList = Array.isArray(staffListRaw) ? staffListRaw : (staffListRaw?.data || [])
 
   const selectedAdvance = advances.find((a: any) => a.id === form.utilized_advance_id)
   const totalBill = Number(form.amount) || 0
@@ -995,7 +1021,7 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               if (amount > 0) {
                 fetch(`/api/expenses/${expense.id}/return-advance`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken()}` },
                   body: JSON.stringify({ amount, account_id: expense.account_id })
                 }).then(() => onRefresh());
               }
