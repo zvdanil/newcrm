@@ -340,7 +340,7 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
           .selectAll()
           .where('enrollment_id', '=', req.params.id)
           .where('account_id', '=', old_account_id)
-          .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+          .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT', 'REFUND'])
           .where('is_deleted', '=', false)
           .where('billing_month', '=', new Date(month))
           .execute()
