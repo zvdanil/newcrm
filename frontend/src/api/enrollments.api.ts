@@ -1,6 +1,13 @@
 import { apiClient } from './client'
 import type { Enrollment, PriceResolution } from '../types'
 
+export interface RebindPayment {
+  id: string
+  date: string
+  amount: number
+  note: string | null
+}
+
 export const enrollmentsApi = {
   listByChild: async (childId: string) => {
     const { data } = await apiClient.get<Enrollment[]>(`/children/${childId}/enrollments`)
@@ -36,6 +43,23 @@ export const enrollmentsApi = {
     const params = new URLSearchParams({ child_id: childId, activity_id: activityId })
     if (date) params.set('date', date)
     const { data } = await apiClient.get<PriceResolution>(`/price-resolve?${params}`)
+    return data
+  },
+
+  rebindAccount: async (
+    id: string,
+    payload: {
+      new_account_id: string
+      from_month: string
+      to_month?: string
+      update_future?: boolean
+      force?: boolean
+    }
+  ): Promise<{ moved_count: number; updated_enrollment: boolean }> => {
+    const { data } = await apiClient.post<{ moved_count: number; updated_enrollment: boolean }>(
+      `/enrollments/${id}/rebind-account`,
+      payload
+    )
     return data
   },
 }

@@ -10,6 +10,7 @@ import { parentsApi } from '../../api/parents.api'
 import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { enrollmentsApi } from '../../api/enrollments.api'
+import type { RebindPayment } from '../../api/enrollments.api'
 import { billingApi } from '../../api/billing.api'
 import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
@@ -274,6 +275,10 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
   const [enrollForm, setEnrollForm]   = useState({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
   const [enrollError, setEnrollError] = useState<string | null>(null)
   const [archiveState, setArchiveState] = useState<{ enrollmentId: string; date: string; cancelAccruals: boolean } | null>(null)
+  const EMPTY_REBIND = { new_account_id: '', from_month: TODAY.slice(0, 7), to_month: '', update_future: false }
+  const [rebindId, setRebindId]       = useState<string | null>(null)
+  const [rebindForm, setRebindForm]   = useState(EMPTY_REBIND)
+  const [rebindWarning, setRebindWarning] = useState<{ payments: RebindPayment[]; message: string } | null>(null)
 
   const { data: enrollments = [], isLoading } = useQuery({
     queryKey: ['enrollments', childId],
@@ -299,7 +304,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn:  accountsApi.list,
-    enabled:  showForm,
+    enabled:  showForm || rebindId !== null,
   })
 
   const { data: priceCheck } = useQuery({
@@ -344,6 +349,31 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
       qc.invalidateQueries({ queryKey: ['balance', childId] })
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
       setArchiveState(null)
+    },
+  })
+
+  const rebindMutation = useMutation({
+    mutationFn: ({ force }: { force: boolean }) =>
+      enrollmentsApi.rebindAccount(rebindId!, {
+        new_account_id: rebindForm.new_account_id,
+        from_month: rebindForm.from_month + '-01',
+        to_month:   rebindForm.to_month ? rebindForm.to_month + '-01' : undefined,
+        update_future: rebindForm.update_future,
+        force,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['enrollments', childId] })
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      setRebindId(null)
+      setRebindForm(EMPTY_REBIND)
+      setRebindWarning(null)
+    },
+    onError: (err: unknown) => {
+      const data = (err as { response?: { data?: { error?: string; payments?: RebindPayment[]; message?: string } } }).response?.data
+      if (data?.error === 'HasPayments') {
+        setRebindWarning({ payments: data.payments ?? [], message: data.message ?? '' })
+      }
     },
   })
 
@@ -553,6 +583,99 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                     </div>
                   </div>
 
+                ) : rebindId === e.id ? (
+                  /* ── Rebind account form ── */
+                  <div className="space-y-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs font-medium text-gray-700">Змінити рахунок · {e.activity_name}</p>
+
+                    <div className="flex gap-2 flex-wrap items-end">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">Новий рахунок</label>
+                        <select
+                          value={rebindForm.new_account_id}
+                          onChange={(ev) => { setRebindForm({ ...rebindForm, new_account_id: ev.target.value }); setRebindWarning(null) }}
+                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        >
+                          <option value="">— оберіть —</option>
+                          {accounts.filter((a) => a.id !== e.account_id && a.is_active).map((a) => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">З місяця</label>
+                        <input
+                          type="month"
+                          value={rebindForm.from_month}
+                          onChange={(ev) => { setRebindForm({ ...rebindForm, from_month: ev.target.value }); setRebindWarning(null) }}
+                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-0.5">По місяць (необов'язково)</label>
+                        <input
+                          type="month"
+                          value={rebindForm.to_month}
+                          onChange={(ev) => { setRebindForm({ ...rebindForm, to_month: ev.target.value }); setRebindWarning(null) }}
+                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rebindForm.update_future}
+                        onChange={(ev) => setRebindForm({ ...rebindForm, update_future: ev.target.checked })}
+                      />
+                      Змінити рахунок підписки для майбутніх місяців
+                    </label>
+
+                    {rebindWarning && (
+                      <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 space-y-1">
+                        <p className="font-medium">{rebindWarning.message}</p>
+                        <ul className="space-y-0.5 pl-2">
+                          {rebindWarning.payments.map((p) => (
+                            <li key={p.id}>
+                              {new Date(p.date).toLocaleDateString('uk-UA')} — {Number(p.amount).toLocaleString('uk-UA', { minimumFractionDigits: 2 })} ₴
+                              {p.note && ` (${p.note})`}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-red-600 font-medium mt-1">Все одно перенести нарахування?</p>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      {rebindWarning ? (
+                        <button
+                          onClick={() => rebindMutation.mutate({ force: true })}
+                          disabled={rebindMutation.isPending}
+                          className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
+                        >
+                          {rebindMutation.isPending ? '...' : 'Так, перенести'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!rebindForm.new_account_id) return
+                            rebindMutation.mutate({ force: false })
+                          }}
+                          disabled={!rebindForm.new_account_id || rebindMutation.isPending}
+                          className="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded disabled:opacity-50"
+                        >
+                          {rebindMutation.isPending ? '...' : 'Перенести'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setRebindId(null); setRebindForm(EMPTY_REBIND); setRebindWarning(null) }}
+                        className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900"
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                  </div>
+
                 ) : tariffEnrollId === e.id ? (
                   /* ── Individual tariff form ── */
                   <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
@@ -689,6 +812,11 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                         )}
                         {canEdit && (
                           <>
+                            {e.status !== 'archived' && (
+                              <button
+                                onClick={() => { setRebindId(e.id); setRebindForm({ ...EMPTY_REBIND, from_month: TODAY.slice(0, 7) }); setRebindWarning(null) }}
+                                className="hover:text-amber-600 transition-colors">рахунок</button>
+                            )}
                             {e.status === 'active' && (
                               <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: TODAY, frozen_to: '' }) }}
                                 className="hover:text-blue-600 transition-colors">заморозити</button>

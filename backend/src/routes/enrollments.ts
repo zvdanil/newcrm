@@ -256,6 +256,135 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
     }
   )
 
+  // POST /api/enrollments/:id/rebind-account
+  app.post<{
+    Params: { id: string }
+    Body: {
+      new_account_id: string
+      from_month: string        // YYYY-MM-01
+      to_month?: string         // YYYY-MM-01 (defaults to from_month)
+      update_future?: boolean
+      force?: boolean
+    }
+  }>(
+    '/enrollments/:id/rebind-account',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { new_account_id, update_future = false, force = false } = req.body
+      const from_month = req.body.from_month
+      const to_month   = req.body.to_month ?? from_month
+
+      if (!new_account_id || !from_month) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'new_account_id та from_month є обовʼязковими' })
+      }
+      if (!/^\d{4}-\d{2}-01$/.test(from_month) || !/^\d{4}-\d{2}-01$/.test(to_month)) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'from_month та to_month мають бути у форматі YYYY-MM-01' })
+      }
+      if (to_month < from_month) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'to_month не може бути раніше from_month' })
+      }
+
+      const enrollment = await db.selectFrom('enrollments').selectAll().where('id', '=', req.params.id).executeTakeFirst()
+      if (!enrollment) return reply.status(404).send({ error: 'NotFound' })
+
+      const old_account_id = enrollment.account_id
+      if (old_account_id === new_account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Новий рахунок збігається з поточним' })
+      }
+
+      // Build list of billing months in the range
+      const months: string[] = []
+      const cur = new Date(from_month)
+      const end = new Date(to_month)
+      while (cur <= end) {
+        months.push(`${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, '0')}-01`)
+        cur.setUTCMonth(cur.getUTCMonth() + 1)
+      }
+
+      // Check for PAYMENT transactions on old account in the period
+      if (!force) {
+        const lastDay = new Date(to_month)
+        lastDay.setUTCMonth(lastDay.getUTCMonth() + 1)
+        lastDay.setUTCDate(0)
+
+        const payments = await db.selectFrom('transactions')
+          .select(['id', 'transaction_date', 'amount', 'note'])
+          .where('child_id', '=', enrollment.child_id)
+          .where('account_id', '=', old_account_id)
+          .where('type', '=', 'PAYMENT')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>=', new Date(from_month))
+          .where('transaction_date', '<=', lastDay)
+          .execute()
+
+        if (payments.length > 0) {
+          return reply.status(409).send({
+            error: 'HasPayments',
+            message: `В обраному періоді є ${payments.length} оплат(и). Перенесення нарахувань без переносу оплат призведе до розбіжності балансів.`,
+            payments: payments.map((p) => ({
+              id: p.id,
+              date: new Date(String(p.transaction_date)).toISOString().slice(0, 10),
+              amount: Number(p.amount),
+              note: p.note,
+            })),
+          })
+        }
+      }
+
+      const deletedBy = (req as { user?: { sub?: string } }).user?.sub ?? null
+      const now = new Date().toISOString()
+      let movedCount = 0
+
+      for (const month of months) {
+        const accruals = await db.selectFrom('transactions')
+          .selectAll()
+          .where('enrollment_id', '=', req.params.id)
+          .where('account_id', '=', old_account_id)
+          .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+          .where('is_deleted', '=', false)
+          .where('billing_month', '=', new Date(month))
+          .execute()
+
+        for (const tx of accruals) {
+          await db.updateTable('transactions')
+            .set({ is_deleted: true, deleted_at: now, deleted_by: deletedBy })
+            .where('id', '=', tx.id)
+            .execute()
+
+          await db.insertInto('transactions')
+            .values({
+              type: tx.type,
+              child_id: tx.child_id,
+              account_id: new_account_id,
+              activity_id: tx.activity_id,
+              enrollment_id: tx.enrollment_id,
+              amount: tx.amount,
+              transaction_date: new Date(String(tx.transaction_date)).toISOString().slice(0, 10),
+              billing_month: tx.billing_month ? new Date(String(tx.billing_month)).toISOString().slice(0, 10) : null,
+              note: tx.note,
+              metadata_json: { ...(tx.metadata_json as Record<string, unknown> ?? {}), rebind_from_account: old_account_id },
+              created_by: deletedBy,
+            })
+            .execute()
+
+          movedCount++
+        }
+      }
+
+      await recalcBalance(enrollment.child_id, old_account_id)
+      await recalcBalance(enrollment.child_id, new_account_id)
+
+      if (update_future) {
+        await db.updateTable('enrollments')
+          .set({ account_id: new_account_id })
+          .where('id', '=', req.params.id)
+          .execute()
+      }
+
+      return { moved_count: movedCount, updated_enrollment: update_future }
+    }
+  )
+
   // GET /api/price-resolve?child_id=&activity_id=&date=
   app.get<{ Querystring: { child_id: string; activity_id: string; date?: string } }>(
     '/price-resolve',
