@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { localDateStr, firstOfMonth } from '../../utils/dateStr'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { accountsApi } from '../../api/accounts.api'
-import type { LedgerKind, LedgerRow } from '../../api/accounts.api'
+import type { LedgerKind, LedgerRow, PayerSearchResult } from '../../api/accounts.api'
 import { billingApi } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { BankImportTab } from './BankImportTab'
@@ -17,6 +17,9 @@ const KIND_LABEL: Record<LedgerKind, string> = {
   transfer_in:    'Переказ (надходження)',
   transfer_out:   'Переказ (вибуття)',
   cross_in:       'Оплата від клієнта',
+  income:         'Надходження',
+  correction_in:  'Корекція залишку',
+  correction_out: 'Корекція залишку',
 }
 
 const KIND_SIGN: Record<LedgerKind, '+' | '-'> = {
@@ -26,6 +29,9 @@ const KIND_SIGN: Record<LedgerKind, '+' | '-'> = {
   transfer_in:    '+',
   transfer_out:   '-',
   cross_in:       '+',
+  income:         '+',
+  correction_in:  '+',
+  correction_out: '-',
 }
 
 const KIND_COLOR: Record<LedgerKind, string> = {
@@ -35,6 +41,9 @@ const KIND_COLOR: Record<LedgerKind, string> = {
   transfer_in:    'text-blue-700',
   transfer_out:   'text-orange-600',
   cross_in:       'text-green-700',
+  income:         'text-teal-700',
+  correction_in:  'text-gray-600',
+  correction_out: 'text-gray-600',
 }
 
 function fmtAmount(row: LedgerRow) {
@@ -55,11 +64,71 @@ function thisMonthRange() {
   return { from, to }
 }
 
+const TODAY = localDateStr(new Date())
+
+function PayerSearch({ value, onChange }: { value: PayerSearchResult | null; onChange: (v: PayerSearchResult | null) => void }) {
+  const [query, setQuery] = useState(value?.full_name ?? '')
+  const [results, setResults] = useState<PayerSearchResult[]>([])
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (value) setQuery(value.full_name)
+  }, [value])
+
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return }
+    if (value && query === value.full_name) return
+    const t = setTimeout(async () => {
+      const r = await accountsApi.searchPayers(query)
+      setResults(r)
+      setOpen(r.length > 0)
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query, value])
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        type="text"
+        value={query}
+        placeholder="Ім'я дитини або батьків..."
+        onChange={(e) => { setQuery(e.target.value); onChange(null) }}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500"
+      />
+      {value && (
+        <button onClick={() => { onChange(null); setQuery('') }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+      )}
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {results.map((r) => (
+            <button key={r.id} onMouseDown={() => { onChange(r); setQuery(r.full_name); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-iris-50 transition-colors">
+              <span className="font-medium text-gray-900">{r.full_name}</span>
+              {r.parent_name && <span className="ml-1.5 text-gray-400">({r.parent_name})</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AccountCardPage() {
   const { id } = useParams<{ id: string }>()
   const canImport = useCanAccess('owner', 'admin')
   const qc = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'ledger' | 'import'>('ledger')
+  const [activeTab, setActiveTab] = useState<'ledger' | 'import' | 'entry'>('ledger')
 
   const defaultRange = thisMonthRange()
   const [from, setFrom] = useState(defaultRange.from)
@@ -86,6 +155,62 @@ export function AccountCardPage() {
       qc.invalidateQueries({ queryKey: ['ledger'] })
       qc.invalidateQueries({ queryKey: ['balance'] })
     },
+  })
+
+  // ── Entry tab state ──────────────────────────────────────────────────────
+  const { data: allAccounts = [] } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: accountsApi.list,
+    enabled: activeTab === 'entry',
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const EMPTY_PAYMENT = { amount: '', date: TODAY, note: '', cross: false, debt_account_id: '', payer: null as PayerSearchResult | null }
+  const EMPTY_INCOME  = { amount: '', date: TODAY, payer_name: '', note: '' }
+  const EMPTY_CORR    = { amount: '', date: TODAY, note: '' }
+
+  const [payForm,  setPayForm]  = useState(EMPTY_PAYMENT)
+  const [incForm,  setIncForm]  = useState(EMPTY_INCOME)
+  const [corrForm, setCorrForm] = useState(EMPTY_CORR)
+  const [entryError, setEntryError] = useState<string | null>(null)
+
+  function invalidateEntry() {
+    qc.invalidateQueries({ queryKey: ['account-ledger', id] })
+    qc.invalidateQueries({ queryKey: ['account', id] })
+    qc.invalidateQueries({ queryKey: ['balance'] })
+  }
+
+  const payMutation = useMutation({
+    mutationFn: () => accountsApi.createPayment(id!, {
+      child_id:        payForm.payer!.id,
+      amount:          parseFloat(payForm.amount),
+      transaction_date: payForm.date,
+      note:            payForm.note || undefined,
+      debt_account_id: payForm.cross && payForm.debt_account_id ? payForm.debt_account_id : undefined,
+    }),
+    onSuccess: () => { invalidateEntry(); setPayForm(EMPTY_PAYMENT); setEntryError(null) },
+    onError:   () => setEntryError('Помилка при збереженні оплати'),
+  })
+
+  const incMutation = useMutation({
+    mutationFn: () => accountsApi.createIncome(id!, {
+      amount:      parseFloat(incForm.amount),
+      income_date: incForm.date,
+      payer_name:  incForm.payer_name || undefined,
+      note:        incForm.note || undefined,
+    }),
+    onSuccess: () => { invalidateEntry(); setIncForm(EMPTY_INCOME); setEntryError(null) },
+    onError:   () => setEntryError('Помилка при збереженні надходження'),
+  })
+
+  const corrMutation = useMutation({
+    mutationFn: () => accountsApi.createCorrection(id!, {
+      amount:          parseFloat(corrForm.amount),
+      correction_date: corrForm.date,
+      note:            corrForm.note || undefined,
+    }),
+    onSuccess: () => { invalidateEntry(); setCorrForm(EMPTY_CORR); setEntryError(null) },
+    onError:   () => setEntryError('Помилка при збереженні корекції'),
   })
 
   if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
@@ -137,18 +262,185 @@ export function AccountCardPage() {
           Рух коштів
         </button>
         {canImport && (
-          <button
-            onClick={() => setActiveTab('import')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
-              activeTab === 'import'
-                ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Імпорт виписки
-          </button>
+          <>
+            <button
+              onClick={() => setActiveTab('entry')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                activeTab === 'entry'
+                  ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Внести
+            </button>
+            <button
+              onClick={() => setActiveTab('import')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                activeTab === 'import'
+                  ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Імпорт виписки
+            </button>
+          </>
         )}
       </div>
+
+      {/* Entry tab */}
+      {activeTab === 'entry' && canImport && id && (
+        <div className="space-y-4">
+          {entryError && (
+            <div className="px-4 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{entryError}</div>
+          )}
+
+          {/* ── Payment from child ── */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-800">Оплата від клієнта</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Дата</label>
+                <input type="date" value={payForm.date}
+                  onChange={(e) => setPayForm({ ...payForm, date: e.target.value })}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Сума, ₴</label>
+                <input type="number" min="0.01" step="0.01" value={payForm.amount}
+                  onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-0.5">Надійшло від</label>
+                <PayerSearch value={payForm.payer} onChange={(p) => setPayForm({ ...payForm, payer: p })} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">Примітка</label>
+              <input type="text" value={payForm.note}
+                onChange={(e) => setPayForm({ ...payForm, note: e.target.value })}
+                placeholder="необов'язково"
+                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={payForm.cross}
+                onChange={(e) => setPayForm({ ...payForm, cross: e.target.checked, debt_account_id: '' })} />
+              Гроші прийшли сюди, але послуга на іншому рахунку
+            </label>
+            {payForm.cross && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Рахунок послуги (де числиться борг)</label>
+                <select value={payForm.debt_account_id}
+                  onChange={(e) => setPayForm({ ...payForm, debt_account_id: e.target.value })}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500">
+                  <option value="">— оберіть —</option>
+                  {allAccounts.filter((a) => a.id !== id && a.is_active).map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                if (!payForm.payer) { setEntryError('Оберіть клієнта'); return }
+                if (!payForm.amount || parseFloat(payForm.amount) <= 0) { setEntryError('Введіть суму'); return }
+                if (payForm.cross && !payForm.debt_account_id) { setEntryError('Оберіть рахунок послуги'); return }
+                setEntryError(null)
+                payMutation.mutate()
+              }}
+              disabled={payMutation.isPending}
+              className="text-xs px-4 py-1.5 bg-iris-600 hover:bg-iris-700 text-white rounded-md disabled:opacity-50 transition-colors"
+            >
+              {payMutation.isPending ? 'Зберігається...' : 'Зафіксувати оплату'}
+            </button>
+          </div>
+
+          {/* ── Arbitrary income ── */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-800">Довільне надходження</h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Дата</label>
+                <input type="date" value={incForm.date}
+                  onChange={(e) => setIncForm({ ...incForm, date: e.target.value })}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Сума, ₴</label>
+                <input type="number" min="0.01" step="0.01" value={incForm.amount}
+                  onChange={(e) => setIncForm({ ...incForm, amount: e.target.value })}
+                  placeholder="0.00"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-0.5">Від кого</label>
+                <input type="text" value={incForm.payer_name}
+                  onChange={(e) => setIncForm({ ...incForm, payer_name: e.target.value })}
+                  placeholder="необов'язково — ім'я або назва"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-0.5">Примітка</label>
+              <input type="text" value={incForm.note}
+                onChange={(e) => setIncForm({ ...incForm, note: e.target.value })}
+                placeholder="необов'язково"
+                className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+            </div>
+            <button
+              onClick={() => {
+                if (!incForm.amount || parseFloat(incForm.amount) <= 0) { setEntryError('Введіть суму'); return }
+                setEntryError(null)
+                incMutation.mutate()
+              }}
+              disabled={incMutation.isPending}
+              className="text-xs px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-md disabled:opacity-50 transition-colors"
+            >
+              {incMutation.isPending ? 'Зберігається...' : 'Зафіксувати надходження'}
+            </button>
+          </div>
+
+          {/* ── Balance correction ── */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-800">Корекція залишку</h3>
+            <p className="text-xs text-gray-500">Технічне виправлення балансу рахунку. Позитивна сума — збільшення, від'ємна — зменшення.</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Дата</label>
+                <input type="date" value={corrForm.date}
+                  onChange={(e) => setCorrForm({ ...corrForm, date: e.target.value })}
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Сума, ₴ (зі знаком)</label>
+                <input type="number" step="0.01" value={corrForm.amount}
+                  onChange={(e) => setCorrForm({ ...corrForm, amount: e.target.value })}
+                  placeholder="+200 або -150"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Примітка</label>
+                <input type="text" value={corrForm.note}
+                  onChange={(e) => setCorrForm({ ...corrForm, note: e.target.value })}
+                  placeholder="причина корекції"
+                  className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (!corrForm.amount || corrForm.amount === '0') { setEntryError('Введіть суму зі знаком'); return }
+                setEntryError(null)
+                corrMutation.mutate()
+              }}
+              disabled={corrMutation.isPending}
+              className="text-xs px-4 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-md disabled:opacity-50 transition-colors"
+            >
+              {corrMutation.isPending ? 'Зберігається...' : 'Зафіксувати корекцію'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Import tab */}
       {activeTab === 'import' && canImport && id && (

@@ -38,6 +38,8 @@ const balanceSql = sql<string>`(
       AND NOT EXISTS (SELECT 1 FROM expenses WHERE withdrawal_transfer_id = account_transfers.id AND is_deleted = false)
       AND NOT EXISTS (SELECT 1 FROM salary_transactions WHERE withdrawal_transfer_id = account_transfers.id AND is_deleted = false)
     ), 0)
+  + COALESCE((SELECT SUM(amount) FROM account_income      WHERE account_id = a.id AND is_deleted = false), 0)
+  + COALESCE((SELECT SUM(amount) FROM account_corrections WHERE account_id = a.id AND is_deleted = false), 0)
 )`
 
 export async function accountsRoutes(app: FastifyInstance) {
@@ -90,7 +92,7 @@ export async function accountsRoutes(app: FastifyInstance) {
       const rows = await sql<{
         id: string
         date: string
-        kind: 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in' | 'cross_out'
+        kind: 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in' | 'cross_out' | 'income' | 'correction_in' | 'correction_out'
         amount: string
         note: string | null
         detail: string | null
@@ -239,6 +241,40 @@ export async function accountsRoutes(app: FastifyInstance) {
           AND (${f}::date IS NULL OR iai.created_at::date >= ${f}::date)
           AND (${t}::date IS NULL OR iai.created_at::date <= ${t}::date)
 
+        UNION ALL
+
+        SELECT
+          ai.id,
+          ai.income_date::date AS date,
+          'income'             AS kind,
+          ai.amount::numeric   AS amount,
+          ai.note,
+          ai.payer_name        AS detail,
+          false                AS is_advance,
+          NULL::numeric        AS utilized_advance_amount
+        FROM account_income ai
+        WHERE ai.account_id = ${id}
+          AND ai.is_deleted = false
+          AND (${f}::date IS NULL OR ai.income_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR ai.income_date::date <= ${t}::date)
+
+        UNION ALL
+
+        SELECT
+          ac.id,
+          ac.correction_date::date AS date,
+          CASE WHEN ac.amount >= 0 THEN 'correction_in' ELSE 'correction_out' END AS kind,
+          ABS(ac.amount)::numeric  AS amount,
+          ac.note,
+          NULL                     AS detail,
+          false                    AS is_advance,
+          NULL::numeric            AS utilized_advance_amount
+        FROM account_corrections ac
+        WHERE ac.account_id = ${id}
+          AND ac.is_deleted = false
+          AND (${f}::date IS NULL OR ac.correction_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR ac.correction_date::date <= ${t}::date)
+
         ORDER BY date DESC, kind
         LIMIT ${limit} OFFSET ${offset}
       `.execute(db)
@@ -302,6 +338,165 @@ export async function accountsRoutes(app: FastifyInstance) {
       const updated = await db.updateTable('accounts').set(req.body).where('id', '=', req.params.id).returningAll().executeTakeFirst()
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
       return updated
+    }
+  )
+
+  // ── GET /api/accounts/payer-search?q= ────────────────────────────────────
+  // Search children by child name OR parent full_name
+  app.get<{ Querystring: { q?: string } }>(
+    '/payer-search',
+    { preHandler: authenticate },
+    async (req) => {
+      const q = (req.query.q ?? '').trim()
+      if (q.length < 2) return []
+
+      const pattern = `%${q}%`
+
+      // Children matching by own name
+      const byChildName = await db.selectFrom('children as c')
+        .select(['c.id', 'c.full_name'])
+        .where('c.is_active', '=', true)
+        .where('c.full_name', 'ilike', pattern)
+        .limit(10)
+        .execute()
+
+      // Children matching via parent name
+      const byParentName = await db.selectFrom('child_parents as cp')
+        .innerJoin('children as c', 'c.id', 'cp.child_id')
+        .innerJoin('parents as p', 'p.id', 'cp.parent_id')
+        .select(['c.id', 'c.full_name', 'p.full_name as parent_name'])
+        .where('c.is_active', '=', true)
+        .where('p.full_name', 'ilike', pattern)
+        .limit(10)
+        .execute()
+
+      // Merge and deduplicate by child id
+      const seen = new Set<string>()
+      const results: { id: string; full_name: string; parent_name?: string | null }[] = []
+
+      for (const r of byChildName) {
+        if (!seen.has(r.id)) { seen.add(r.id); results.push(r) }
+      }
+      for (const r of byParentName) {
+        if (!seen.has(r.id)) { seen.add(r.id); results.push({ id: r.id, full_name: r.full_name, parent_name: r.parent_name }) }
+      }
+
+      return results.slice(0, 15)
+    }
+  )
+
+  // ── POST /api/accounts/:id/payments — manual payment from child ───────────
+  app.post<{
+    Params: { id: string }
+    Body: {
+      child_id: string
+      amount: number
+      transaction_date?: string
+      note?: string
+      debt_account_id?: string   // if set → cross-account: money arrived here, debt on debt_account_id
+    }
+  }>(
+    '/:id/payments',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { child_id, amount, note, debt_account_id } = req.body
+      const physicalAccountId = req.params.id   // account where money physically arrived
+      const dateStr = req.body.transaction_date ?? new Date().toISOString().slice(0, 10)
+
+      if (!child_id || !amount || amount <= 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'child_id та amount є обовʼязковими' })
+      }
+
+      const isCrossAccount = !!debt_account_id && debt_account_id !== physicalAccountId
+      const serviceAccountId = isCrossAccount ? debt_account_id! : physicalAccountId
+
+      const { createTransaction, recalcBalance } = await import('../services/balanceService.js')
+
+      const txId = await createTransaction({
+        type: 'PAYMENT',
+        child_id,
+        account_id: serviceAccountId,
+        amount,
+        transaction_date: dateStr,
+        note: note ?? null,
+        created_by: (req as { user?: { sub?: string } }).user?.sub ?? null,
+        metadata_json: isCrossAccount ? { payment_account_id: physicalAccountId } : null,
+      })
+
+      if (isCrossAccount) {
+        await db.insertInto('inter_account_imbalances').values({
+          from_account_id: physicalAccountId,
+          to_account_id:   serviceAccountId,
+          amount,
+          transaction_id:  txId,
+          note: note ?? null,
+        }).execute()
+      }
+
+      await recalcBalance(child_id, serviceAccountId)
+
+      return reply.status(201).send({ id: txId, cross_account: isCrossAccount })
+    }
+  )
+
+  // ── POST /api/accounts/:id/income — arbitrary income (no child) ───────────
+  app.post<{
+    Params: { id: string }
+    Body: { amount: number; income_date?: string; payer_name?: string; note?: string }
+  }>(
+    '/:id/income',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { amount, payer_name, note } = req.body
+      const income_date = req.body.income_date ?? new Date().toISOString().slice(0, 10)
+
+      if (!amount || amount <= 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'amount має бути більше 0' })
+      }
+
+      const row = await db.insertInto('account_income')
+        .values({
+          account_id: req.params.id,
+          income_date,
+          amount,
+          payer_name: payer_name || null,
+          note: note || null,
+          created_by: (req as { user?: { sub?: string } }).user?.sub ?? null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      return reply.status(201).send(row)
+    }
+  )
+
+  // ── POST /api/accounts/:id/corrections — balance correction ──────────────
+  app.post<{
+    Params: { id: string }
+    Body: { amount: number; correction_date?: string; note?: string }
+  }>(
+    '/:id/corrections',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { amount, note } = req.body
+      const correction_date = req.body.correction_date ?? new Date().toISOString().slice(0, 10)
+
+      if (amount === undefined || amount === null) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'amount є обовʼязковим' })
+      }
+
+      const row = await db.insertInto('account_corrections')
+        .values({
+          account_id: req.params.id,
+          correction_date,
+          amount,
+          note: note || null,
+          created_by: (req as { user?: { sub?: string } }).user?.sub ?? null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow()
+
+      return reply.status(201).send(row)
     }
   )
 }

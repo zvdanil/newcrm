@@ -6,7 +6,13 @@ export interface AccountWithBalance extends Account {
   open_imbalances?: number
 }
 
-export type LedgerKind = 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in'
+export type LedgerKind = 'payment' | 'expense' | 'salary_payment' | 'transfer_in' | 'transfer_out' | 'cross_in' | 'income' | 'correction_in' | 'correction_out'
+
+export interface PayerSearchResult {
+  id: string
+  full_name: string
+  parent_name?: string | null
+}
 
 export interface LedgerRow {
   id:     string
@@ -77,6 +83,41 @@ export const accountsApi = {
 
   update: async (id: string, payload: Partial<Pick<Account, 'name' | 'type' | 'currency' | 'note' | 'is_active'>>) => {
     const { data } = await apiClient.put<Account>(`/accounts/${id}`, payload)
+    return data
+  },
+
+  searchPayers: async (q: string): Promise<PayerSearchResult[]> => {
+    const { data } = await apiClient.get<PayerSearchResult[]>(`/accounts/payer-search?q=${encodeURIComponent(q)}`)
+    return data
+  },
+
+  createPayment: async (accountId: string, payload: {
+    child_id: string
+    amount: number
+    transaction_date?: string
+    note?: string
+    debt_account_id?: string
+  }) => {
+    const { data } = await apiClient.post(`/accounts/${accountId}/payments`, payload)
+    return data
+  },
+
+  createIncome: async (accountId: string, payload: {
+    amount: number
+    income_date?: string
+    payer_name?: string
+    note?: string
+  }) => {
+    const { data } = await apiClient.post(`/accounts/${accountId}/income`, payload)
+    return data
+  },
+
+  createCorrection: async (accountId: string, payload: {
+    amount: number
+    correction_date?: string
+    note?: string
+  }) => {
+    const { data } = await apiClient.post(`/accounts/${accountId}/corrections`, payload)
     return data
   },
 }

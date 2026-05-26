@@ -504,6 +504,33 @@ export interface BankPayerProfilesTable {
   updated_at:        Generated<Date>
 }
 
+export interface AccountIncomeTable {
+  id:          Generated<string>
+  account_id:  string
+  income_date: ColumnType<Date, string, string>
+  amount:      ColumnType<string, number | string, number | string>
+  payer_name:  string | null
+  note:        string | null
+  created_at:  Generated<Date>
+  created_by:  string | null
+  is_deleted:  Generated<boolean>
+  deleted_at:  ColumnType<Date | null, string | null, string | null>
+  deleted_by:  string | null
+}
+
+export interface AccountCorrectionsTable {
+  id:              Generated<string>
+  account_id:      string
+  correction_date: ColumnType<Date, string, string>
+  amount:          ColumnType<string, number | string, number | string>
+  note:            string | null
+  created_at:      Generated<Date>
+  created_by:      string | null
+  is_deleted:      Generated<boolean>
+  deleted_at:      ColumnType<Date | null, string | null, string | null>
+  deleted_by:      string | null
+}
+
 export interface Database {
   users:                 UsersTable
   groups:                GroupsTable
@@ -549,6 +576,8 @@ export interface Database {
   child_parents:              ChildParentsTable
   import_templates:           ImportTemplatesTable
   bank_payer_profiles:        BankPayerProfilesTable
+  account_income:             AccountIncomeTable
+  account_corrections:        AccountCorrectionsTable
 }
 
 export interface EquityParticipantsTable {
