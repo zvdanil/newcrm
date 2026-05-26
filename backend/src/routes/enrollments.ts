@@ -1,21 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
-import { getEffectivePrice, recalcActivityAccruals } from '../services/billingRunService.js'
+import { getEffectivePrice, recalcActivityAccruals, countWorkingDays } from '../services/billingRunService.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
-
-// Подсчёт рабочих дней (пн–пт) в диапазоне [from, to] включительно
-function countWorkingDays(from: Date, to: Date): number {
-  let count = 0
-  const cur = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
-  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()))
-  while (cur <= end) {
-    const dow = cur.getUTCDay() // 0=Вс, 1=Пн, ..., 5=Пт, 6=Сб
-    if (dow >= 1 && dow <= 5) count++
-    cur.setUTCDate(cur.getUTCDate() + 1)
-  }
-  return count
-}
 
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments

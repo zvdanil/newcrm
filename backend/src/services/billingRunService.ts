@@ -2,6 +2,19 @@ import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { createTransaction, recalcBalance } from './balanceService.js'
 
+// Підрахунок робочих днів (пн–пт) у діапазоні [from, to] включно
+export function countWorkingDays(from: Date, to: Date): number {
+  let count = 0
+  const cur = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
+  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()))
+  while (cur <= end) {
+    const dow = cur.getUTCDay()
+    if (dow >= 1 && dow <= 5) count++
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return count
+}
+
 interface RunResult {
   billing_month: string
   created_count: number
@@ -375,7 +388,12 @@ export async function recalcActivityAccruals(
           .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
-        if (new Date(String(e.start_date)).getTime() > billingDate.getTime()) {
+        const startDate = new Date(String(e.start_date))
+        const startMonthKey = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-01`
+        const isMidMonthStart = startDate.getTime() > billingDate.getTime()
+
+        // Запис ще не почався у цьому місяці (починається в майбутньому місяці) — пропускаємо
+        if (isMidMonthStart && startMonthKey !== monthStr) {
           await recalcBalance(e.child_id, e.account_id)
           continue
         }
@@ -395,17 +413,36 @@ export async function recalcActivityAccruals(
           continue
         }
 
+        // Розрахунок суми: про-рата для запису не з 1-го числа, повна ціна — інакше
+        let accrualAmount = price
+        let accrualNote = `Нарахування за ${monthStr.slice(0, 7)}`
+        let proRataMeta: Record<string, unknown> = {}
+
+        if (isMidMonthStart) {
+          const firstDay = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1))
+          const lastDay  = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 0))
+          const wdInMonth   = countWorkingDays(firstDay, lastDay)
+          const wdRemaining = countWorkingDays(startDate, lastDay)
+          if (wdInMonth === 0 || wdRemaining === 0) {
+            await recalcBalance(e.child_id, e.account_id)
+            continue
+          }
+          accrualAmount = Math.round((price / wdInMonth) * wdRemaining)
+          accrualNote = `Нарахування за ${monthStr.slice(0, 7)} (про-рата ${wdRemaining}/${wdInMonth} роб. дн.)`
+          proRataMeta = { pro_rata: true, working_days_remaining: wdRemaining, working_days_in_month: wdInMonth, full_price: price }
+        }
+
         await createTransaction({
           type: 'ACCRUAL',
           child_id: e.child_id,
           account_id: e.account_id,
           activity_id: activityId,
           enrollment_id: e.enrollment_id,
-          amount: price,
+          amount: accrualAmount,
           transaction_date: monthStr,
           billing_month: monthStr,
-          note: `Нарахування за ${monthStr.slice(0, 7)}`,
-          metadata_json: { tariff_snapshot: { price, billing_month: monthStr }, source: 'retro_recalc' },
+          note: accrualNote,
+          metadata_json: { tariff_snapshot: { price, billing_month: monthStr }, source: 'retro_recalc', ...proRataMeta },
           created_by: triggeredBy,
         })
         replaced++
