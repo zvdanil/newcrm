@@ -1930,6 +1930,103 @@ function ParentsBlock({ child }: { child: Child }) {
   const filteredResults = parentsData?.data.filter((p) => !parents.some((cp) => cp.id === p.id)) ?? []
   const searchedButEmpty = showAdd && !showCreate && search.length > 0 && parentsData && filteredResults.length === 0
 
+  function ParentRow({ p }: { p: ChildParent }) {
+    const [editing, setEditing] = useState(false)
+    const [form, setForm] = useState({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '' })
+
+    const saveMutation = useMutation({
+      mutationFn: () => parentsApi.update(p.id, {
+        full_name: form.full_name.trim(),
+        phone:     form.phone.trim()  || null,
+        email:     form.email.trim()  || null,
+      }),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['child', child.id] })
+        qc.invalidateQueries({ queryKey: ['parent-access', child.id] })
+        setEditing(false)
+      },
+    })
+
+    if (editing) {
+      return (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50 text-sm">
+          <input
+            type="text"
+            value={form.full_name}
+            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            placeholder="ПІБ *"
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <input
+            type="tel"
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="Телефон"
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <input
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="Email"
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => { if (form.full_name.trim()) saveMutation.mutate() }}
+              disabled={!form.full_name.trim() || saveMutation.isPending}
+              className="px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm rounded-lg"
+            >
+              {saveMutation.isPending ? '...' : 'Зберегти'}
+            </button>
+            <button
+              onClick={() => { setForm({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '' }); setEditing(false) }}
+              className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
+            >
+              Скасувати
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        {canEdit ? (
+          <select
+            value={p.role ?? ''}
+            onChange={(e) => updateRoleMutation.mutate({ parentId: p.id, role: e.target.value || null })}
+            className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
+          >
+            {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        ) : (
+          p.role && <span className="text-xs font-medium text-iris-600">{p.role}</span>
+        )}
+        <span className="font-medium text-gray-900">{p.full_name}</span>
+        {p.phone && <span className="text-gray-500">{p.phone}</span>}
+        {p.email && <span className="text-gray-400 text-xs">{p.email}</span>}
+        {!p.phone && !p.email && <span className="text-gray-300 text-xs">без контактів</span>}
+        {canEdit && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setEditing(true)}
+              className="text-xs text-iris-500 hover:text-iris-700"
+            >
+              Ред.
+            </button>
+            <button
+              onClick={() => { if (confirm(`Відʼєднати ${p.full_name}?`)) removeMutation.mutate(p.id) }}
+              className="text-xs text-red-400 hover:text-red-600"
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -1950,32 +2047,7 @@ function ParentsBlock({ child }: { child: Child }) {
 
       {parents.length > 0 && (
         <div className="space-y-2">
-          {parents.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              {canEdit ? (
-                <select
-                  value={p.role ?? ''}
-                  onChange={(e) => updateRoleMutation.mutate({ parentId: p.id, role: e.target.value || null })}
-                  className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
-                >
-                  {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              ) : (
-                p.role && <span className="text-xs font-medium text-iris-600">{p.role}</span>
-              )}
-              <span className="font-medium text-gray-900">{p.full_name}</span>
-              {p.phone && <span className="text-gray-500">{p.phone}</span>}
-              {p.email && <span className="text-gray-400">{p.email}</span>}
-              {canEdit && (
-                <button
-                  onClick={() => { if (confirm(`Відʼєднати ${p.full_name}?`)) removeMutation.mutate(p.id) }}
-                  className="ml-auto text-xs text-red-400 hover:text-red-600"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
+          {parents.map((p) => <ParentRow key={p.id} p={p} />)}
         </div>
       )}
 
