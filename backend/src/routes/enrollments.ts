@@ -4,6 +4,19 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { getEffectivePrice, recalcActivityAccruals } from '../services/billingRunService.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
 
+// Подсчёт рабочих дней (пн–пт) в диапазоне [from, to] включительно
+function countWorkingDays(from: Date, to: Date): number {
+  let count = 0
+  const cur = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()))
+  const end = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()))
+  while (cur <= end) {
+    const dow = cur.getUTCDay() // 0=Вс, 1=Пн, ..., 5=Пт, 6=Сб
+    if (dow >= 1 && dow <= 5) count++
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return count
+}
+
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments
   app.get<{ Params: { childId: string } }>(
@@ -89,11 +102,13 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         if (dayOfMonth > 1 && startMonthStr === currentMonthStr) {
           const year = d.getUTCFullYear()
           const month = d.getUTCMonth()
-          const daysInMonth = new Date(year, month + 1, 0).getDate()
-          const daysRemaining = daysInMonth - dayOfMonth + 1
+          const firstDay = new Date(Date.UTC(year, month, 1))
+          const lastDay  = new Date(Date.UTC(year, month + 1, 0))
+          const workingDaysInMonth   = countWorkingDays(firstDay, lastDay)
+          const workingDaysRemaining = countWorkingDays(d, lastDay)
           const price = await getEffectivePrice(child_id, activity_id, new Date(startMonthStr))
-          if (price && price > 0) {
-            const proRata = Math.round((price / daysInMonth) * daysRemaining * 100) / 100
+          if (price && price > 0 && workingDaysInMonth > 0) {
+            const proRata = Math.round((price / workingDaysInMonth) * workingDaysRemaining)
             await createTransaction({
               type: 'ACCRUAL',
               child_id,
@@ -103,11 +118,11 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
               amount: proRata,
               transaction_date: start_date,
               billing_month: startMonthStr,
-              note: `Нарахування за ${startMonthStr.slice(0, 7)} (про-рата ${daysRemaining}/${daysInMonth} дн.)`,
+              note: `Нарахування за ${startMonthStr.slice(0, 7)} (про-рата ${workingDaysRemaining}/${workingDaysInMonth} роб. дн.)`,
               metadata_json: {
                 pro_rata: true,
-                days_remaining: daysRemaining,
-                days_in_month: daysInMonth,
+                working_days_remaining: workingDaysRemaining,
+                working_days_in_month: workingDaysInMonth,
                 full_price: price,
               },
               created_by: createdBy,
