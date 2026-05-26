@@ -1861,6 +1861,8 @@ function ParentAccessBlock({ childId }: { childId: string }) {
   )
 }
 
+const EMPTY_NEW_PARENT = { full_name: '', phone: '', email: '' }
+
 function ParentsBlock({ child }: { child: Child }) {
   const qc = useQueryClient()
   const canEdit = useCanAccess('owner', 'admin', 'manager')
@@ -1869,23 +1871,49 @@ function ParentsBlock({ child }: { child: Child }) {
   const [search, setSearch] = useState('')
   const [selectedParentId, setSelectedParentId] = useState('')
   const [selectedRole, setSelectedRole] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [newParent, setNewParent] = useState(EMPTY_NEW_PARENT)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const { data: parentsData } = useQuery({
     queryKey: ['parents-search', search],
     queryFn: () => parentsApi.list({ search: search || undefined }),
     staleTime: 30_000,
-    enabled: showAdd,
+    enabled: showAdd && !showCreate,
   })
+
+  const resetAdd = () => {
+    setShowAdd(false)
+    setShowCreate(false)
+    setSearch('')
+    setSelectedParentId('')
+    setSelectedRole('')
+    setNewParent(EMPTY_NEW_PARENT)
+    setCreateError(null)
+  }
 
   const addMutation = useMutation({
     mutationFn: () => childrenApi.addParent(child.id, selectedParentId, selectedRole || null),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['child', child.id] })
-      setShowAdd(false)
-      setSelectedParentId('')
-      setSelectedRole('')
-      setSearch('')
+      resetAdd()
     },
+  })
+
+  const createAndLinkMutation = useMutation({
+    mutationFn: async () => {
+      const created = await parentsApi.create({
+        full_name: newParent.full_name.trim(),
+        phone: newParent.phone.trim() || undefined,
+        email: newParent.email.trim() || undefined,
+      })
+      await childrenApi.addParent(child.id, created.id, selectedRole || null)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['child', child.id] })
+      resetAdd()
+    },
+    onError: () => setCreateError('Помилка при створенні. Перевірте дані.'),
   })
 
   const removeMutation = useMutation({
@@ -1898,6 +1926,9 @@ function ParentsBlock({ child }: { child: Child }) {
       childrenApi.addParent(child.id, parentId, role),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['child', child.id] }),
   })
+
+  const filteredResults = parentsData?.data.filter((p) => !parents.some((cp) => cp.id === p.id)) ?? []
+  const searchedButEmpty = showAdd && !showCreate && search.length > 0 && parentsData && filteredResults.length === 0
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -1948,31 +1979,43 @@ function ParentsBlock({ child }: { child: Child }) {
         </div>
       )}
 
-      {showAdd && (
+      {showAdd && !showCreate && (
         <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
           <input
             type="text"
-            placeholder="Пошук батька/матері..."
+            placeholder="Пошук за ім'ям..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setSelectedParentId('') }}
             className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
           />
-          {parentsData && parentsData.data.length > 0 && (
+
+          {filteredResults.length > 0 && (
             <select
-              size={Math.min(parentsData.data.length, 5)}
+              size={Math.min(filteredResults.length, 5)}
               value={selectedParentId}
               onChange={(e) => setSelectedParentId(e.target.value)}
               className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
             >
-              {parentsData.data
-                .filter((p) => !parents.some((cp) => cp.id === p.id))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name}{p.phone ? ` · ${p.phone}` : ''}
-                  </option>
-                ))}
+              {filteredResults.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}{p.phone ? ` · ${p.phone}` : ''}
+                </option>
+              ))}
             </select>
           )}
+
+          {searchedButEmpty && (
+            <div className="flex items-center gap-2 py-1">
+              <span className="text-xs text-gray-400">Нікого не знайдено.</span>
+              <button
+                onClick={() => { setShowCreate(true); setNewParent({ ...EMPTY_NEW_PARENT, full_name: search }) }}
+                className="text-xs text-iris-600 hover:text-iris-700 font-medium"
+              >
+                Створити нового
+              </button>
+            </div>
+          )}
+
           <select
             value={selectedRole}
             onChange={(e) => setSelectedRole(e.target.value)}
@@ -1980,6 +2023,7 @@ function ParentsBlock({ child }: { child: Child }) {
           >
             {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+
           <div className="flex gap-2">
             <button
               onClick={() => addMutation.mutate()}
@@ -1988,11 +2032,66 @@ function ParentsBlock({ child }: { child: Child }) {
             >
               Додати
             </button>
+            <button onClick={resetAdd} className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm">
+              Скасувати
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showAdd && showCreate && (
+        <div className="border border-iris-200 rounded-lg p-3 space-y-2 bg-iris-50">
+          <p className="text-xs font-medium text-iris-800">Новий батько / опікун</p>
+
+          <input
+            type="text"
+            placeholder="ПІБ *"
+            value={newParent.full_name}
+            onChange={(e) => setNewParent({ ...newParent, full_name: e.target.value })}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <input
+            type="tel"
+            placeholder="Телефон"
+            value={newParent.phone}
+            onChange={(e) => setNewParent({ ...newParent, phone: e.target.value })}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <input
+            type="email"
+            placeholder="Email (потрібен для запрошення в кабінет)"
+            value={newParent.email}
+            onChange={(e) => setNewParent({ ...newParent, email: e.target.value })}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+
+          <select
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
+            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          >
+            {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          {createError && <p className="text-xs text-red-600">{createError}</p>}
+
+          <div className="flex gap-2">
             <button
-              onClick={() => { setShowAdd(false); setSearch(''); setSelectedParentId('') }}
+              onClick={() => {
+                setCreateError(null)
+                if (!newParent.full_name.trim()) { setCreateError("ПІБ є обов'язковим"); return }
+                createAndLinkMutation.mutate()
+              }}
+              disabled={createAndLinkMutation.isPending}
+              className="px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white text-sm rounded-lg"
+            >
+              {createAndLinkMutation.isPending ? '...' : 'Створити і додати'}
+            </button>
+            <button
+              onClick={() => { setShowCreate(false); setNewParent(EMPTY_NEW_PARENT); setCreateError(null) }}
               className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
             >
-              Скасувати
+              ← Назад
             </button>
           </div>
         </div>
