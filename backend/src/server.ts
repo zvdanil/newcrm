@@ -30,6 +30,7 @@ import { dividendsRoutes } from './routes/dividends.js'
 import { reportsRoutes } from './routes/reports.js'
 import { usersRoutes } from './routes/users.js'
 import { inviteRoutes } from './routes/invites.js'
+import { parentRoutes } from './routes/parent.js'
 import cron from 'node-cron'
 import { runBilling, currentBillingMonth } from './services/billingRunService.js'
 import { runSmartAccruals } from './services/smartTariffService.js'
@@ -78,6 +79,7 @@ await app.register(dividendsRoutes,      { prefix: '/api/dividends' })
 await app.register(reportsRoutes,        { prefix: '/api/reports' })
 await app.register(usersRoutes,          { prefix: '/api/users' })
 await app.register(inviteRoutes,         { prefix: '/api/invite' })
+await app.register(parentRoutes,         { prefix: '/api/parent' })
 
 // Serve frontend in production (single-service mode)
 if (isProd) {

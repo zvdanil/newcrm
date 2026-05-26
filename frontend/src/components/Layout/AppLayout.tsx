@@ -21,13 +21,16 @@ export function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const isDutyAdmin     = user?.role === 'duty_admin'
+  const isParent        = user?.role === 'parent'
   const canManageGroups = useCanAccess('owner', 'admin')
   const canManageUsers  = useCanAccess('owner', 'admin')
   const isOwner = useCanAccess('owner')
 
   const visibleLinks = isDutyAdmin
     ? NAV_LINKS.filter(l => DUTY_ADMIN_LINKS.has(l.to))
-    : NAV_LINKS
+    : isParent
+      ? []
+      : NAV_LINKS
 
   // When embedded in an iframe (e.g. opened from calendar modal), hide navigation
   const isEmbedded = new URLSearchParams(location.search).get('layout') === 'none'

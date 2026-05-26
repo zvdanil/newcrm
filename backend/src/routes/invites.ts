@@ -37,10 +37,10 @@ export async function inviteRoutes(app: FastifyInstance) {
   // POST /api/invite/:token/accept — set password, activate user (public)
   app.post<{
     Params: { token: string }
-    Body: { password: string; name?: string }
+    Body: { password: string; name?: string; email?: string }
   }>('/:token/accept', async (req, reply) => {
     const { token } = req.params
-    const { password, name } = req.body
+    const { password, name, email: emailFromBody } = req.body
 
     if (!password || password.length < 8)
       return reply.status(400).send({ error: 'PasswordTooShort', message: 'Мінімум 8 символів' })
@@ -54,11 +54,13 @@ export async function inviteRoutes(app: FastifyInstance) {
       return reply.status(410).send({ error: 'TokenExpired' })
 
     const hash = await bcrypt.hash(password, 10)
+    // Email from invite, or from body (when invite was created without email)
+    const resolvedEmail = invite.email ?? emailFromBody ?? null
 
     if (invite.type === 'invite') {
-      const existing = invite.email
+      const existing = resolvedEmail
         ? await db.selectFrom('users').selectAll()
-            .where('email', '=', invite.email.toLowerCase()).executeTakeFirst()
+            .where('email', '=', resolvedEmail.toLowerCase()).executeTakeFirst()
         : null
 
       if (existing) {
@@ -72,10 +74,10 @@ export async function inviteRoutes(app: FastifyInstance) {
           updated_at:    new Date(),
         }).where('id', '=', existing.id).execute()
       } else {
-        if (!invite.email || !invite.role)
-          return reply.status(400).send({ error: 'BadRequest', message: 'Некоректне запрошення' })
+        if (!resolvedEmail || !invite.role)
+          return reply.status(400).send({ error: 'EmailRequired', message: 'Для активації необхідно вказати email' })
         await db.insertInto('users').values({
-          email:         invite.email.toLowerCase(),
+          email:         resolvedEmail.toLowerCase(),
           password_hash: hash,
           role:          invite.role,
           staff_id:      invite.staff_id ?? null,

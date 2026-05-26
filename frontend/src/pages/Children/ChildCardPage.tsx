@@ -11,6 +11,7 @@ import { activitiesApi } from '../../api/activities.api'
 import { accountsApi } from '../../api/accounts.api'
 import { enrollmentsApi } from '../../api/enrollments.api'
 import type { RebindPayment } from '../../api/enrollments.api'
+import type { ParentAccessRow } from '../../api/children.api'
 import { billingApi } from '../../api/billing.api'
 import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
@@ -219,6 +220,9 @@ export function ChildCardPage() {
 
       {/* Parents */}
       <ParentsBlock child={child} />
+
+      {/* Parent cabinet access */}
+      {id && <ParentAccessBlock childId={id} />}
 
       {/* Known payers from bank statements */}
       {id && <BankPayersBlock childId={id} />}
@@ -1769,6 +1773,93 @@ const ROLE_OPTIONS = [
   { value: 'тато', label: 'Тато' },
   { value: 'опікун', label: 'Опікун' },
 ]
+
+function ParentAccessBlock({ childId }: { childId: string }) {
+  const qc = useQueryClient()
+  const [inviteUrl, setInviteUrl]       = useState<string | null>(null)
+  const [emailInput, setEmailInput]     = useState<Record<string, string>>({})
+
+  const { data: rows = [], isLoading } = useQuery<ParentAccessRow[]>({
+    queryKey: ['parent-access', childId],
+    queryFn: () => childrenApi.getParentAccess(childId),
+  })
+
+  const inviteMutation = useMutation({
+    mutationFn: ({ parentId, email }: { parentId: string; email?: string }) =>
+      childrenApi.createParentInvite(childId, parentId, email),
+    onSuccess: (data) => {
+      setInviteUrl(data.inviteUrl)
+      qc.invalidateQueries({ queryKey: ['parent-access', childId] })
+    },
+  })
+
+  if (isLoading) return null
+  if (rows.length === 0) return null
+
+  function statusBadge(row: ParentAccessRow) {
+    if (row.user_id && row.user_is_active) return <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Активний</span>
+    if (row.pending_invite_expires_at)     return <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Запрошено</span>
+    return <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Немає доступу</span>
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <h2 className="font-medium text-gray-900">Доступ до кабінету</h2>
+
+      {inviteUrl && (
+        <div className="space-y-2 p-3 bg-iris-50 border border-iris-200 rounded-lg">
+          <p className="text-xs font-medium text-iris-800">Посилання для запрошення (дійсне 72 год):</p>
+          <div className="flex gap-2">
+            <input readOnly value={inviteUrl}
+              className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white font-mono text-gray-700 select-all"
+              onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <button
+              onClick={() => navigator.clipboard.writeText(inviteUrl)}
+              className="text-xs px-3 py-1 bg-iris-600 hover:bg-iris-700 text-white rounded transition-colors">
+              Копіювати
+            </button>
+          </div>
+          <button onClick={() => setInviteUrl(null)} className="text-xs text-gray-400 hover:text-gray-600">Закрити</button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const hasAccess = !!(row.user_id && row.user_is_active)
+          const hasPending = !!row.pending_invite_expires_at
+          const email = emailInput[row.parent_id] ?? ''
+
+          return (
+            <div key={row.parent_id} className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="font-medium text-gray-900 min-w-0 flex-1">{row.full_name}</span>
+              {statusBadge(row)}
+              {!hasAccess && (
+                <div className="flex items-center gap-2">
+                  {!row.email && (
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmailInput({ ...emailInput, [row.parent_id]: e.target.value })}
+                      placeholder="email (якщо немає в картці)"
+                      className="text-xs border border-gray-300 rounded px-2 py-1 w-44 focus:border-iris-500 focus:ring-iris-500"
+                    />
+                  )}
+                  <button
+                    onClick={() => inviteMutation.mutate({ parentId: row.parent_id, email: row.email ?? (email || undefined) })}
+                    disabled={inviteMutation.isPending}
+                    className="text-xs px-2 py-1 bg-iris-600 hover:bg-iris-700 text-white rounded disabled:opacity-50 transition-colors"
+                  >
+                    {hasPending ? 'Оновити запрошення' : 'Запросити'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function ParentsBlock({ child }: { child: Child }) {
   const qc = useQueryClient()

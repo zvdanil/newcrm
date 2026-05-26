@@ -830,6 +830,113 @@ export async function childrenRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/children/:id/parent-access — access status for each linked parent
+  app.get<{ Params: { id: string } }>(
+    '/:id/parent-access',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req) => {
+      const rows = await db
+        .selectFrom('child_parents as cp')
+        .innerJoin('parents as p', 'p.id', 'cp.parent_id')
+        .leftJoin('users as u', 'u.parent_id', 'p.id')
+        .select([
+          'p.id as parent_id', 'p.full_name', 'p.email', 'p.phone',
+          'u.id as user_id', 'u.is_active as user_is_active',
+        ])
+        .where('cp.child_id', '=', req.params.id)
+        .orderBy('p.full_name', 'asc')
+        .execute()
+
+      // For each parent without active user, check for pending invite
+      const result = await Promise.all(rows.map(async (r) => {
+        let pending_invite_expires_at: string | null = null
+        if (!r.user_id || !r.user_is_active) {
+          const invite = await db
+            .selectFrom('user_invites')
+            .select('expires_at')
+            .where('parent_id', '=', r.parent_id)
+            .where('used_at', 'is', null)
+            .orderBy('expires_at', 'desc')
+            .executeTakeFirst()
+          if (invite && new Date(String(invite.expires_at)) > new Date()) {
+            pending_invite_expires_at = new Date(String(invite.expires_at)).toISOString()
+          }
+        }
+        return {
+          parent_id: r.parent_id,
+          full_name: r.full_name,
+          email: r.email,
+          phone: r.phone,
+          user_id: r.user_id ?? null,
+          user_is_active: r.user_is_active ?? null,
+          pending_invite_expires_at,
+        }
+      }))
+
+      return result
+    }
+  )
+
+  // POST /api/children/:id/parent-invite — create/renew invite for a linked parent
+  app.post<{
+    Params: { id: string }
+    Body: { parent_id: string; email?: string }
+  }>(
+    '/:id/parent-invite',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { parent_id, email: emailOverride } = req.body
+
+      // Verify parent is linked to this child
+      const link = await db.selectFrom('child_parents')
+        .select('child_id')
+        .where('child_id', '=', req.params.id)
+        .where('parent_id', '=', parent_id)
+        .executeTakeFirst()
+      if (!link) return reply.status(404).send({ error: 'ParentNotLinked' })
+
+      const parent = await db.selectFrom('parents')
+        .select(['id', 'email'])
+        .where('id', '=', parent_id)
+        .executeTakeFirst()
+      if (!parent) return reply.status(404).send({ error: 'ParentNotFound' })
+
+      const inviteEmail = emailOverride ?? parent.email ?? null
+
+      // Check if user already active
+      if (inviteEmail) {
+        const existing = await db.selectFrom('users').select('id')
+          .where('email', '=', inviteEmail.toLowerCase())
+          .where('is_active', '=', true)
+          .executeTakeFirst()
+        if (existing) return reply.status(409).send({ error: 'EmailAlreadyExists', message: 'Користувач з таким email вже активний' })
+      }
+
+      // Expire old pending invites for this parent
+      await db.updateTable('user_invites')
+        .set({ used_at: new Date().toISOString() })
+        .where('parent_id', '=', parent_id)
+        .where('used_at', 'is', null)
+        .execute()
+
+      const token = (await import('node:crypto')).randomBytes(32).toString('hex')
+      const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+
+      await db.insertInto('user_invites').values({
+        token,
+        email:      inviteEmail,
+        role:       'parent',
+        parent_id,
+        invited_by: (req as { user?: { sub?: string } }).user?.sub ?? '',
+        type:       'invite',
+        expires_at: expiresAt,
+      }).execute()
+
+      const frontendUrl = process.env.FRONTEND_URL ?? `${req.protocol}://${req.hostname}`
+      return reply.status(201).send({ inviteUrl: `${frontendUrl}/invite/${token}` })
+    }
+  )
+
   // DELETE /api/children/:id/parents/:parentId — unlink a parent from this child
   app.delete<{ Params: { id: string; parentId: string } }>(
     '/:id/parents/:parentId',

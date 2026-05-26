@@ -122,4 +122,24 @@ export const childrenApi = {
   removeParent: async (childId: string, parentId: string) => {
     await apiClient.delete(`/children/${childId}/parents/${parentId}`)
   },
+
+  getParentAccess: async (childId: string): Promise<ParentAccessRow[]> => {
+    const { data } = await apiClient.get<ParentAccessRow[]>(`/children/${childId}/parent-access`)
+    return data
+  },
+
+  createParentInvite: async (childId: string, parentId: string, email?: string): Promise<{ inviteUrl: string }> => {
+    const { data } = await apiClient.post<{ inviteUrl: string }>(`/children/${childId}/parent-invite`, { parent_id: parentId, email })
+    return data
+  },
+}
+
+export interface ParentAccessRow {
+  parent_id: string
+  full_name: string
+  email: string | null
+  phone: string | null
+  user_id: string | null
+  user_is_active: boolean | null
+  pending_invite_expires_at: string | null
 }

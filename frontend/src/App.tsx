@@ -29,6 +29,7 @@ import { ReportsPage } from './pages/Reports/ReportsPage'
 import UsersPage from './pages/Users/UsersPage'
 import AcceptInvitePage from './pages/Invite/AcceptInvitePage'
 import ResetPasswordPage from './pages/Invite/ResetPasswordPage'
+import { CabinetPage } from './pages/Cabinet/CabinetPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,12 +39,21 @@ const queryClient = new QueryClient({
 
 function RootRedirect() {
   const { user } = useAuthStore()
-  return <Navigate to={user?.role === 'duty_admin' ? '/journals' : '/children'} replace />
+  if (user?.role === 'parent')     return <Navigate to="/cabinet" replace />
+  if (user?.role === 'duty_admin') return <Navigate to="/journals" replace />
+  return <Navigate to="/children" replace />
 }
 
 function NonDutyAdminRoute() {
   const { user } = useAuthStore()
   if (user?.role === 'duty_admin') return <Navigate to="/journals" replace />
+  if (user?.role === 'parent')     return <Navigate to="/cabinet"  replace />
+  return <Outlet />
+}
+
+function ParentRoute() {
+  const { user } = useAuthStore()
+  if (user?.role !== 'parent') return <Navigate to="/" replace />
   return <Outlet />
 }
 
@@ -59,6 +69,11 @@ export function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<RootRedirect />} />
+
+              {/* Кабінет батьків */}
+              <Route element={<ParentRoute />}>
+                <Route path="cabinet" element={<CabinetPage />} />
+              </Route>
 
               {/* Журнали — доступні для всіх ролей включно з duty_admin */}
               <Route path="journals"             element={<JournalsListPage />} />
