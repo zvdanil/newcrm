@@ -132,6 +132,30 @@ export const childrenApi = {
     const { data } = await apiClient.post<{ inviteUrl: string }>(`/children/${childId}/parent-invite`, { parent_id: parentId, email })
     return data
   },
+
+  getMonthStats: async (childId: string, month: string): Promise<ChildMonthStats> => {
+    const { data } = await apiClient.get<ChildMonthStats>(`/children/${childId}/month-stats?month=${month}`)
+    return data
+  },
+}
+
+export interface MonthStatsEnrollment {
+  account_id: string
+  enrollment_status: 'active' | 'frozen' | 'archived'
+  activity_id: string
+  activity_name: string
+  activity_is_active: boolean
+}
+
+export interface MonthStatsAttendance {
+  activity_id: string
+  visit_count: number
+  excused_count: number
+}
+
+export interface ChildMonthStats {
+  enrollments: MonthStatsEnrollment[]
+  attendance: MonthStatsAttendance[]
 }
 
 export interface ParentAccessRow {

@@ -27,6 +27,28 @@ export interface ParentAttendanceRow {
   activity_name: string
 }
 
+export interface MonthSummaryTransaction {
+  id: string
+  type: 'ACCRUAL' | 'REFUND'
+  amount: string
+  transaction_date: string
+  billing_month: string | null
+  note: string | null
+  activity_id: string | null
+  activity_name: string | null
+}
+
+export interface ActivityMonthlySummary {
+  activity_id: string
+  activity_name: string
+  activity_is_active: boolean
+  accrual_total: number
+  refund_total: number
+  visit_count: number
+  excused_count: number
+  transactions: MonthSummaryTransaction[]
+}
+
 export const parentApi = {
   getChildren: async (): Promise<ParentChild[]> => {
     const { data } = await apiClient.get<ParentChild[]>('/parent/children')
@@ -44,6 +66,13 @@ export const parentApi = {
   getAttendance: async (childId: string, month: string): Promise<ParentAttendanceRow[]> => {
     const { data } = await apiClient.get<ParentAttendanceRow[]>(
       `/parent/children/${childId}/attendance?month=${month}`
+    )
+    return data
+  },
+
+  getMonthSummary: async (childId: string, month: string): Promise<ActivityMonthlySummary[]> => {
+    const { data } = await apiClient.get<ActivityMonthlySummary[]>(
+      `/parent/children/${childId}/month-summary?month=${month}`
     )
     return data
   },

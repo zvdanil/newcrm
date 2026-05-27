@@ -1110,4 +1110,49 @@ export async function childrenRoutes(app: FastifyInstance) {
         .execute()
     }
   )
+
+  // GET /api/children/:id/month-stats?month=YYYY-MM
+  app.get<{ Params: { id: string }; Querystring: { month?: string } }>(
+    '/:id/month-stats',
+    { preHandler: authenticate },
+    async (request) => {
+      const { id } = request.params
+      const month = request.query.month ?? new Date().toISOString().slice(0, 7)
+      const [y, m] = month.split('-').map(Number)
+      const from = `${y}-${String(m).padStart(2, '0')}-01`
+      const lastDay = new Date(y, m, 0).getDate()
+      const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+      const [enrollments, attendanceLogs] = await Promise.all([
+        db.selectFrom('enrollments as e')
+          .innerJoin('activities as a', 'a.id', 'e.activity_id')
+          .select([
+            'e.account_id', 'e.status as enrollment_status',
+            'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+          ])
+          .where('e.child_id', '=', id)
+          .execute(),
+
+        db.selectFrom('attendance_logs as al')
+          .select(['al.activity_id', 'al.status'])
+          .where('al.child_id', '=', id)
+          .where('al.date', '>=', new Date(from))
+          .where('al.date', '<=', new Date(to))
+          .execute(),
+      ])
+
+      const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
+      for (const log of attendanceLogs) {
+        const key = log.activity_id ?? 'none'
+        attendanceMap[key] ??= { visit_count: 0, excused_count: 0 }
+        if (log.status === 'present' || log.status === 'special') attendanceMap[key].visit_count++
+        else if (log.status === 'absent_excused') attendanceMap[key].excused_count++
+      }
+
+      return {
+        enrollments,
+        attendance: Object.entries(attendanceMap).map(([activity_id, data]) => ({ activity_id, ...data })),
+      }
+    }
+  )
 }

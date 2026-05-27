@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { parentApi } from '../../api/parent.api'
-import type { ParentChild, ParentLedgerRow, ParentAttendanceRow } from '../../api/parent.api'
+import type { ParentChild, ParentLedgerRow, ParentAttendanceRow, ActivityMonthlySummary } from '../../api/parent.api'
 
 // ────────────────────────────────────────────────────────────
 // Helpers
@@ -26,6 +26,14 @@ function nextMonth(month: string) {
   const [y, m] = month.split('-').map(Number)
   const d = new Date(y, m, 1)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthDateRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split('-').map(Number)
+  const from = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(y, m, 0).getDate()
+  const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { from, to }
 }
 
 const MONTH_LABELS: Record<string, string> = {
@@ -123,10 +131,8 @@ function TabBar<T extends string>({
 // TAB 1 — Відвідування
 // ────────────────────────────────────────────────────────────
 
-function AttendanceTab({ childId }: { childId: string }) {
-  const [month, setMonth]             = useState(currentMonth())
-  const [activeActivity, setActive]   = useState<string | null>(null)
-  const canGoNext = month < currentMonth()
+function AttendanceTab({ childId, month }: { childId: string; month: string }) {
+  const [activeActivity, setActive] = useState<string | null>(null)
 
   const { data: rows = [], isLoading } = useQuery<ParentAttendanceRow[]>({
     queryKey: ['parent-attendance', childId, month],
@@ -145,15 +151,6 @@ function AttendanceTab({ childId }: { childId: string }) {
 
   return (
     <div className="space-y-0">
-      {/* Month nav */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-gray-50">
-        <button onClick={() => setMonth(prevMonth(month))} className="p-1 rounded hover:bg-gray-100 text-gray-500 text-lg leading-none">‹</button>
-        <span className="text-sm font-medium text-gray-800 min-w-[140px] text-center">{monthLabel(month)}</span>
-        <button onClick={() => setMonth(nextMonth(month))} disabled={!canGoNext}
-          className="p-1 rounded hover:bg-gray-100 text-gray-500 disabled:opacity-30 text-lg leading-none">›</button>
-      </div>
-
-      {/* Activity sub-tabs */}
       {activities.length > 1 && (
         <TabBar
           small
@@ -163,7 +160,6 @@ function AttendanceTab({ childId }: { childId: string }) {
         />
       )}
 
-      {/* Content */}
       <div className="px-6 py-4">
         {isLoading && <p className="text-sm text-gray-400 py-4 text-center">Завантаження...</p>}
         {!isLoading && visible.length === 0 && (
@@ -190,12 +186,12 @@ function AttendanceTab({ childId }: { childId: string }) {
 }
 
 // ────────────────────────────────────────────────────────────
-// TAB 2 — Нарахування (accrual cards per activity)
+// TAB 2 — Нарахування (cards per activity from month-summary)
 // ────────────────────────────────────────────────────────────
 
-function AccrualCard({ activity, rows }: { activity: string; rows: ParentLedgerRow[] }) {
+function AccrualCard({ summary }: { summary: ActivityMonthlySummary }) {
   const [open, setOpen] = useState(false)
-  const total = rows.reduce((s, r) => s + parseFloat(r.amount), 0)
+  const net = summary.accrual_total - summary.refund_total
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -203,29 +199,52 @@ function AccrualCard({ activity, rows }: { activity: string; rows: ParentLedgerR
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
       >
-        <span className="font-medium text-gray-800">{activity}</span>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-700 font-semibold">{total.toFixed(2)} ₴</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-gray-800 truncate">{summary.activity_name}</span>
+          {!summary.activity_is_active && (
+            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">архів</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+          {(summary.visit_count > 0 || summary.excused_count > 0) && (
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              {summary.visit_count > 0 && (
+                <span title="Відвідувань">П: {summary.visit_count}</span>
+              )}
+              {summary.excused_count > 0 && (
+                <span title="Поважних пропусків">В: {summary.excused_count}</span>
+              )}
+            </div>
+          )}
+          <span className="text-gray-700 font-semibold">{net.toFixed(2)} ₴</span>
           <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {open && (
         <div className="divide-y divide-gray-50">
-          {rows.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-              <span className="text-gray-400 text-xs w-24 flex-shrink-0">{formatDate(r.transaction_date)}</span>
-              {r.billing_month && (
-                <span className="text-xs text-gray-400 flex-shrink-0">
-                  {monthLabel(r.billing_month.slice(0, 7))}
+          {summary.transactions.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-gray-400 text-center">Транзакцій немає</div>
+          ) : (
+            summary.transactions.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+                <span className="text-gray-400 text-xs w-24 flex-shrink-0">{formatDate(t.transaction_date)}</span>
+                <span className={`text-xs flex-shrink-0 ${t.type === 'REFUND' ? 'text-green-600' : 'text-gray-500'}`}>
+                  {t.type === 'REFUND' ? 'Повернення' : 'Нарахування'}
                 </span>
-              )}
-              <span className="flex-1 min-w-0 text-xs text-gray-500 truncate">{r.note ?? ''}</span>
-              <span className="text-gray-800 font-medium flex-shrink-0">{parseFloat(r.amount).toFixed(2)} ₴</span>
+                <span className="flex-1 min-w-0 text-xs text-gray-400 truncate">{t.note ?? ''}</span>
+                <span className={`flex-shrink-0 font-medium ${t.type === 'REFUND' ? 'text-green-700' : 'text-gray-800'}`}>
+                  {t.type === 'REFUND' ? '+' : ''}{parseFloat(t.amount).toFixed(2)} ₴
+                </span>
+              </div>
+            ))
+          )}
+          <div className="flex justify-between items-center px-4 py-2 bg-gray-50 text-xs text-gray-500">
+            <div className="flex gap-3">
+              {summary.visit_count > 0 && <span>Відвідувань: {summary.visit_count}</span>}
+              {summary.excused_count > 0 && <span>Поважних пропусків: {summary.excused_count}</span>}
             </div>
-          ))}
-          <div className="flex justify-end px-4 py-2 bg-gray-50">
-            <span className="text-xs text-gray-500">Разом: <span className="font-semibold text-gray-700">{total.toFixed(2)} ₴</span></span>
+            <span>Разом: <span className="font-semibold text-gray-700">{net.toFixed(2)} ₴</span></span>
           </div>
         </div>
       )}
@@ -233,42 +252,42 @@ function AccrualCard({ activity, rows }: { activity: string; rows: ParentLedgerR
   )
 }
 
-function AccrualsTab({ childId }: { childId: string }) {
-  const { data: ledger = [], isLoading } = useQuery<ParentLedgerRow[]>({
-    queryKey: ['parent-ledger', childId],
-    queryFn: () => parentApi.getLedger(childId),
+function AccrualsTab({ childId, month }: { childId: string; month: string }) {
+  const { data: summaries = [], isLoading } = useQuery<ActivityMonthlySummary[]>({
+    queryKey: ['parent-month-summary', childId, month],
+    queryFn: () => parentApi.getMonthSummary(childId, month),
   })
 
-  const accruals = ledger.filter((r) => r.type === 'ACCRUAL')
-  const byActivity = groupBy(accruals, (r) => r.activity_name ?? 'Без активності')
-  const activities = Object.keys(byActivity).sort()
-
   if (isLoading) return <div className="px-6 py-6 text-center text-sm text-gray-400">Завантаження...</div>
-  if (accruals.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Нарахувань немає</div>
+  if (summaries.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Нарахувань немає</div>
 
   return (
     <div className="px-6 py-4 space-y-2">
-      {activities.map((activity) => (
-        <AccrualCard key={activity} activity={activity} rows={byActivity[activity]} />
+      {summaries.map((s) => (
+        <AccrualCard key={s.activity_id} summary={s} />
       ))}
     </div>
   )
 }
 
 // ────────────────────────────────────────────────────────────
-// TAB 3 — Оплати (payments per account)
+// TAB 3 — Оплати (payments per account, filtered by month)
 // ────────────────────────────────────────────────────────────
 
 function PaymentsTab({
   childId,
+  month,
   balances,
 }: {
   childId: string
+  month: string
   balances: { account_name: string; balance: string }[]
 }) {
+  const { from, to } = monthDateRange(month)
+
   const { data: ledger = [], isLoading } = useQuery<ParentLedgerRow[]>({
-    queryKey: ['parent-ledger', childId],
-    queryFn: () => parentApi.getLedger(childId),
+    queryKey: ['parent-ledger', childId, month],
+    queryFn: () => parentApi.getLedger(childId, { from, to }),
   })
 
   const payments = ledger.filter((r) => r.type === 'PAYMENT' || r.type === 'REFUND' || r.type === 'ADJUSTMENT')
@@ -276,7 +295,7 @@ function PaymentsTab({
   const accounts = Object.keys(byAccount).sort()
 
   if (isLoading) return <div className="px-6 py-6 text-center text-sm text-gray-400">Завантаження...</div>
-  if (payments.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Оплат немає</div>
+  if (payments.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Оплат за цей місяць немає</div>
 
   function amountColor(type: string) {
     if (type === 'PAYMENT') return 'text-green-700 font-medium'
@@ -296,12 +315,10 @@ function PaymentsTab({
         const rows = byAccount[accountName]
         return (
           <div key={accountName} className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Account header */}
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
               <span className="text-sm font-medium text-gray-800">{accountName}</span>
-              {bal && <BalancePill balance={bal.balance} account_name="Баланс" />}
+              {bal && <BalancePill balance={bal.balance} account_name="Поточний баланс" />}
             </div>
-            {/* Rows */}
             <div className="divide-y divide-gray-50">
               {rows.map((r) => (
                 <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -327,7 +344,7 @@ function PaymentsTab({
 }
 
 // ────────────────────────────────────────────────────────────
-// Child panel with 3 tabs
+// Child panel — month nav shared across all tabs
 // ────────────────────────────────────────────────────────────
 
 type MainTab = 'attendance' | 'accruals' | 'payments'
@@ -339,7 +356,9 @@ const MAIN_TABS: { id: MainTab; label: string }[] = [
 ]
 
 function ChildPanel({ child }: { child: ParentChild }) {
-  const [tab, setTab] = useState<MainTab>('attendance')
+  const [tab, setTab]     = useState<MainTab>('attendance')
+  const [month, setMonth] = useState(currentMonth())
+  const canGoNext = month < currentMonth()
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -363,13 +382,33 @@ function ChildPanel({ child }: { child: ParentChild }) {
         </div>
       </div>
 
+      {/* Month navigation — shared for all tabs */}
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-100 bg-gray-50/60">
+        <button
+          onClick={() => setMonth(prevMonth(month))}
+          className="p-1 rounded hover:bg-gray-200 text-gray-500 text-lg leading-none"
+        >
+          ‹
+        </button>
+        <span className="text-sm font-medium text-gray-700 min-w-[148px] text-center">
+          {monthLabel(month)}
+        </span>
+        <button
+          onClick={() => setMonth(nextMonth(month))}
+          disabled={!canGoNext}
+          className="p-1 rounded hover:bg-gray-200 text-gray-500 disabled:opacity-30 text-lg leading-none"
+        >
+          ›
+        </button>
+      </div>
+
       {/* Main tabs */}
       <TabBar tabs={MAIN_TABS} active={tab} onChange={setTab} />
 
       {/* Tab content */}
-      {tab === 'attendance' && <AttendanceTab childId={child.id} />}
-      {tab === 'accruals'   && <AccrualsTab   childId={child.id} />}
-      {tab === 'payments'   && <PaymentsTab   childId={child.id} balances={child.balances} />}
+      {tab === 'attendance' && <AttendanceTab childId={child.id} month={month} />}
+      {tab === 'accruals'   && <AccrualsTab   childId={child.id} month={month} />}
+      {tab === 'payments'   && <PaymentsTab   childId={child.id} month={month} balances={child.balances} />}
     </div>
   )
 }

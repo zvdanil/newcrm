@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { childrenApi } from '../../api/children.api'
-import type { IndividualTariff, IndTariffType, OpenAccrual } from '../../api/children.api'
+import type { IndividualTariff, IndTariffType, OpenAccrual, ChildMonthStats } from '../../api/children.api'
 import type { ChildParent, Child } from '../../types'
 import { groupsApi } from '../../api/groups.api'
 import { parentsApi } from '../../api/parents.api'
@@ -1102,6 +1102,11 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
     staleTime: 0,
   })
 
+  const { data: monthStats } = useQuery<ChildMonthStats>({
+    queryKey: ['child-month-stats', childId, ym],
+    queryFn: () => childrenApi.getMonthStats(childId, ym),
+  })
+
   const initMutation = useMutation({
     mutationFn: () => billingApi.setInitialBalance(childId, {
       account_id: initForm.account_id, amount: Number(initForm.amount), note: initForm.note || undefined,
@@ -1223,6 +1228,16 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
   }, {})
 
   const activeAccounts = balances
+
+  // Maps for month-stats: activity_id → is_active, activity_id → attendance counts
+  const activityFlagsMap: Record<string, boolean> = {}
+  for (const e of (monthStats?.enrollments ?? [])) {
+    activityFlagsMap[e.activity_id] = e.activity_is_active
+  }
+  const attendanceCountMap: Record<string, { visit_count: number; excused_count: number }> = {}
+  for (const a of (monthStats?.attendance ?? [])) {
+    attendanceCountMap[a.activity_id] = a
+  }
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
@@ -1616,15 +1631,38 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     const unlinkedTotal = unlinkedAdjs.reduce((s, a) => s + Number(a.amount), 0)
                     // billing_month for the selected month (used as fallback for per_lesson)
                     const selectedBillingMonth = `${ym}-01`
+                    // Active/frozen enrolled activities with no accrual this month for this account
+                    const activityNamesWithAccrual = new Set(Object.keys(byActivity))
+                    const zeroActivities = (monthStats?.enrollments ?? [])
+                      .filter(e =>
+                        e.account_id === bal.account_id &&
+                        (e.enrollment_status === 'active' || e.enrollment_status === 'frozen') &&
+                        !activityNamesWithAccrual.has(e.activity_name)
+                      )
+                      .filter((e, i, arr) => arr.findIndex(x => x.activity_id === e.activity_id) === i)
                     return (
                   <div className="px-4 py-3 space-y-2 text-xs">
                     {/* Accruals grouped by activity — with before→after for adjusted ones */}
-                    {enriched.length > 0 && (
+                    {(enriched.length > 0 || zeroActivities.length > 0) && (
                       <div>
                         <p className="text-gray-400 mb-1">Нарахування</p>
-                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => (
+                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => {
+                          const isArchived = activityId ? activityFlagsMap[activityId] === false : false
+                          const att = activityId ? attendanceCountMap[activityId] : undefined
+                          return (
                           <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
-                            <span className="text-gray-600 min-w-0 truncate">{name}</span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-gray-600 truncate">{name}</span>
+                              {isArchived && (
+                                <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                              )}
+                              {(att?.visit_count || att?.excused_count) && (
+                                <span className="text-gray-400 shrink-0">
+                                  {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
+                                  {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                </span>
+                              )}
+                            </div>
                             <span className="font-mono shrink-0 flex items-center gap-1">
                               {adjusted ? (
                                 <>
@@ -1655,7 +1693,26 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                               )}
                             </span>
                           </div>
-                        ))}
+                          )
+                        })}
+                        {/* Activities enrolled but with no accrual this month */}
+                        {zeroActivities.map((e) => {
+                          const att = attendanceCountMap[e.activity_id]
+                          return (
+                            <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="truncate">{e.activity_name}</span>
+                                {(att?.visit_count || att?.excused_count) && (
+                                  <span className="shrink-0">
+                                    {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
+                                    {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-mono text-gray-300">0.00</span>
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
 

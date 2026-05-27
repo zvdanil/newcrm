@@ -37,7 +37,8 @@
       "Bash(xargs grep -l \"staff\\\\|Staff\")",
       "Bash(xargs grep -l \"is_advance\\\\|utilized_advance\\\\|return-advance\")",
       "Bash(git fetch *)",
-      "Bash(xargs grep -l \"ALTER TABLE expenses\\\\|dividend_payout\")"
+      "Bash(xargs grep -l \"ALTER TABLE expenses\\\\|dividend_payout\")",
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"ChildCardPage|children\\\\.api|parent\\\\.api|CabinetPage|month-stats|month-summary\" })"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"
