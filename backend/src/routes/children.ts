@@ -927,7 +927,7 @@ export async function childrenRoutes(app: FastifyInstance) {
         email:      inviteEmail,
         role:       'parent',
         parent_id,
-        invited_by: (req as { user?: { sub?: string } }).user?.sub ?? '',
+        invited_by: req.user.sub,
         type:       'invite',
         expires_at: expiresAt,
       }).execute()

@@ -1776,8 +1776,9 @@ const ROLE_OPTIONS = [
 
 function ParentAccessBlock({ childId }: { childId: string }) {
   const qc = useQueryClient()
-  const [inviteUrl, setInviteUrl]       = useState<string | null>(null)
-  const [emailInput, setEmailInput]     = useState<Record<string, string>>({})
+  const [inviteUrl, setInviteUrl]   = useState<string | null>(null)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [emailInput, setEmailInput] = useState<Record<string, string>>({})
 
   const { data: rows = [], isLoading } = useQuery<ParentAccessRow[]>({
     queryKey: ['parent-access', childId],
@@ -1788,8 +1789,19 @@ function ParentAccessBlock({ childId }: { childId: string }) {
     mutationFn: ({ parentId, email }: { parentId: string; email?: string }) =>
       childrenApi.createParentInvite(childId, parentId, email),
     onSuccess: (data) => {
+      setInviteError(null)
       setInviteUrl(data.inviteUrl)
       qc.invalidateQueries({ queryKey: ['parent-access', childId] })
+    },
+    onError: (err: unknown) => {
+      const code = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data
+      if (code?.error === 'EmailAlreadyExists') {
+        setInviteError('Користувач з таким email вже активний у системі')
+      } else if (code?.error === 'ParentNotLinked') {
+        setInviteError('Батько не прив\'язаний до цієї дитини')
+      } else {
+        setInviteError(code?.message ?? 'Помилка при створенні запрошення')
+      }
     },
   })
 
@@ -1823,6 +1835,13 @@ function ParentAccessBlock({ childId }: { childId: string }) {
         </div>
       )}
 
+      {inviteError && (
+        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          {inviteError}
+          <button onClick={() => setInviteError(null)} className="ml-2 text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
+
       <div className="space-y-3">
         {rows.map((row) => {
           const hasAccess = !!(row.user_id && row.user_is_active)
@@ -1834,22 +1853,26 @@ function ParentAccessBlock({ childId }: { childId: string }) {
               <span className="font-medium text-gray-900 min-w-0 flex-1">{row.full_name}</span>
               {statusBadge(row)}
               {!hasAccess && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {!row.email && (
                     <input
                       type="email"
                       value={email}
-                      onChange={(e) => setEmailInput({ ...emailInput, [row.parent_id]: e.target.value })}
-                      placeholder="email (якщо немає в картці)"
+                      onChange={(e) => { setEmailInput({ ...emailInput, [row.parent_id]: e.target.value }); setInviteError(null) }}
+                      placeholder="email для запрошення"
                       className="text-xs border border-gray-300 rounded px-2 py-1 w-44 focus:border-iris-500 focus:ring-iris-500"
                     />
                   )}
                   <button
-                    onClick={() => inviteMutation.mutate({ parentId: row.parent_id, email: row.email ?? (email || undefined) })}
-                    disabled={inviteMutation.isPending}
+                    onClick={() => {
+                      setInviteError(null)
+                      inviteMutation.mutate({ parentId: row.parent_id, email: row.email ?? (email || undefined) })
+                    }}
+                    disabled={inviteMutation.isPending || (!row.email && !email)}
+                    title={!row.email && !email ? 'Введіть email для запрошення' : undefined}
                     className="text-xs px-2 py-1 bg-iris-600 hover:bg-iris-700 text-white rounded disabled:opacity-50 transition-colors"
                   >
-                    {hasPending ? 'Оновити запрошення' : 'Запросити'}
+                    {inviteMutation.isPending ? '...' : hasPending ? 'Оновити запрошення' : 'Запросити'}
                   </button>
                 </div>
               )}
