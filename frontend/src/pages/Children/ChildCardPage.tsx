@@ -1529,7 +1529,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
             }}
             cancelPending={cancelTxMutation.isPending}
           />
-        ) : Object.keys(groupedByAccount).length === 0 ? (
+        ) : (Object.keys(groupedByAccount).length === 0 && activeAccounts.length === 0) ? (
           <p className="text-sm text-gray-400 text-center py-4">Рухів за цей місяць немає</p>
         ) : (
           <div className="space-y-4">
@@ -1600,7 +1600,12 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
 
             {activeAccounts.map((bal) => {
               const group = groupedByAccount[bal.account_id]
-              if (!group && !balances.find(b => b.account_id === bal.account_id)) return null
+              // monthStats == null means still loading — don't skip while loading
+              const hasEnrolledActivities = monthStats == null || monthStats.enrollments.some(e =>
+                e.account_id === bal.account_id &&
+                (e.enrollment_status === 'active' || e.enrollment_status === 'frozen')
+              )
+              if (!group && !hasEnrolledActivities) return null
 
               const totalAccruals  = (group?.accruals  ?? []).reduce((s, t) => s + Number(t.amount), 0)
               const totalPayments  = (group?.payments  ?? []).reduce((s, t) => s + Number(t.amount), 0)
