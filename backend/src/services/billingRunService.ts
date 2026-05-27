@@ -268,7 +268,8 @@ export async function runBilling(billingMonthStr: string, triggeredBy: string | 
         continue
       }
       const price = Math.round(parseFloat(e.ind_price as string) * 100) / 100
-      if (price <= 0) { result.skipped_count++; continue }
+      if (price < 0) { result.skipped_count++; continue }
+      if (price === 0) { result.skipped_count++; continue }  // free subscription, no accrual
       await billMonthlyEnrollment(e.enrollment_id, e.child_id, e.account_id, e.activity_id, price, billingMonthStr, billingDate, triggeredBy, result)
     }
 
@@ -399,7 +400,16 @@ export async function recalcActivityAccruals(
         }
 
         const ind = await getChildIndividualTariff(e.child_id, activityId, billingDate)
-        if (ind && ind.tariff_type === 'per_lesson') {
+        const effectiveIndType: string = ind ? ind.tariff_type : activity.tariff_type
+
+        // per_lesson handled by journal trigger, not by recalc
+        if (effectiveIndType === 'per_lesson') {
+          await recalcBalance(e.child_id, e.account_id)
+          continue
+        }
+        // If effective type differs from activity type, the correct billing run handles it
+        // (e.g. monthly activity + individual smart → runSmartAccruals owns it)
+        if (effectiveIndType !== activity.tariff_type) {
           await recalcBalance(e.child_id, e.account_id)
           continue
         }
@@ -534,8 +544,16 @@ export async function recalcActivityAccruals(
 
     for (const mark of marks) {
       const lessonDate = new Date(mark.date as Date)
-      const price = await getEffectivePrice(mark.child_id, activityId, lessonDate)
-      if (!price || price <= 0) continue
+
+      // Individual tariff overrides price (and possibly tariff type)
+      const ind = await getChildIndividualTariff(mark.child_id, activityId, lessonDate)
+      if (ind && ind.tariff_type !== 'per_lesson') continue  // switched to monthly/smart — skip
+
+      const price = ind
+        ? Math.round(parseFloat(ind.price as string) * 100) / 100
+        : await getEffectivePrice(mark.child_id, activityId, lessonDate)
+
+      if (price === null || price <= 0) continue  // no tariff or free lesson
 
       const lessonDateStr = lessonDate.toISOString().slice(0, 10)
       await createTransaction({

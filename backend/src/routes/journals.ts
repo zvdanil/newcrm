@@ -106,7 +106,8 @@ async function triggerPerLessonAccrual(
 
   if (customAmount !== null && customAmount > 0) {
     amount = customAmount
-  } else if (overridePrice !== null && overridePrice > 0) {
+  } else if (overridePrice !== null) {
+    // Individual tariff applies even when price = 0 (free lesson)
     amount = overridePrice
   } else {
     const tariff = await db
