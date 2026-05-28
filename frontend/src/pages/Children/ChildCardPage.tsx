@@ -221,11 +221,11 @@ export function ChildCardPage() {
       {/* Parents */}
       <ParentsBlock child={child} />
 
-      {/* Parent cabinet access */}
-      {id && <ParentAccessBlock childId={id} />}
-
       {/* Known payers from bank statements */}
       {id && <BankPayersBlock childId={id} />}
+
+      {/* Parent cabinet access */}
+      {id && <ParentAccessBlock childId={id} />}
 
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} />}
@@ -2073,13 +2073,15 @@ function ParentsBlock({ child }: { child: Child }) {
 
   function ParentRow({ p }: { p: ChildParent }) {
     const [editing, setEditing] = useState(false)
-    const [form, setForm] = useState({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '' })
+    const [form, setForm] = useState({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '', edrpou: p.edrpou ?? '', iban: p.iban ?? '' })
 
     const saveMutation = useMutation({
       mutationFn: () => parentsApi.update(p.id, {
         full_name: form.full_name.trim(),
         phone:     form.phone.trim()  || null,
         email:     form.email.trim()  || null,
+        edrpou:    form.edrpou.trim() || null,
+        iban:      form.iban.trim()   || null,
       }),
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ['child', child.id] })
@@ -2112,6 +2114,20 @@ function ParentsBlock({ child }: { child: Child }) {
             placeholder="Email"
             className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
           />
+          <input
+            type="text"
+            value={form.edrpou}
+            onChange={(e) => setForm({ ...form, edrpou: e.target.value })}
+            placeholder="ІНН / ЄДРПОУ"
+            className="w-full rounded border-gray-300 text-sm font-mono shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
+          <input
+            type="text"
+            value={form.iban}
+            onChange={(e) => setForm({ ...form, iban: e.target.value })}
+            placeholder="IBAN (UA...)"
+            className="w-full rounded border-gray-300 text-sm font-mono shadow-sm focus:border-iris-500 focus:ring-iris-500"
+          />
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => { if (form.full_name.trim()) saveMutation.mutate() }}
@@ -2121,7 +2137,7 @@ function ParentsBlock({ child }: { child: Child }) {
               {saveMutation.isPending ? '...' : 'Зберегти'}
             </button>
             <button
-              onClick={() => { setForm({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '' }); setEditing(false) }}
+              onClick={() => { setForm({ full_name: p.full_name, phone: p.phone ?? '', email: p.email ?? '', edrpou: p.edrpou ?? '', iban: p.iban ?? '' }); setEditing(false) }}
               className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm"
             >
               Скасувати
@@ -2132,36 +2148,44 @@ function ParentsBlock({ child }: { child: Child }) {
     }
 
     return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        {canEdit ? (
-          <select
-            value={p.role ?? ''}
-            onChange={(e) => updateRoleMutation.mutate({ parentId: p.id, role: e.target.value || null })}
-            className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
-          >
-            {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        ) : (
-          p.role && <span className="text-xs font-medium text-iris-600">{p.role}</span>
-        )}
-        <span className="font-medium text-gray-900">{p.full_name}</span>
-        {p.phone && <span className="text-gray-500">{p.phone}</span>}
-        {p.email && <span className="text-gray-400 text-xs">{p.email}</span>}
-        {!p.phone && !p.email && <span className="text-gray-300 text-xs">без контактів</span>}
-        {canEdit && (
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setEditing(true)}
-              className="text-xs text-iris-500 hover:text-iris-700"
+      <div className="space-y-0.5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {canEdit ? (
+            <select
+              value={p.role ?? ''}
+              onChange={(e) => updateRoleMutation.mutate({ parentId: p.id, role: e.target.value || null })}
+              className="rounded border-gray-200 text-xs text-gray-500 py-0.5 focus:border-iris-400 focus:ring-iris-400"
             >
-              Ред.
-            </button>
-            <button
-              onClick={() => { if (confirm(`Відʼєднати ${p.full_name}?`)) removeMutation.mutate(p.id) }}
-              className="text-xs text-red-400 hover:text-red-600"
-            >
-              ×
-            </button>
+              {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          ) : (
+            p.role && <span className="text-xs font-medium text-iris-600">{p.role}</span>
+          )}
+          <span className="font-medium text-gray-900">{p.full_name}</span>
+          {p.phone && <span className="text-gray-500">{p.phone}</span>}
+          {p.email && <span className="text-gray-400 text-xs">{p.email}</span>}
+          {!p.phone && !p.email && <span className="text-gray-300 text-xs">без контактів</span>}
+          {canEdit && (
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-iris-500 hover:text-iris-700"
+              >
+                Ред.
+              </button>
+              <button
+                onClick={() => { if (confirm(`Відʼєднати ${p.full_name}?`)) removeMutation.mutate(p.id) }}
+                className="text-xs text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+        {(p.edrpou || p.iban) && (
+          <div className="flex flex-wrap gap-x-4 text-xs text-gray-400 font-mono pl-1">
+            {p.edrpou && <span>ІНН: {p.edrpou}</span>}
+            {p.iban && <span>IBAN: {p.iban}</span>}
           </div>
         )}
       </div>

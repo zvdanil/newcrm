@@ -46,6 +46,7 @@ interface ApplyRow {
   bank_ref: string
   counterparty_name: string
   edrpou: string | null
+  iban?: string | null
   note?: string
   force?: boolean
 }
@@ -336,6 +337,30 @@ export async function importRoutes(app: FastifyInstance) {
         parentFamilies.set(m.parent_id, list)
       }
 
+      // Also include parents linked via child_parents (direct child-parent link, newer system)
+      const childParentLinks = await db
+        .selectFrom('child_parents as cp')
+        .innerJoin('children as c', 'c.id', 'cp.child_id')
+        .innerJoin('parents as p', 'p.id', 'cp.parent_id')
+        .leftJoin('families as f', 'f.id', 'c.family_id')
+        .select(['cp.parent_id', 'c.id as child_id', 'c.full_name as child_name', 'c.family_id', 'f.name as family_name', 'p.full_name as parent_name'])
+        .execute()
+
+      for (const link of childParentLinks) {
+        const list = parentFamilies.get(link.parent_id) ?? []
+        const entryKey = link.family_id ?? `child:${link.child_id}`
+        const alreadyPresent = list.some((e) => (e.family_id ?? `child:${e.child_id}`) === entryKey)
+        if (!alreadyPresent) {
+          list.push({
+            family_id: link.family_id ?? null,
+            child_id: link.family_id ? null : link.child_id,
+            family_name: link.family_name ?? link.child_name,
+            parent_name: link.parent_name,
+          })
+        }
+        parentFamilies.set(link.parent_id, list)
+      }
+
       // Load all children (family_id is optional)
       const allChildren = await db
         .selectFrom('children')
@@ -578,7 +603,7 @@ export async function importRoutes(app: FastifyInstance) {
               created_by: createdBy,
             })
 
-            await upsertPayerProfile(child.id, row.counterparty_name, row.edrpou, null, row.date)
+            await upsertPayerProfile(child.id, row.counterparty_name, row.edrpou, row.iban ?? null, row.date)
 
             allocationsOut.push({
               row_index: row.row_index,
@@ -626,7 +651,7 @@ export async function importRoutes(app: FastifyInstance) {
                 created_by: createdBy,
               })
 
-              await upsertPayerProfile(firstChild.id, row.counterparty_name, row.edrpou, null, row.date)
+              await upsertPayerProfile(firstChild.id, row.counterparty_name, row.edrpou, row.iban ?? null, row.date)
 
               const family = await db.selectFrom('families').select('name').where('id', '=', row.family_id).executeTakeFirst()
               allocationsOut.push({
@@ -657,7 +682,7 @@ export async function importRoutes(app: FastifyInstance) {
                 rowAllocations.push({ child_id: alloc.child_id, child_name: alloc.child_name, amount: alloc.amount, tx_id })
                 if (!profiledChildren.has(alloc.child_id)) {
                   profiledChildren.add(alloc.child_id)
-                  await upsertPayerProfile(alloc.child_id, row.counterparty_name, row.edrpou, null, row.date)
+                  await upsertPayerProfile(alloc.child_id, row.counterparty_name, row.edrpou, row.iban ?? null, row.date)
                 }
               }
 

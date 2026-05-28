@@ -246,7 +246,8 @@ export function BankImportTab({ accountId }: Props) {
         row_index: row.row_index, date: row.date, amount: row.amount,
         family_id: effectiveFamilyId, child_id: effectiveChildId ?? undefined,
         bank_ref: row.bank_ref, counterparty_name: row.counterparty_name,
-        edrpou: row.edrpou, note: row.description || row.counterparty_name,
+        edrpou: row.edrpou, iban: row.iban,
+        note: row.description || row.counterparty_name,
         force: forceImport.has(row.row_index),
       })
     }
