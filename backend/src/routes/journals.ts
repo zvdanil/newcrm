@@ -211,7 +211,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, from, to є обовʼязковими' })
       }
 
-      const [activity, refundConfig, enrollments, logs, groupLogs] = await Promise.all([
+      const [activity, refundConfig, enrollments, logs, groupLogs, assignedStaff] = await Promise.all([
         db.selectFrom('activities as a')
           .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
           .select(['a.id', 'a.name', 'a.account_id', 'a.tariff_type', 'a.is_rigid', 'a.has_group_classes', 'a.auto_group_classes', 'ac.name as account_name'])
@@ -249,6 +249,16 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('date', '>=', new Date(from))
           .where('date', '<=', new Date(to))
           .execute(),
+
+        db.selectFrom('staff_rates as sr')
+          .innerJoin('staff as s', 's.id', 'sr.staff_id')
+          .select(['s.id as staff_id', 's.full_name', 'sr.rate_type'])
+          .where('sr.activity_id', '=', activity_id)
+          .where('sr.valid_to', 'is', null)
+          .where('sr.rate_category', '=', 'auto')
+          .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'smart', 'smart_per_child'])
+          .orderBy('s.full_name', 'asc')
+          .execute(),
       ])
 
       if (!activity) return reply.status(404).send({ error: 'NotFound' })
@@ -266,6 +276,15 @@ export async function journalsRoutes(app: FastifyInstance) {
         groupLogsIndex[toDateStr(log.date)] = log
       }
 
+      const groupTeachers = assignedStaff
+        .filter(s => s.rate_type === 'group_lesson')
+        .map(s => ({ id: s.staff_id, full_name: s.full_name }))
+
+      const additionalTeachers = assignedStaff
+        .filter(s => s.rate_type !== 'group_lesson')
+        .filter((s, i, arr) => arr.findIndex(x => x.staff_id === s.staff_id) === i)
+        .map(s => ({ id: s.staff_id, full_name: s.full_name }))
+
       return {
         activity: { ...activity, refund_config: refundConfig ?? null },
         dates: generateDates(from, to),
@@ -280,6 +299,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           logs: logsIndex[e.enrollment_id] ?? {},
         })),
         group_logs: groupLogsIndex,
+        assigned_staff: { group_teachers: groupTeachers, additional_teachers: additionalTeachers },
       }
     }
   )
