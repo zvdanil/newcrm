@@ -460,7 +460,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                 const activeRateIds = new Set(staffRates.map(r => r.id))
                 const isEven        = rowIdx % 2 === 0
                 const baseRowClass  = isEven ? 'bg-white' : 'bg-gray-50/40'
-                const stickyBg      = isEven ? 'bg-white' : 'bg-gray-50/60'
+                const stickyBg      = isEven ? 'bg-white' : 'bg-gray-50'
 
                 // Group payment transactions by date
                 const paymentsByDate = new Map<string, SalaryTransaction[]>()
