@@ -268,6 +268,15 @@ export interface ExpensesTable {
   is_advance_return:      Generated<boolean>
   utilized_advance_id:    string | null
   utilized_advance_amount: ColumnType<string | null, number | string | null, number | string | null>
+  advance_staff_id:       string | null
+}
+
+export interface ExpenseAdvanceUsagesTable {
+  id:         Generated<string>
+  expense_id: string
+  advance_id: string
+  amount:     ColumnType<string, number | string, number | string>
+  created_at: Generated<Date>
 }
 
 export interface AccountTransfersTable {
@@ -578,6 +587,7 @@ export interface Database {
   bank_payer_profiles:        BankPayerProfilesTable
   account_income:             AccountIncomeTable
   account_corrections:        AccountCorrectionsTable
+  expense_advance_usages:     ExpenseAdvanceUsagesTable
 }
 
 export interface EquityParticipantsTable {

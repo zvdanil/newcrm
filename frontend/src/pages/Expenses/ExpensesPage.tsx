@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type ExpenseAdvance, type SalaryPayment } from '../../api/expenses.api'
+import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type StaffAdvancePool, type SalaryPayment } from '../../api/expenses.api'
+import { staffApi, type StaffMember } from '../../api/staff.api'
 import { accountsApi } from '../../api/accounts.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
@@ -25,19 +26,6 @@ function categoryLabel(expense: Expense) {
   return expense.category_name ?? '—'
 }
 
-// Розумний пошук токену Supabase у localStorage
-function getAuthToken() {
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.endsWith('-auth-token')) {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(key) || '{}');
-        if (parsed?.access_token) return parsed.access_token;
-      } catch (e) {}
-    }
-  }
-  return localStorage.getItem('token') || '';
-}
 
 // ── Default account (localStorage) ────────────────────────────────────────
 
@@ -441,52 +429,47 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
   const isEdit = !!initial?.id
 
   const [form, setForm] = useState({
-    account_id:   initial?.account_id ?? defaultAccountId,
-    category_id:  initial?.category_id ?? '',
-    amount:       initial ? fmt(initial.amount ?? 0) : '',
-    accrual_date: initial?.accrual_date?.slice(0, 10) ?? today,
-    is_instant:   initial?.is_instant ?? true,
-    is_dividend:  initial?.is_dividend ?? false,
-    note:         initial?.note ?? '',
-    is_advance:   initial?.is_advance ?? false,
-    staff_id:     initial?.staff_id ?? '',
-    utilized_advance_id: initial?.utilized_advance_id ?? '',
+    account_id:       initial?.account_id ?? defaultAccountId,
+    category_id:      initial?.category_id ?? '',
+    amount:           initial ? fmt(initial.amount ?? 0) : '',
+    accrual_date:     initial?.accrual_date?.slice(0, 10) ?? today,
+    is_instant:       initial?.is_instant ?? true,
+    is_dividend:      initial?.is_dividend ?? false,
+    note:             initial?.note ?? '',
+    is_advance:       initial?.is_advance ?? false,
+    staff_id:         initial?.staff_id ?? '',
+    advance_staff_id: '',   // staff whose pool to deduct from when creating an expense
   })
   const [editNote, setEditNote] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  // Завантажуємо доступні аванси для обраної категорії
-  const { data: advances = [] } = useQuery<ExpenseAdvance[]>({
+  // Завантажуємо пули авансів по сотрудниках для обраної категорії
+  const { data: advancePools = [] } = useQuery<StaffAdvancePool[]>({
     queryKey: ['advances', form.category_id],
     queryFn: () => expensesApi.getAdvances(form.category_id),
     enabled: !!form.category_id && !form.is_advance && !isEdit,
   })
 
   // Завантажуємо активних співробітників для видачі авансу
-  const { data: staffListRaw = [] } = useQuery({
+  const { data: staffList = [] } = useQuery<StaffMember[]>({
     queryKey: ['staff', 'active'],
-    queryFn: () => fetch('/api/staff?is_active=true', {
-      headers: { Authorization: `Bearer ${getAuthToken()}` }
-    }).then(async r => {
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.message || 'API Error')
-      return data
-    }),
+    queryFn: () => staffApi.list({ is_active: true }),
     enabled: form.is_advance && !isEdit,
   })
 
-  const staffList = Array.isArray(staffListRaw) ? staffListRaw : (staffListRaw?.data || [])
-
-  // Авто-вибір першого авансу при завантаженні
+  // Авто-вибір першого пулу при завантаженні
   useEffect(() => {
-    if (!form.is_advance && advances.length > 0 && !form.utilized_advance_id) {
-      setForm(f => ({ ...f, utilized_advance_id: advances[0].id }))
+    if (!form.is_advance && advancePools.length > 0 && !form.advance_staff_id) {
+      const firstPool = advancePools[0]
+      setForm(f => ({ ...f, advance_staff_id: firstPool.staff_id ?? '__no_staff__' }))
     }
-  }, [advances])
+  }, [advancePools])
 
-  const selectedAdvance = advances.find(a => a.id === form.utilized_advance_id)
+  const selectedPool = advancePools.find(p =>
+    form.advance_staff_id === '__no_staff__' ? p.staff_id === null : p.staff_id === form.advance_staff_id
+  )
   const totalBill = Number(form.amount) || 0
-  const advanceCoverage = selectedAdvance ? Math.min(totalBill, selectedAdvance.remaining_balance) : 0
+  const advanceCoverage = selectedPool ? Math.min(totalBill, selectedPool.remaining_balance) : 0
   const amountFromAccount = totalBill - advanceCoverage
 
   async function handleNewSubcategory(parentId: string, name: string): Promise<ExpenseCategory> {
@@ -524,18 +507,20 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         edit_note: editNote.trim() || undefined,
       })
     } else {
+      const usePool = !form.is_advance && !!form.advance_staff_id && !!selectedPool
       createMutation.mutate({
-        account_id:   form.account_id,
-        category_id:  form.category_id || undefined,
-        amount:       totalBill,
-        accrual_date: form.accrual_date,
-        is_instant:   form.is_instant,
-        is_dividend:  form.is_dividend,
-        note: form.note || undefined,
-        is_advance:   form.is_advance,
-        staff_id:     form.is_advance ? (form.staff_id || undefined) : undefined,
-        utilized_advance_id: !form.is_advance ? (form.utilized_advance_id || undefined) : undefined,
-        utilized_advance_amount: (!form.is_advance && form.utilized_advance_id) ? advanceCoverage : undefined,
+        account_id:       form.account_id,
+        category_id:      form.category_id || undefined,
+        amount:           totalBill,
+        accrual_date:     form.accrual_date,
+        is_instant:       form.is_instant,
+        is_dividend:      form.is_dividend,
+        note:             form.note || undefined,
+        is_advance:       form.is_advance,
+        staff_id:         form.is_advance ? (form.staff_id || undefined) : undefined,
+        advance_staff_id: usePool
+          ? (form.advance_staff_id === '__no_staff__' ? undefined : form.advance_staff_id)
+          : undefined,
       })
     }
   }
@@ -567,33 +552,33 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         <CategoryPicker
           categories={categories}
           value={form.category_id}
-          onChange={id => setForm(f => ({ ...f, category_id: id, utilized_advance_id: '' }))}
+          onChange={id => setForm(f => ({ ...f, category_id: id, advance_staff_id: '' }))}
           onNewSubcategory={handleNewSubcategory}
         />
 
-        {/* Аванс під категорією */}
-        {!isEdit && !form.is_advance && advances.length > 0 && (
+        {/* Аванс під категорією — пули по співробітниках */}
+        {!isEdit && !form.is_advance && advancePools.length > 0 && (
           <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-xs font-semibold text-blue-800">💳 Є аванс на цій категорії</h4>
-              {selectedAdvance && (
-                <span className="text-xs text-blue-600 font-medium">залишок: {selectedAdvance.remaining_balance} ₴</span>
+              {selectedPool && (
+                <span className="text-xs text-blue-600 font-medium">залишок: {selectedPool.remaining_balance} ₴</span>
               )}
             </div>
             <select
-              value={form.utilized_advance_id}
-              onChange={e => setForm(f => ({ ...f, utilized_advance_id: e.target.value }))}
+              value={form.advance_staff_id}
+              onChange={e => setForm(f => ({ ...f, advance_staff_id: e.target.value }))}
               className="w-full text-sm border border-blue-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">— не використовувати аванс —</option>
-              {advances.map(a => (
-                <option key={a.id} value={a.id}>
-                  {a.staff_name ? `${a.staff_name} — ` : ''}Залишок: {a.remaining_balance} ₴
-                </option>
-              ))}
+              {advancePools.map(p => {
+                const key = p.staff_id ?? '__no_staff__'
+                const label = p.staff_name ? `${p.staff_name} — ${p.remaining_balance} ₴` : `Без співробітника — ${p.remaining_balance} ₴`
+                return <option key={key} value={key}>{label}</option>
+              })}
             </select>
 
-            {selectedAdvance && totalBill > 0 && (
+            {selectedPool && totalBill > 0 && (
               <div className="mt-2 text-xs text-blue-900 space-y-1 bg-white/60 p-2 rounded border border-blue-100">
                 <div className="flex justify-between">
                   <span>Сума чеку:</span>
@@ -657,7 +642,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         <div className="pt-2 border-t border-iris-100">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer font-medium mb-3">
             <input type="checkbox" checked={form.is_advance}
-              onChange={e => setForm(f => ({ ...f, is_advance: e.target.checked, utilized_advance_id: '' }))}
+              onChange={e => setForm(f => ({ ...f, is_advance: e.target.checked, advance_staff_id: '' }))}
               className="rounded text-iris-600 focus:ring-iris-500" />
             💰 Це видача авансу на майбутні витрати
           </label>
@@ -999,11 +984,13 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           )}
           {expense.is_advance && (
             <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">
-              {expense.staff_name ? 'аванс підзвіт' : 'аванс на категорію'}
+              аванс{expense.staff_name ? ` → ${expense.staff_name}` : ''}
             </span>
           )}
-          {expense.utilized_advance_id && (
-            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">з авансу ({expense.utilized_advance_amount} ₴)</span>
+          {(expense.advance_staff_id || expense.utilized_advance_id) && !expense.is_advance_return && (
+            <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
+              з авансу{expense.utilized_advance_amount ? ` (${expense.utilized_advance_amount} ₴)` : ''}
+            </span>
           )}
           {expense.is_advance_return && (
             <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>

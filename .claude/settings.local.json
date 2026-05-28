@@ -41,7 +41,8 @@
       "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"ChildCardPage|children\\\\.api|parent\\\\.api|CabinetPage|month-stats|month-summary\" })",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3000/api/children/00000000-0000-0000-0000-000000000000/month-stats?month=2026-05\")",
       "PowerShell($ports = @\\(3000, 3001, 4000, 8000, 8080\\); foreach \\($p in $ports\\) { try { $r = Invoke-WebRequest -Uri \"http://localhost:$p/api/children/test/month-stats\" -TimeoutSec 2 -ErrorAction Stop; \"$p`: $\\($r.StatusCode\\)\" } catch { if \\($_.Exception.Message -match \"401|403|404|400\"\\) { \"$p`: HTTP error \\(server running\\)\" } else { \"$p`: no server\" } } })",
-      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -notmatch 'BankImportTab|CalendarPage' } | Select-Object -First 30)"
+      "PowerShell(cd \"c:\\\\dan\\\\CRM\\\\NewCRM\\\\newcrm-1\\\\frontend\"; npx tsc --noEmit 2>&1 | Where-Object { $_ -notmatch 'BankImportTab|CalendarPage' } | Select-Object -First 30)",
+      "Bash(Get-ChildItem -Path . -Directory)"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"
