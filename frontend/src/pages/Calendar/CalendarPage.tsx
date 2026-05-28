@@ -607,6 +607,7 @@ export function CalendarPage() {
       start_time:   form.start_time,
       duration_min: Number(form.duration_min),
       days:         form.days,
+      dtstart:      form.dtstart,
       dtend:        form.dtend        || null,
       color:        form.color        || null,
       note:         form.note         || null,

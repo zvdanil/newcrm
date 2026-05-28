@@ -438,7 +438,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const substitution = await db
     .selectFrom('substitutions as sub')
     .innerJoin('activity_schedules as s', 's.id', 'sub.schedule_id')
-    .select(['sub.original_staff_id', 'sub.substitute_staff_id'])
+    .select(['sub.original_staff_id', 'sub.substitute_staff_id', 'sub.salary_tx_id'])
     .where('s.activity_id', '=', activityId)
     .where('sub.occurrence_date', '=', new Date(date))
     .executeTakeFirst()
@@ -572,6 +572,25 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
         billing_month:    billing,
         metadata_json:    meta,
       }).execute()
+    }
+  }
+
+  // Manage substitution ACCRUAL based on attendance (rate_id = null, not covered above)
+  if (substitution?.salary_tx_id) {
+    if (presentCount === 0) {
+      // No children present — remove substitute's accrual
+      await db.updateTable('salary_transactions')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('id', '=', substitution.salary_tx_id)
+        .where('is_deleted', '=', false)
+        .execute()
+    } else {
+      // At least one child present — restore if it was auto-removed
+      await db.updateTable('salary_transactions')
+        .set({ is_deleted: false, deleted_at: null })
+        .where('id', '=', substitution.salary_tx_id)
+        .where('is_deleted', '=', true)
+        .execute()
     }
   }
 

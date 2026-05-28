@@ -101,6 +101,7 @@ export const calendarApi = {
     start_time?:   string
     duration_min?: number
     days?:         number[]
+    dtstart?:      string
     dtend?:        string | null
     color?:        string | null
     note?:         string | null

@@ -461,6 +461,7 @@ export async function calendarRoutes(app: FastifyInstance) {
       start_time?:   string
       duration_min?: number
       days?:         number[]
+      dtstart?:      string
       dtend?:        string | null
       color?:        string | null
       note?:         string | null
@@ -470,7 +471,7 @@ export async function calendarRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
       const { id } = req.params
-      const { name, staff_id, room, start_time, duration_min, days, dtend, color, note } = req.body
+      const { name, staff_id, room, start_time, duration_min, days, dtstart, dtend, color, note } = req.body
 
       const sched = await db.selectFrom('activity_schedules').selectAll().where('id', '=', id).executeTakeFirst()
       if (!sched) return reply.status(404).send({ error: 'NotFound' })
@@ -482,6 +483,7 @@ export async function calendarRoutes(app: FastifyInstance) {
       if (start_time !== undefined) updates.start_time  = start_time
       if (duration_min !== undefined) updates.duration_min = duration_min
       if (days       !== undefined) updates.rrule       = buildRRule(days)
+      if (dtstart    !== undefined) updates.dtstart     = dtstart
       if (dtend      !== undefined) updates.dtend       = dtend
       if (color      !== undefined) updates.color       = color
       if (note       !== undefined) updates.note        = note
@@ -551,6 +553,23 @@ export async function calendarRoutes(app: FastifyInstance) {
         .returningAll()
         .executeTakeFirstOrThrow()
 
+      // When cancelling an occurrence, soft-delete the substitute's salary accrual (if any)
+      if (exception_type === 'cancelled') {
+        const sub = await db
+          .selectFrom('substitutions')
+          .select('salary_tx_id')
+          .where('schedule_id', '=', id)
+          .where('occurrence_date', '=', new Date(original_date))
+          .executeTakeFirst()
+        if (sub?.salary_tx_id) {
+          await db.updateTable('salary_transactions')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+            .where('id', '=', sub.salary_tx_id)
+            .where('is_deleted', '=', false)
+            .execute()
+        }
+      }
+
       return reply.status(201).send(row)
     }
   )
@@ -560,11 +579,37 @@ export async function calendarRoutes(app: FastifyInstance) {
     '/schedules/:id/exceptions/:originalDate',
     { preHandler: requireRole('owner', 'admin', 'manager', 'duty_admin') },
     async (req, reply) => {
+      // Check if this was a cancellation exception (restore salary accrual if so)
+      const exception = await db
+        .selectFrom('schedule_exceptions')
+        .select('exception_type')
+        .where('schedule_id', '=', req.params.id)
+        .where('original_date', '=', new Date(req.params.originalDate))
+        .executeTakeFirst()
+
       await db
         .deleteFrom('schedule_exceptions')
         .where('schedule_id', '=', req.params.id)
         .where('original_date', '=', new Date(req.params.originalDate))
         .execute()
+
+      // Restore the substitute's salary accrual when a cancellation is undone
+      if (exception?.exception_type === 'cancelled') {
+        const sub = await db
+          .selectFrom('substitutions')
+          .select('salary_tx_id')
+          .where('schedule_id', '=', req.params.id)
+          .where('occurrence_date', '=', new Date(req.params.originalDate))
+          .executeTakeFirst()
+        if (sub?.salary_tx_id) {
+          await db.updateTable('salary_transactions')
+            .set({ is_deleted: false, deleted_at: null })
+            .where('id', '=', sub.salary_tx_id)
+            .where('is_deleted', '=', true)
+            .execute()
+        }
+      }
+
       return reply.status(204).send()
     }
   )
