@@ -120,4 +120,31 @@ export const accountsApi = {
     const { data } = await apiClient.post(`/accounts/${accountId}/corrections`, payload)
     return data
   },
+
+  updateCorrection: async (accountId: string, corrId: string, payload: {
+    amount?: number
+    correction_date?: string
+    note?: string
+  }) => {
+    const { data } = await apiClient.put(`/accounts/${accountId}/corrections/${corrId}`, payload)
+    return data
+  },
+
+  deleteCorrection: async (accountId: string, corrId: string) => {
+    await apiClient.delete(`/accounts/${accountId}/corrections/${corrId}`)
+  },
+
+  updateIncome: async (accountId: string, incomeId: string, payload: {
+    amount?: number
+    income_date?: string
+    payer_name?: string
+    note?: string
+  }) => {
+    const { data } = await apiClient.put(`/accounts/${accountId}/income/${incomeId}`, payload)
+    return data
+  },
+
+  deleteIncome: async (accountId: string, incomeId: string) => {
+    await apiClient.delete(`/accounts/${accountId}/income/${incomeId}`)
+  },
 }

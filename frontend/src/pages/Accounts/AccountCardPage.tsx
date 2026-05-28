@@ -124,6 +124,15 @@ function PayerSearch({ value, onChange }: { value: PayerSearchResult | null; onC
   )
 }
 
+type EditRowState = {
+  id: string
+  kind: 'correction' | 'income'
+  amount: string
+  date: string
+  note: string
+  payer_name: string
+}
+
 export function AccountCardPage() {
   const { id } = useParams<{ id: string }>()
   const canImport = useCanAccess('owner', 'admin')
@@ -135,6 +144,8 @@ export function AccountCardPage() {
   const [to,   setTo]   = useState(defaultRange.to)
   const [applied, setApplied] = useState(defaultRange)
 
+  const [editRow, setEditRow] = useState<EditRowState | null>(null)
+
   const { data: account, isLoading: acctLoading } = useQuery({
     queryKey: ['account', id],
     queryFn: () => accountsApi.get(id!),
@@ -145,6 +156,13 @@ export function AccountCardPage() {
     queryKey: ['account-ledger', id, applied],
     queryFn: () => accountsApi.ledger(id!, { from: applied.from, to: applied.to, limit: 500 }),
     enabled: !!id,
+  })
+
+  const { data: allEntries } = useQuery({
+    queryKey: ['account-ledger-all', id],
+    queryFn: () => accountsApi.ledger(id!, { limit: 500 }),
+    enabled: activeTab === 'entry' && !!id,
+    staleTime: 0,
   })
 
   const cancelMutation = useMutation({
@@ -176,6 +194,7 @@ export function AccountCardPage() {
 
   function invalidateEntry() {
     qc.invalidateQueries({ queryKey: ['account-ledger', id] })
+    qc.invalidateQueries({ queryKey: ['account-ledger-all', id] })
     qc.invalidateQueries({ queryKey: ['account', id] })
     qc.invalidateQueries({ queryKey: ['balance'] })
   }
@@ -211,6 +230,37 @@ export function AccountCardPage() {
     }),
     onSuccess: () => { invalidateEntry(); setCorrForm(EMPTY_CORR); setEntryError(null) },
     onError:   () => setEntryError('Помилка при збереженні корекції'),
+  })
+
+  const updateCorrMutation = useMutation({
+    mutationFn: (row: EditRowState) => accountsApi.updateCorrection(id!, row.id, {
+      amount:          parseFloat(row.amount),
+      correction_date: row.date,
+      note:            row.note || undefined,
+    }),
+    onSuccess: () => { invalidateEntry(); setEditRow(null) },
+    onError:   () => setEntryError('Помилка при оновленні корекції'),
+  })
+
+  const deleteCorrMutation = useMutation({
+    mutationFn: (corrId: string) => accountsApi.deleteCorrection(id!, corrId),
+    onSuccess: () => invalidateEntry(),
+  })
+
+  const updateIncMutation = useMutation({
+    mutationFn: (row: EditRowState) => accountsApi.updateIncome(id!, row.id, {
+      amount:      parseFloat(row.amount),
+      income_date: row.date,
+      payer_name:  row.payer_name || undefined,
+      note:        row.note || undefined,
+    }),
+    onSuccess: () => { invalidateEntry(); setEditRow(null) },
+    onError:   () => setEntryError('Помилка при оновленні надходження'),
+  })
+
+  const deleteIncMutation = useMutation({
+    mutationFn: (incomeId: string) => accountsApi.deleteIncome(id!, incomeId),
+    onSuccess: () => invalidateEntry(),
   })
 
   if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
@@ -439,6 +489,123 @@ export function AccountCardPage() {
               {corrMutation.isPending ? 'Зберігається...' : 'Зафіксувати корекцію'}
             </button>
           </div>
+
+          {/* ── Existing corrections & income ── */}
+          {(() => {
+            const managed = (allEntries?.data ?? []).filter(r =>
+              r.kind === 'income' || r.kind === 'correction_in' || r.kind === 'correction_out'
+            )
+            if (managed.length === 0) return null
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                  <h3 className="text-sm font-semibold text-gray-700">Внесені залишки та корекції</h3>
+                </div>
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">Дата</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium">Тип</th>
+                      <th className="text-left px-4 py-2 text-gray-500 font-medium hidden sm:table-cell">Деталь / Примітка</th>
+                      <th className="text-right px-4 py-2 text-gray-500 font-medium">Сума</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {managed.map((row) => {
+                      const isEditingThis = editRow?.id === row.id
+                      const isCorr = row.kind === 'correction_in' || row.kind === 'correction_out'
+
+                      if (isEditingThis && editRow) {
+                        return (
+                          <tr key={row.id} className="bg-iris-50">
+                            <td className="px-3 py-2">
+                              <input type="date" value={editRow.date}
+                                onChange={(e) => setEditRow({ ...editRow, date: e.target.value })}
+                                className="w-full text-xs border border-iris-300 rounded px-2 py-1 focus:border-iris-500" />
+                            </td>
+                            <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{KIND_LABEL[row.kind]}</td>
+                            <td className="px-3 py-2 hidden sm:table-cell">
+                              <div className="flex gap-2">
+                                {editRow.kind === 'income' && (
+                                  <input type="text" value={editRow.payer_name}
+                                    onChange={(e) => setEditRow({ ...editRow, payer_name: e.target.value })}
+                                    placeholder="Від кого"
+                                    className="w-32 text-xs border border-gray-300 rounded px-2 py-1 focus:border-iris-500" />
+                                )}
+                                <input type="text" value={editRow.note}
+                                  onChange={(e) => setEditRow({ ...editRow, note: e.target.value })}
+                                  placeholder="Примітка"
+                                  className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 focus:border-iris-500" />
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <input type="number" step="0.01" value={editRow.amount}
+                                  onChange={(e) => setEditRow({ ...editRow, amount: e.target.value })}
+                                  className="w-24 text-xs border border-iris-300 rounded px-2 py-1 text-right focus:border-iris-500" />
+                                <button
+                                  onClick={() => editRow.kind === 'correction'
+                                    ? updateCorrMutation.mutate(editRow)
+                                    : updateIncMutation.mutate(editRow)
+                                  }
+                                  disabled={updateCorrMutation.isPending || updateIncMutation.isPending}
+                                  className="text-xs px-2 py-1 bg-iris-600 text-white rounded hover:bg-iris-700 disabled:opacity-50"
+                                >Зберегти</button>
+                                <button onClick={() => setEditRow(null)}
+                                  className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                >✕</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      return (
+                        <tr key={row.id} className="hover:bg-gray-50 group">
+                          <td className="px-4 py-2.5 text-gray-500 tabular-nums whitespace-nowrap">
+                            {new Date(row.date).toLocaleDateString('uk-UA')}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{KIND_LABEL[row.kind]}</td>
+                          <td className="px-4 py-2.5 text-gray-400 hidden sm:table-cell">
+                            {row.detail && <span className="mr-2 text-gray-600">{row.detail}</span>}
+                            {row.note ?? ''}
+                          </td>
+                          <td className={`px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap ${KIND_COLOR[row.kind]}`}>
+                            <div className="flex items-center justify-end gap-2">
+                              <span>{fmtAmount(row)}</span>
+                              <button
+                                onClick={() => setEditRow({
+                                  id:         row.id,
+                                  kind:       isCorr ? 'correction' : 'income',
+                                  amount:     row.amount,
+                                  date:       row.date,
+                                  note:       row.note ?? '',
+                                  payer_name: row.detail ?? '',
+                                })}
+                                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-iris-500 transition-all"
+                                title="Редагувати"
+                              >✎</button>
+                              <button
+                                onClick={() => {
+                                  if (window.confirm(`Видалити запис ${fmtAmount(row)}?`)) {
+                                    if (isCorr) deleteCorrMutation.mutate(row.id)
+                                    else        deleteIncMutation.mutate(row.id)
+                                  }
+                                }}
+                                disabled={deleteCorrMutation.isPending || deleteIncMutation.isPending}
+                                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-30"
+                                title="Видалити"
+                              >✕</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -509,47 +676,126 @@ export function AccountCardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map((row, i) => (
-                <tr key={`${row.id}-${row.kind}-${i}`} className="hover:bg-gray-50 transition-colors group">
-                  <td className="px-4 py-2.5 text-gray-500 tabular-nums whitespace-nowrap">
-                    {new Date(row.date).toLocaleDateString('uk-UA')}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
-                      {KIND_LABEL[row.kind]}
-                      {row.is_advance && (
-                        <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">аванс</span>
-                      )}
-                      {!row.is_advance && row.utilized_advance_amount && Number(row.utilized_advance_amount) > 0 && (
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded whitespace-nowrap">з авансу {Number(row.utilized_advance_amount).toFixed(2)} ₴</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-700">
-                    {row.detail ?? <span className="text-gray-400">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-400 hidden sm:table-cell">
-                    {row.note ?? ''}
-                  </td>
-                  <td className={`px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap ${KIND_COLOR[row.kind]}`}>
-                    <div className="flex items-center justify-end gap-2">
-                      <span>{fmtAmount(row)}</span>
-                      {canImport && row.kind === 'payment' && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Скасувати оплату ${fmtAmount(row)} від ${row.detail ?? ''}?\nБаланс ребёнка буде перераховано.`)) {
-                              cancelMutation.mutate(row.id)
+              {rows.map((row, i) => {
+                const isEditing = editRow?.id === row.id
+                const isCorr    = row.kind === 'correction_in' || row.kind === 'correction_out'
+                const isIncome  = row.kind === 'income'
+                const canEdit   = canImport && (isCorr || isIncome)
+
+                if (isEditing && editRow) {
+                  return (
+                    <tr key={`${row.id}-edit`} className="bg-iris-50">
+                      <td className="px-3 py-2">
+                        <input type="date" value={editRow.date}
+                          onChange={(e) => setEditRow({ ...editRow, date: e.target.value })}
+                          className="w-full text-xs border border-iris-300 rounded px-2 py-1 focus:border-iris-500" />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{KIND_LABEL[row.kind]}</td>
+                      <td className="px-3 py-2">
+                        {editRow.kind === 'income' && (
+                          <input type="text" value={editRow.payer_name}
+                            onChange={(e) => setEditRow({ ...editRow, payer_name: e.target.value })}
+                            placeholder="Від кого"
+                            className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:border-iris-500" />
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={editRow.note}
+                          onChange={(e) => setEditRow({ ...editRow, note: e.target.value })}
+                          placeholder="Примітка"
+                          className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:border-iris-500" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-2">
+                          <input type="number" step="0.01" value={editRow.amount}
+                            onChange={(e) => setEditRow({ ...editRow, amount: e.target.value })}
+                            className="w-24 text-xs border border-iris-300 rounded px-2 py-1 text-right focus:border-iris-500" />
+                          <button
+                            onClick={() => editRow.kind === 'correction'
+                              ? updateCorrMutation.mutate(editRow)
+                              : updateIncMutation.mutate(editRow)
                             }
-                          }}
-                          disabled={cancelMutation.isPending}
-                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-30"
-                          title="Скасувати оплату"
-                        >✕</button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                            disabled={updateCorrMutation.isPending || updateIncMutation.isPending}
+                            className="text-xs px-2 py-1 bg-iris-600 text-white rounded hover:bg-iris-700 disabled:opacity-50"
+                          >Зберегти</button>
+                          <button onClick={() => setEditRow(null)}
+                            className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                          >Скасувати</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                return (
+                  <tr key={`${row.id}-${row.kind}-${i}`} className="hover:bg-gray-50 transition-colors group">
+                    <td className="px-4 py-2.5 text-gray-500 tabular-nums whitespace-nowrap">
+                      {new Date(row.date).toLocaleDateString('uk-UA')}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        {KIND_LABEL[row.kind]}
+                        {row.is_advance && (
+                          <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">аванс</span>
+                        )}
+                        {!row.is_advance && row.utilized_advance_amount && Number(row.utilized_advance_amount) > 0 && (
+                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded whitespace-nowrap">з авансу {Number(row.utilized_advance_amount).toFixed(2)} ₴</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700">
+                      {row.detail ?? <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400 hidden sm:table-cell">
+                      {row.note ?? ''}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap ${KIND_COLOR[row.kind]}`}>
+                      <div className="flex items-center justify-end gap-2">
+                        <span>{fmtAmount(row)}</span>
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditRow({
+                              id:         row.id,
+                              kind:       isCorr ? 'correction' : 'income',
+                              amount:     row.amount,
+                              date:       row.date,
+                              note:       row.note ?? '',
+                              payer_name: row.detail ?? '',
+                            })}
+                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-iris-500 transition-all text-xs"
+                            title="Редагувати"
+                          >✎</button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Видалити запис ${fmtAmount(row)}?`)) {
+                                if (isCorr) deleteCorrMutation.mutate(row.id)
+                                else        deleteIncMutation.mutate(row.id)
+                              }
+                            }}
+                            disabled={deleteCorrMutation.isPending || deleteIncMutation.isPending}
+                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-30"
+                            title="Видалити"
+                          >✕</button>
+                        )}
+                        {canImport && row.kind === 'payment' && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Скасувати оплату ${fmtAmount(row)} від ${row.detail ?? ''}?\nБаланс ребёнка буде перераховано.`)) {
+                                cancelMutation.mutate(row.id)
+                              }
+                            }}
+                            disabled={cancelMutation.isPending}
+                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all disabled:opacity-30"
+                            title="Скасувати оплату"
+                          >✕</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -123,7 +123,7 @@ export async function accountsRoutes(app: FastifyInstance) {
 
         SELECT
           id,
-          payment_date::date AS date,
+          accrual_date::date AS date,
           'expense'          AS kind,
           (amount - COALESCE(utilized_advance_amount, 0))::numeric AS amount,
           note,
@@ -136,14 +136,14 @@ export async function accountsRoutes(app: FastifyInstance) {
           AND is_deleted = false
           AND is_advance_return = false
           AND (amount - COALESCE(utilized_advance_amount, 0)) > 0
-          AND (${f}::date IS NULL OR payment_date::date >= ${f}::date)
-          AND (${t}::date IS NULL OR payment_date::date <= ${t}::date)
+          AND (${f}::date IS NULL OR accrual_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR accrual_date::date <= ${t}::date)
 
         UNION ALL
 
         SELECT
           id,
-          payment_date::date AS date,
+          accrual_date::date AS date,
           'transfer_in'      AS kind,
           amount::numeric    AS amount,
           note,
@@ -155,8 +155,8 @@ export async function accountsRoutes(app: FastifyInstance) {
           AND status     = 'paid'
           AND is_deleted = false
           AND is_advance_return = true
-          AND (${f}::date IS NULL OR payment_date::date >= ${f}::date)
-          AND (${t}::date IS NULL OR payment_date::date <= ${t}::date)
+          AND (${f}::date IS NULL OR accrual_date::date >= ${f}::date)
+          AND (${t}::date IS NULL OR accrual_date::date <= ${t}::date)
 
         UNION ALL
 
@@ -287,7 +287,7 @@ export async function accountsRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>(
     '/:id/imbalances',
     { preHandler: requireRole('owner', 'admin') },
-    async (req, reply) => {
+    async (req) => {
       const rows = await db.selectFrom('inter_account_imbalances as iai')
         .selectAll('iai')
         .leftJoin('accounts as af',  'af.id',  'iai.from_account_id')
@@ -497,6 +497,105 @@ export async function accountsRoutes(app: FastifyInstance) {
         .executeTakeFirstOrThrow()
 
       return reply.status(201).send(row)
+    }
+  )
+
+  // ── PUT /api/accounts/:id/corrections/:corrId ─────────────────────────────
+  app.put<{
+    Params: { id: string; corrId: string }
+    Body: { amount?: number; correction_date?: string; note?: string }
+  }>(
+    '/:id/corrections/:corrId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { amount, note, correction_date } = req.body
+      const updates: Record<string, unknown> = {}
+      if (amount !== undefined) updates.amount = amount
+      if (note    !== undefined) updates.note = note || null
+      if (correction_date)       updates.correction_date = correction_date
+
+      if (Object.keys(updates).length === 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Немає полів для оновлення' })
+      }
+
+      const row = await db.updateTable('account_corrections')
+        .set(updates)
+        .where('id', '=', req.params.corrId)
+        .where('account_id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!row) return reply.status(404).send({ error: 'NotFound' })
+      return row
+    }
+  )
+
+  // ── DELETE /api/accounts/:id/corrections/:corrId ──────────────────────────
+  app.delete<{ Params: { id: string; corrId: string } }>(
+    '/:id/corrections/:corrId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const row = await db.updateTable('account_corrections')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: (req as { user?: { sub?: string } }).user?.sub ?? null })
+        .where('id', '=', req.params.corrId)
+        .where('account_id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!row) return reply.status(404).send({ error: 'NotFound' })
+      return reply.status(204).send()
+    }
+  )
+
+  // ── PUT /api/accounts/:id/income/:incomeId ────────────────────────────────
+  app.put<{
+    Params: { id: string; incomeId: string }
+    Body: { amount?: number; income_date?: string; payer_name?: string; note?: string }
+  }>(
+    '/:id/income/:incomeId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { amount, income_date, payer_name, note } = req.body
+      const updates: Record<string, unknown> = {}
+      if (amount      !== undefined) updates.amount = amount
+      if (income_date !== undefined) updates.income_date = income_date
+      if (payer_name  !== undefined) updates.payer_name = payer_name || null
+      if (note        !== undefined) updates.note = note || null
+
+      if (Object.keys(updates).length === 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Немає полів для оновлення' })
+      }
+
+      const row = await db.updateTable('account_income')
+        .set(updates)
+        .where('id', '=', req.params.incomeId)
+        .where('account_id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!row) return reply.status(404).send({ error: 'NotFound' })
+      return row
+    }
+  )
+
+  // ── DELETE /api/accounts/:id/income/:incomeId ─────────────────────────────
+  app.delete<{ Params: { id: string; incomeId: string } }>(
+    '/:id/income/:incomeId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const row = await db.updateTable('account_income')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: (req as { user?: { sub?: string } }).user?.sub ?? null })
+        .where('id', '=', req.params.incomeId)
+        .where('account_id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!row) return reply.status(404).send({ error: 'NotFound' })
+      return reply.status(204).send()
     }
   )
 }
