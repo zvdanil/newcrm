@@ -1533,7 +1533,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
           <p className="text-sm text-gray-400 text-center py-4">Рухів за цей місяць немає</p>
         ) : (
           <div className="space-y-4">
-            {/* Accounts without enrollment but with transactions (e.g. bank import payments) */}
+            {/* Accounts without active enrollment but with transactions (e.g. archived enrollments, bank imports) */}
             {Object.entries(groupedByAccount)
               .filter(([accId]) => !activeAccounts.find((b) => b.account_id === accId))
               .map(([accId, group]) => {
@@ -1542,6 +1542,20 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                 const totalRefunds  = group.refunds.reduce((s, t) => s + Number(t.amount), 0)
                 const totalAdj      = group.adjustments.reduce((s, t) => s + Number(t.amount), 0)
                 const monthNet      = totalPayments + totalRefunds - totalAccruals + totalAdj
+                const { enriched: archEnriched } = enrichAccruals(group.accruals, group.adjustments)
+                const archByActivity = archEnriched.reduce<Record<string, { orig: number; eff: number; adjusted: boolean; activityId: string | null }>>((acc, tx) => {
+                  const key = tx.activity_name ?? '—'
+                  if (!acc[key]) acc[key] = { orig: 0, eff: 0, adjusted: false, activityId: tx.activity_id }
+                  acc[key].orig += tx._orig
+                  acc[key].eff  += tx._eff
+                  acc[key].adjusted = acc[key].adjusted || tx._adjusted
+                  return acc
+                }, {})
+                const archRefundByActivity = group.refunds.reduce<Record<string, number>>((acc, tx) => {
+                  const key = tx.activity_name ?? tx.note ?? '—'
+                  acc[key] = (acc[key] ?? 0) + Number(tx.amount)
+                  return acc
+                }, {})
                 return (
                   <div key={accId} className="rounded-lg border border-gray-100 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
@@ -1551,6 +1565,48 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       </span>
                     </div>
                     <div className="px-4 py-3 space-y-2 text-xs">
+                      {/* Нарахування for archived-enrollment accounts */}
+                      {archEnriched.length > 0 && (
+                        <div>
+                          <p className="text-gray-400 mb-1">Нарахування</p>
+                          {Object.entries(archByActivity).map(([name, { orig, eff, adjusted, activityId }]) => {
+                            const att = activityId ? attendanceCountMap[activityId] : undefined
+                            return (
+                              <div key={name} className="flex justify-between py-0.5 gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-gray-500 truncate">{name}</span>
+                                  <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                                  {(att?.visit_count || att?.excused_count) && (
+                                    <span className="text-gray-400 shrink-0">
+                                      {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
+                                      {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-mono shrink-0">
+                                  {adjusted ? (
+                                    <span className="text-gray-400 line-through mr-1">{orig.toFixed(2)}</span>
+                                  ) : null}
+                                  <span className="text-red-500">−{adjusted ? eff.toFixed(2) : orig.toFixed(2)}</span>
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {/* Повернення for archived-enrollment accounts */}
+                      {group.refunds.length > 0 && (
+                        <div>
+                          <p className="text-gray-400 mb-1">Повернення</p>
+                          {Object.entries(archRefundByActivity).map(([name, total]) => (
+                            <div key={name} className="flex justify-between py-0.5">
+                              <span className="text-gray-500">{name}</span>
+                              <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Оплати */}
                       {group.payments.length > 0 && (
                         <div>
                           <p className="text-gray-400 mb-1">Оплати</p>

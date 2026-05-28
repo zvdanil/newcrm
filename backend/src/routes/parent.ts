@@ -89,6 +89,7 @@ export async function parentRoutes(app: FastifyInstance) {
   })
 
   // GET /api/parent/children/:childId/month-summary?month=YYYY-MM
+  // Returns data grouped by account → activity (fixes double-activity bug and per-lesson ACCRUAL bug)
   app.get<{
     Params: { childId: string }
     Querystring: { month?: string }
@@ -108,35 +109,35 @@ export async function parentRoutes(app: FastifyInstance) {
 
     const txFields = [
       't.id', 't.type', 't.amount', 't.transaction_date', 't.billing_month', 't.note',
+      't.account_id',
       'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+      'ac.name as account_name',
     ] as const
 
-    const [enrollments, accruals, refunds, attendanceLogs] = await Promise.all([
+    const [enrollments, transactions, attendanceLogs] = await Promise.all([
+      // Active/frozen enrollments with account info
       db.selectFrom('enrollments as e')
         .innerJoin('activities as a', 'a.id', 'e.activity_id')
-        .select(['a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active'])
+        .innerJoin('accounts as ac', 'ac.id', 'e.account_id')
+        .select([
+          'e.account_id', 'ac.name as account_name', 'e.status as enrollment_status',
+          'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+        ])
         .where('e.child_id', '=', req.params.childId)
         .where('e.status', 'in', ['active', 'frozen'])
         .execute(),
 
+      // ACCRUAL + REFUND filtered by transaction_date (catches per-lesson ACCRUALs with null billing_month too)
       db.selectFrom('transactions as t')
         .leftJoin('activities as a', 'a.id', 't.activity_id')
+        .leftJoin('accounts as ac', 'ac.id', 't.account_id')
         .select(txFields)
         .where('t.child_id', '=', req.params.childId)
-        .where('t.type', '=', 'ACCRUAL')
-        .where('t.is_deleted', '=', false)
-        .where('t.billing_month', '>=', new Date(from))
-        .where('t.billing_month', '<=', new Date(to))
-        .execute(),
-
-      db.selectFrom('transactions as t')
-        .leftJoin('activities as a', 'a.id', 't.activity_id')
-        .select(txFields)
-        .where('t.child_id', '=', req.params.childId)
-        .where('t.type', '=', 'REFUND')
+        .where('t.type', 'in', ['ACCRUAL', 'REFUND'])
         .where('t.is_deleted', '=', false)
         .where('t.transaction_date', '>=', new Date(from))
         .where('t.transaction_date', '<=', new Date(to))
+        .orderBy('t.transaction_date', 'desc')
         .execute(),
 
       db.selectFrom('attendance_logs as al')
@@ -147,64 +148,80 @@ export async function parentRoutes(app: FastifyInstance) {
         .execute(),
     ])
 
-    const allTransactions = [...accruals, ...refunds].sort(
-      (a, b) => new Date(String(b.transaction_date)).getTime() - new Date(String(a.transaction_date)).getTime()
-    )
-
-    // Aggregate attendance counts by activity
-    const attendance: Record<string, { visit_count: number; excused_count: number }> = {}
+    // Attendance map: activity_id → { visit_count, excused_count }
+    const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
     for (const log of attendanceLogs) {
       const key = log.activity_id ?? 'none'
-      attendance[key] ??= { visit_count: 0, excused_count: 0 }
-      if (log.status === 'present' || log.status === 'special') attendance[key].visit_count++
-      else if (log.status === 'absent_excused') attendance[key].excused_count++
+      attendanceMap[key] ??= { visit_count: 0, excused_count: 0 }
+      if (log.status === 'present' || log.status === 'special') attendanceMap[key].visit_count++
+      else if (log.status === 'absent_excused') attendanceMap[key].excused_count++
     }
 
-    type TxRow = typeof allTransactions[number]
-    type Summary = {
+    type TxRow = typeof transactions[number]
+    type ActivityEntry = {
       activity_id: string; activity_name: string; activity_is_active: boolean
+      enrollment_status: string | null  // null = has transactions but no active/frozen enrollment
       accrual_total: number; refund_total: number; visit_count: number; excused_count: number
       transactions: TxRow[]
     }
-    const map = new Map<string, Summary>()
+    type AccountEntry = { account_id: string; account_name: string; activities: Map<string, ActivityEntry> }
 
-    for (const e of enrollments) {
-      if (!map.has(e.activity_id)) {
-        map.set(e.activity_id, {
-          activity_id: e.activity_id, activity_name: e.activity_name,
-          activity_is_active: e.activity_is_active,
-          accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0, transactions: [],
-        })
+    const accountMap = new Map<string, AccountEntry>()
+
+    function ensureActivity(accountId: string, accountName: string, activityId: string, activityName: string, activityIsActive: boolean, enrollmentStatus: string | null): ActivityEntry {
+      let acct = accountMap.get(accountId)
+      if (!acct) {
+        acct = { account_id: accountId, account_name: accountName, activities: new Map() }
+        accountMap.set(accountId, acct)
       }
+      let entry = acct.activities.get(activityId)
+      if (!entry) {
+        entry = {
+          activity_id: activityId, activity_name: activityName,
+          activity_is_active: activityIsActive, enrollment_status: enrollmentStatus,
+          accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0, transactions: [],
+        }
+        acct.activities.set(activityId, entry)
+      }
+      return entry
     }
 
-    for (const t of allTransactions) {
-      const actId = t.activity_id ?? 'unknown'
-      if (!map.has(actId)) {
-        map.set(actId, {
-          activity_id: actId, activity_name: t.activity_name ?? 'Невідома активність',
-          activity_is_active: t.activity_is_active ?? false,
-          accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0, transactions: [],
-        })
-      }
-      const entry = map.get(actId)!
+    // Seed from active/frozen enrollments (guaranteed to show even if no transactions this month)
+    for (const e of enrollments) {
+      ensureActivity(e.account_id, e.account_name, e.activity_id, e.activity_name, e.activity_is_active, e.enrollment_status)
+    }
+
+    // Add transaction data (grouped by account_id + activity_id — fixes double-activity across accounts)
+    for (const t of transactions) {
+      const accountId = t.account_id ?? 'unknown'
+      const accountName = t.account_name ?? 'Невідомий рахунок'
+      const activityId = t.activity_id ?? 'unknown'
+      const activityName = t.activity_name ?? 'Невідома активність'
+      const entry = ensureActivity(accountId, accountName, activityId, activityName, t.activity_is_active ?? false, null)
       entry.transactions.push(t)
       const amt = parseFloat(String(t.amount))
       if (t.type === 'ACCRUAL') entry.accrual_total += amt
       else if (t.type === 'REFUND') entry.refund_total += amt
     }
 
-    for (const [actId, counts] of Object.entries(attendance)) {
-      const entry = map.get(actId)
-      if (entry) {
-        entry.visit_count = counts.visit_count
-        entry.excused_count = counts.excused_count
+    // Attach attendance counts (activity_id applies to all accounts for that activity)
+    for (const [actId, counts] of Object.entries(attendanceMap)) {
+      for (const acct of accountMap.values()) {
+        const entry = acct.activities.get(actId)
+        if (entry) { entry.visit_count = counts.visit_count; entry.excused_count = counts.excused_count }
       }
     }
 
-    return Array.from(map.values())
-      .filter((a) => a.activity_is_active || a.transactions.length > 0)
-      .sort((a, b) => a.activity_name.localeCompare(b.activity_name, 'uk'))
+    return Array.from(accountMap.values())
+      .map(acct => ({
+        account_id: acct.account_id,
+        account_name: acct.account_name,
+        activities: Array.from(acct.activities.values())
+          .filter(a => a.enrollment_status !== null || a.transactions.length > 0)
+          .sort((a, b) => a.activity_name.localeCompare(b.activity_name, 'uk')),
+      }))
+      .filter(acct => acct.activities.length > 0)
+      .sort((a, b) => a.account_name.localeCompare(b.account_name, 'uk'))
   })
 
   // GET /api/parent/children/:childId/attendance?month=YYYY-MM

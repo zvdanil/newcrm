@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { parentApi } from '../../api/parent.api'
-import type { ParentChild, ParentLedgerRow, ParentAttendanceRow, ActivityMonthlySummary } from '../../api/parent.api'
+import type { ParentChild, ParentLedgerRow, ParentAttendanceRow, AccountMonthlySummary, ActivityMonthlySummary } from '../../api/parent.api'
 
 // ────────────────────────────────────────────────────────────
 // Helpers
@@ -186,37 +186,38 @@ function AttendanceTab({ childId, month }: { childId: string; month: string }) {
 }
 
 // ────────────────────────────────────────────────────────────
-// TAB 2 — Нарахування (cards per activity from month-summary)
+// TAB 2 — Нарахування (grouped by account → activity)
 // ────────────────────────────────────────────────────────────
 
-function AccrualCard({ summary }: { summary: ActivityMonthlySummary }) {
+function AccrualActivityRow({ summary }: { summary: ActivityMonthlySummary }) {
   const [open, setOpen] = useState(false)
   const net = summary.accrual_total - summary.refund_total
+  const isArchived = summary.enrollment_status === null || !summary.activity_is_active
 
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className={`border rounded-lg overflow-hidden ${isArchived ? 'border-gray-100' : 'border-gray-200'}`}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
       >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-medium text-gray-800 truncate">{summary.activity_name}</span>
-          {!summary.activity_is_active && (
-            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">архів</span>
+          <span className={`font-medium truncate ${isArchived ? 'text-gray-500' : 'text-gray-800'}`}>
+            {summary.activity_name}
+          </span>
+          {isArchived && (
+            <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-400">архів</span>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0 ml-2">
           {(summary.visit_count > 0 || summary.excused_count > 0) && (
             <div className="flex items-center gap-2 text-xs text-gray-400">
-              {summary.visit_count > 0 && (
-                <span title="Відвідувань">П: {summary.visit_count}</span>
-              )}
-              {summary.excused_count > 0 && (
-                <span title="Поважних пропусків">В: {summary.excused_count}</span>
-              )}
+              {summary.visit_count > 0 && <span title="Відвідувань">П: {summary.visit_count}</span>}
+              {summary.excused_count > 0 && <span title="Поважних пропусків">В: {summary.excused_count}</span>}
             </div>
           )}
-          <span className="text-gray-700 font-semibold">{net.toFixed(2)} ₴</span>
+          <span className={`font-semibold ${net < 0 ? 'text-red-500' : net > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+            {net !== 0 ? (net > 0 ? '+' : '−') : ''}{Math.abs(net).toFixed(2)} ₴
+          </span>
           <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
         </div>
       </button>
@@ -244,7 +245,9 @@ function AccrualCard({ summary }: { summary: ActivityMonthlySummary }) {
               {summary.visit_count > 0 && <span>Відвідувань: {summary.visit_count}</span>}
               {summary.excused_count > 0 && <span>Поважних пропусків: {summary.excused_count}</span>}
             </div>
-            <span>Разом: <span className="font-semibold text-gray-700">{net.toFixed(2)} ₴</span></span>
+            <span>Разом: <span className={`font-semibold ${net < 0 ? 'text-red-500' : 'text-gray-700'}`}>
+              {net !== 0 ? (net > 0 ? '+' : '−') : ''}{Math.abs(net).toFixed(2)} ₴
+            </span></span>
           </div>
         </div>
       )}
@@ -253,19 +256,34 @@ function AccrualCard({ summary }: { summary: ActivityMonthlySummary }) {
 }
 
 function AccrualsTab({ childId, month }: { childId: string; month: string }) {
-  const { data: summaries = [], isLoading } = useQuery<ActivityMonthlySummary[]>({
+  const { data: accounts = [], isLoading } = useQuery<AccountMonthlySummary[]>({
     queryKey: ['parent-month-summary', childId, month],
     queryFn: () => parentApi.getMonthSummary(childId, month),
   })
 
   if (isLoading) return <div className="px-6 py-6 text-center text-sm text-gray-400">Завантаження...</div>
-  if (summaries.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Нарахувань немає</div>
+  if (accounts.length === 0) return <div className="px-6 py-6 text-center text-sm text-gray-400">Нарахувань немає</div>
 
   return (
-    <div className="px-6 py-4 space-y-2">
-      {summaries.map((s) => (
-        <AccrualCard key={s.activity_id} summary={s} />
-      ))}
+    <div className="px-6 py-4 space-y-5">
+      {accounts.map((acct) => {
+        const totalNet = acct.activities.reduce((s, a) => s + a.accrual_total - a.refund_total, 0)
+        return (
+          <div key={acct.account_id} className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-700 uppercase tracking-wide">{acct.account_name}</span>
+              <span className={`text-sm font-mono font-medium ${totalNet < 0 ? 'text-red-500' : totalNet > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                {totalNet !== 0 ? (totalNet > 0 ? '+' : '−') : ''}{Math.abs(totalNet).toFixed(2)} ₴
+              </span>
+            </div>
+            <div className="p-3 space-y-2">
+              {acct.activities.map((s) => (
+                <AccrualActivityRow key={`${acct.account_id}:${s.activity_id}`} summary={s} />
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

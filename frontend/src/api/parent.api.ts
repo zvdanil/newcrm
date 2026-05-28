@@ -34,19 +34,28 @@ export interface MonthSummaryTransaction {
   transaction_date: string
   billing_month: string | null
   note: string | null
+  account_id: string | null
   activity_id: string | null
   activity_name: string | null
+  account_name: string | null
 }
 
 export interface ActivityMonthlySummary {
   activity_id: string
   activity_name: string
   activity_is_active: boolean
+  enrollment_status: string | null  // null = archived enrollment (has transactions but no active enrollment)
   accrual_total: number
   refund_total: number
   visit_count: number
   excused_count: number
   transactions: MonthSummaryTransaction[]
+}
+
+export interface AccountMonthlySummary {
+  account_id: string
+  account_name: string
+  activities: ActivityMonthlySummary[]
 }
 
 export const parentApi = {
@@ -70,8 +79,8 @@ export const parentApi = {
     return data
   },
 
-  getMonthSummary: async (childId: string, month: string): Promise<ActivityMonthlySummary[]> => {
-    const { data } = await apiClient.get<ActivityMonthlySummary[]>(
+  getMonthSummary: async (childId: string, month: string): Promise<AccountMonthlySummary[]> => {
+    const { data } = await apiClient.get<AccountMonthlySummary[]>(
       `/parent/children/${childId}/month-summary?month=${month}`
     )
     return data
