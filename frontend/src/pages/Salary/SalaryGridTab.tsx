@@ -416,7 +416,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
               {/* day-of-week row */}
               <tr>
                 <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1 min-w-[180px]" />
-                <th className="bg-gray-50 border-b border-r border-gray-200 px-1 py-1 text-center text-gray-400 font-normal min-w-[80px]">
+                <th className="sticky left-[180px] z-30 bg-gray-50 border-b border-r border-gray-200 px-1 py-1 text-center text-gray-400 font-normal min-w-[80px]">
                   Ставка
                 </th>
                 {dates.map(d => (
@@ -438,7 +438,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                 <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-3 py-1.5 text-left text-xs font-medium text-gray-600">
                   Співробітник
                 </th>
-                <th className="bg-gray-50 border-b border-r border-gray-200 px-1 py-1.5 text-center text-gray-500 font-medium min-w-[80px]" />
+                <th className="sticky left-[180px] z-30 bg-gray-50 border-b border-r border-gray-200 px-1 py-1.5 text-center text-gray-500 font-medium min-w-[80px]" />
                 {dates.map(d => (
                   <th
                     key={d}
@@ -547,7 +547,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                       className={`border-t border-gray-100 ${baseRowClass} hover:bg-iris-50/20`}
                     >
                       {groupIdx === 0 && nameCell}
-                      <td className="px-1 py-1 text-center border-r border-gray-200 whitespace-nowrap">
+                      <td className={`sticky left-[180px] z-10 px-1 py-1 text-center border-r border-gray-200 whitespace-nowrap ${stickyBg}`}>
                         <span className="inline-block text-[10px] font-medium text-iris-600 bg-iris-50 rounded px-1 py-0.5">
                           {group.label}
                         </span>
@@ -601,7 +601,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                       className={`border-t border-gray-100 ${baseRowClass} hover:bg-iris-50/20`}
                     >
                       {rateGroups.length === 0 && nameCell}
-                      <td className="px-1 py-1 text-center border-r border-gray-200">
+                      <td className={`sticky left-[180px] z-10 px-1 py-1 text-center border-r border-gray-200 ${stickyBg}`}>
                         <span className="inline-block text-[10px] font-medium text-gray-400 bg-gray-100 rounded px-1 py-0.5">
                           Нарах.
                         </span>
@@ -635,7 +635,7 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                     key={`${row.id}-payment`}
                     className={`border-b-2 border-gray-200 ${baseRowClass} hover:bg-green-50/20`}
                   >
-                    <td className="px-1 py-1 text-center border-r border-gray-200">
+                    <td className={`sticky left-[180px] z-10 px-1 py-1 text-center border-r border-gray-200 ${stickyBg}`}>
                       <span className="inline-block text-[10px] font-medium text-green-700 bg-green-50 rounded px-1 py-0.5 whitespace-nowrap">
                         Виплат.
                       </span>
