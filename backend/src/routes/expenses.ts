@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 
@@ -117,8 +118,11 @@ export async function expensesRoutes(app: FastifyInstance) {
           'cp.name as parent_category_name',
           'u.email as created_by_email',
           'e.is_advance', 'e.is_advance_return', 'e.staff_id', 's.full_name as staff_name',
-          'e.utilized_advance_id', 'e.utilized_advance_amount', 'e.advance_staff_id'
+          'e.utilized_advance_id', 'e.utilized_advance_amount', 'e.advance_staff_id',
         ])
+        .select(
+          sql<string>`COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u WHERE u.expense_id = e.id), 0)`.as('pool_advance_amount')
+        )
         .where('e.is_deleted', '=', false)
 
       if (req.query.account_id)  q = q.where('e.account_id', '=', req.query.account_id)
@@ -189,7 +193,7 @@ export async function expensesRoutes(app: FastifyInstance) {
       staff_id?: string
       utilized_advance_id?: string
       utilized_advance_amount?: number
-      advance_staff_id?: string
+      advance_staff_id?: string | null
     }
   }>(
     '/',
@@ -233,16 +237,23 @@ export async function expensesRoutes(app: FastifyInstance) {
           .executeTakeFirstOrThrow()
 
         // FIFO pool deduction: find advances for this staff+category ordered by date, deduct in order
-        if (advance_staff_id && category_id) {
-          const poolAdvances = await trx
+        // advance_staff_id === null  → "no-staff" pool (staff_id IS NULL)
+        // advance_staff_id === uuid  → named-staff pool
+        // advance_staff_id === undefined → no pool selected, skip
+        if (advance_staff_id !== undefined && category_id) {
+          let poolQ = trx
             .selectFrom('expenses as e')
             .select(['e.id', 'e.amount'])
             .where('e.is_advance', '=', true)
             .where('e.category_id', '=', category_id)
-            .where('e.staff_id', '=', advance_staff_id)
             .where('e.is_deleted', '=', false)
             .orderBy('e.accrual_date', 'asc')
-            .execute()
+
+          poolQ = advance_staff_id === null
+            ? poolQ.where('e.staff_id', 'is', null)
+            : poolQ.where('e.staff_id', '=', advance_staff_id)
+
+          const poolAdvances = await poolQ.execute()
 
           let remaining = amount
           for (const adv of poolAdvances) {

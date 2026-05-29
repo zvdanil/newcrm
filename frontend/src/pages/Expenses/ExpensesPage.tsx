@@ -519,7 +519,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         is_advance:       form.is_advance,
         staff_id:         form.is_advance ? (form.staff_id || undefined) : undefined,
         advance_staff_id: usePool
-          ? (form.advance_staff_id === '__no_staff__' ? undefined : form.advance_staff_id)
+          ? (form.advance_staff_id === '__no_staff__' ? null : form.advance_staff_id)
           : undefined,
       })
     }
@@ -987,9 +987,15 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               аванс{expense.staff_name ? ` → ${expense.staff_name}` : ''}
             </span>
           )}
-          {(expense.advance_staff_id || expense.utilized_advance_id) && !expense.is_advance_return && (
+          {(expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
             <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
-              з авансу{expense.utilized_advance_amount ? ` (${expense.utilized_advance_amount} ₴)` : ''}
+              з авансу{
+                Number(expense.pool_advance_amount) > 0
+                  ? ` (${Number(expense.pool_advance_amount).toFixed(2)} ₴)`
+                  : expense.utilized_advance_amount
+                    ? ` (${expense.utilized_advance_amount} ₴)`
+                    : ''
+              }
             </span>
           )}
           {expense.is_advance_return && (

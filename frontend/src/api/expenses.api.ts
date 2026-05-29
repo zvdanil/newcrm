@@ -30,6 +30,7 @@ export interface Expense {
   utilized_advance_id: string | null
   utilized_advance_amount: number | null
   advance_staff_id: string | null
+  pool_advance_amount: string
   withdrawal_transfer_id: string | null
   dividend_payout_id: string | null
   note: string | null
@@ -135,7 +136,7 @@ export const expensesApi = {
     staff_id?: string
     utilized_advance_id?: string
     utilized_advance_amount?: number
-    advance_staff_id?: string
+    advance_staff_id?: string | null
   }) => {
     const { data } = await apiClient.post<Expense>('/expenses', payload)
     return data
