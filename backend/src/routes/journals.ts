@@ -532,18 +532,21 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       const wasChargeable = oldStatus === 'present' || oldStatus === 'special'
       const isChargeable  = status === 'present' || status === 'special'
+      const oldAmount = existing.custom_amount != null ? Number(existing.custom_amount) : null
+      const newAmount = custom_amount != null ? Number(custom_amount) : null
+      const amountChanged = oldAmount !== newAmount
 
       if (putEffectiveType === 'per_lesson') {
         if (!wasChargeable && isChargeable) {
           await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
         } else if (wasChargeable && !isChargeable) {
           await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-        } else if (wasChargeable && isChargeable && oldStatus !== status) {
+        } else if (wasChargeable && isChargeable && (oldStatus !== status || amountChanged)) {
           await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
           await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
         }
       } else if (putEffectiveType === 'smart') {
-        if (oldStatus !== status) {
+        if (oldStatus !== status || amountChanged) {
           const billingMonth = dateStr.slice(0, 7) + '-01'
           await recalcSmartBenefit(existing.enrollment_id, billingMonth)
         }
