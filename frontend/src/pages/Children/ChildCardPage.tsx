@@ -1568,7 +1568,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       {/* Нарахування for archived-enrollment accounts */}
                       {archEnriched.length > 0 && (
                         <div>
-                          <p className="text-gray-400 mb-1">Нарахування</p>
+                          <p className="font-bold text-red-500 mb-1">Нарахування</p>
                           {Object.entries(archByActivity).map(([name, { orig, eff, adjusted, activityId }]) => {
                             const att = activityId ? attendanceCountMap[activityId] : undefined
                             return (
@@ -1597,7 +1597,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       {/* Повернення for archived-enrollment accounts */}
                       {group.refunds.length > 0 && (
                         <div>
-                          <p className="text-gray-400 mb-1">Повернення</p>
+                          <p className="font-bold text-green-500 mb-1">Повернення</p>
                           {Object.entries(archRefundByActivity).map(([name, total]) => (
                             <div key={name} className="flex justify-between py-0.5">
                               <span className="text-gray-500">{name}</span>
@@ -1609,7 +1609,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       {/* Оплати */}
                       {group.payments.length > 0 && (
                         <div>
-                          <p className="text-gray-400 mb-1">Оплати</p>
+                          <p className="font-bold text-green-600 mb-1">Оплати</p>
                           {group.payments.map((tx) => {
                             const metaPayId = (tx.metadata_json as { payment_account_id?: string } | null)?.payment_account_id
                             const linkedImbalance = imbalances.find((im) => im.transaction_id === tx.id)
@@ -1643,7 +1643,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                           })}
                           {group.payments.length > 1 && (
                             <div className="flex justify-between py-0.5 border-t border-gray-100 mt-1 pt-1">
-                              <span className="text-gray-400">Разом оплат</span>
+                              <span className="font-bold text-green-600">Разом оплат</span>
                               <span className="font-mono text-green-600">+{totalPayments.toFixed(2)}</span>
                             </div>
                           )}
@@ -1706,7 +1706,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     {/* Accruals grouped by activity — with before→after for adjusted ones */}
                     {(enriched.length > 0 || zeroActivities.length > 0) && (
                       <div>
-                        <p className="text-gray-400 mb-1">Нарахування</p>
+                        <p className="font-bold text-red-500 mb-1">Нарахування</p>
                         {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => {
                           const isArchived = activityId ? activityFlagsMap[activityId] === false : false
                           const att = activityId ? attendanceCountMap[activityId] : undefined
@@ -1780,7 +1780,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     {/* Refunds grouped by activity */}
                     {(group?.refunds ?? []).length > 0 && (
                       <div>
-                        <p className="text-gray-400 mb-1">Повернення</p>
+                        <p className="font-bold text-green-500 mb-1">Повернення</p>
                         {Object.entries(
                           (group?.refunds ?? []).reduce<Record<string, number>>((acc, tx) => {
                             const key = tx.activity_name ?? tx.note ?? '—'
@@ -1807,7 +1807,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     {/* Payments — individual rows */}
                     {(group?.payments ?? []).length > 0 && (
                       <div>
-                        <p className="text-gray-400 mb-1">Оплати</p>
+                        <p className="font-bold text-green-600 mb-1">Оплати</p>
                         {group.payments.map((tx) => {
                           const metaPayId = (tx.metadata_json as { payment_account_id?: string } | null)?.payment_account_id
                           const linkedImbalance = imbalances.find((im) => im.transaction_id === tx.id)
@@ -1856,7 +1856,7 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                         })}
                         {(group?.payments ?? []).length > 1 && (
                           <div className="flex justify-between py-0.5 border-t border-gray-100 mt-1 pt-1">
-                            <span className="text-gray-400">Разом оплат</span>
+                            <span className="font-bold text-green-600">Разом оплат</span>
                             <span className="font-mono text-green-600">+{totalPayments.toFixed(2)}</span>
                           </div>
                         )}
