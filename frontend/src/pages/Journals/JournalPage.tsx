@@ -246,8 +246,8 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
   const queryClient = useQueryClient()
 
   const { data: resp, isLoading } = useQuery({
-    queryKey: ['children-search', search],
-    queryFn: () => childrenApi.list({ search }),
+    queryKey: ['children-search', search, true],
+    queryFn: () => childrenApi.list({ search, is_active: true }),
     enabled: true
   })
   const children = resp?.data
