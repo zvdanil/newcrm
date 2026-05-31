@@ -440,8 +440,8 @@ export function JournalPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-        <table className="w-auto text-sm border-separate border-spacing-0">
+       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
+         <table className="w-auto text-sm border-separate border-spacing-0">
           <thead className="sticky top-14 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
             <tr>
               <th className="sticky left-0 z-40 bg-gray-50 text-left px-3 py-1.5 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
