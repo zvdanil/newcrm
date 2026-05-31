@@ -479,68 +479,88 @@ export function JournalPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-              {activity?.has_group_classes && (
-                <>
-                  <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
-                    <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse flex-shrink-0" />
-                        <span>ГРУПОВЕ ЗАНЯТТЯ</span>
-                        {groupTeachers.length > 0 && (
-                          <span className="text-iris-400 font-medium normal-case">
-                            ({groupTeachers.map((t, i) => (
-                              <span key={t.id}>
-                                {i > 0 && ', '}
-                                <Link to={`/staff/${t.id}`} className="hover:text-iris-700 underline underline-offset-2 transition-colors">{t.full_name}</Link>
-                              </span>
-                            ))})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {dates.map(d => {
-                      const gLog = groupLogs[d]
-                      const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
-                      const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
-                      const baseBg = isWeekend ? 'bg-amber-50/30' : ''
-                      return (
-                        <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
-                          {!gLog || gLog.status !== 'conducted' ? (
-                            <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
-                              className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
-                          ) : (
-                            <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
-                              className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black hover:bg-iris-600 transition-colors">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                  <tr className="bg-gray-50/30">
-                    <td className="sticky left-0 z-10 px-3 py-1 font-black text-gray-400 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>ДОДАТКОВІ ЗАНЯТТЯ</span>
-                        {additionalTeachers.length > 0 && (
-                          <span className="text-gray-400 font-medium normal-case">
-                            ({additionalTeachers.map((t, i) => (
-                              <span key={t.id}>
-                                {i > 0 && ', '}
-                                <Link to={`/staff/${t.id}`} className="hover:text-iris-600 underline underline-offset-2 transition-colors">{t.full_name}</Link>
-                              </span>
-                            ))})
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    {dates.map(d => {
-                      const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
-                      return (
-                        <td key={`additional-${d}`} className={`border-r border-b border-gray-200 min-w-[32px] ${isWeekend ? 'bg-amber-50/20' : ''}`} />
-                      )
-                    })}
-                  </tr>
-                </>
-              )}
+               {activity?.has_group_classes && (
+                 <>
+                   <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
+                     <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
+                       <div className="flex items-center gap-1.5 flex-wrap">
+                         <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse flex-shrink-0" />
+                         <span>ГРУПОВЕ ЗАНЯТТЯ</span>
+                         {groupTeachers.length > 0 && (
+                           <span className="text-iris-400 font-medium normal-case">
+                             ({groupTeachers.map((t, i) => (
+                               <span key={t.id}>
+                                 {i > 0 && ', '}
+                                 <Link to={`/staff/${t.id}`} className="hover:text-iris-700 underline underline-offset-2 transition-colors">{t.full_name}</Link>
+                               </span>
+                             ))})
+                           </span>
+                         )}
+                       </div>
+                     </td>
+                     {dates.map(d => {
+                       const gLog = groupLogs[d]
+                       const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                       const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
+                       const baseBg = isWeekend ? 'bg-amber-50/30' : ''
+                       return (
+                         <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                           {!gLog || gLog.status !== 'conducted' ? (
+                             <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
+                               className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
+                           ) : (
+                             <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
+                               className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black hover:bg-iris-600 transition-colors">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
+                           )}
+                         </td>
+                       )
+                     })}
+                   </tr>
+                   <tr className="bg-gray-50/30">
+                     <td className="sticky left-0 z-10 px-3 py-1 font-black text-gray-400 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
+                       <div className="flex items-center gap-1.5 flex-wrap">
+                         <span>ДОДАТКОВІ ЗАНЯТТЯ</span>
+                         {additionalTeachers.length > 0 && (
+                           <span className="text-gray-400 font-medium normal-case">
+                             ({additionalTeachers.map((t, i) => (
+                               <span key={t.id}>
+                                 {i > 0 && ', '}
+                                 <Link to={`/staff/${t.id}`} className="hover:text-iris-600 underline underline-offset-2 transition-colors">{t.full_name}</Link>
+                               </span>
+                             ))})
+                           </span>
+                         )}
+                       </div>
+                     </td>
+                     {dates.map(d => {
+                       const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                       return (
+                         <td key={`additional-${d}`} className={`border-r border-b border-gray-200 min-w-[32px] ${isWeekend ? 'bg-amber-50/20' : ''}`} />
+                       )
+                     })}
+                   </tr>
+                 </>
+               )}
+               {!activity?.has_group_classes && (groupTeachers.length > 0 || additionalTeachers.length > 0) && (
+                 <tr className="bg-gray-50/50">
+                   <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-gray-500 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
+                     <div className="flex items-center gap-1.5 flex-wrap">
+                       <span>ПЕДАГОГ</span>
+                       <span className="text-gray-400 font-medium normal-case">
+                         ({[...groupTeachers, ...additionalTeachers].map((t, i) => (
+                           <span key={t.id}>
+                             {i > 0 && ', '}
+                             <Link to={`/staff/${t.id}`} className="hover:text-iris-600 underline underline-offset-2 transition-colors">{t.full_name}</Link>
+                           </span>
+                         ))})
+                       </span>
+                     </div>
+                   </td>
+                   {dates.map(d => (
+                     <td key={`teacher-${d}`} className="border-r border-b border-gray-200 min-w-[32px]" />
+                   ))}
+                 </tr>
+               )}
 
               {groupedData.map((group) => (
                 <React.Fragment key={group.groupName || 'all'}>
