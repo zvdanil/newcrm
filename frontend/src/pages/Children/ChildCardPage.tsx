@@ -35,6 +35,7 @@ export function ChildCardPage() {
 
   const [editing, setEditing] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [ym, setYm] = useState(currentYM())
   const [form, setForm] = useState({
     full_name: '',
     birth_date: '',
@@ -228,10 +229,10 @@ export function ChildCardPage() {
       {id && <ParentAccessBlock childId={id} />}
 
       {/* Balances */}
-      {id && <BalancesBlock childId={id} canEdit={isOwner} />}
+      {id && <BalancesBlock childId={id} canEdit={isOwner} ym={ym} setYm={setYm} />}
 
       {/* Enrollments (includes individual tariff management) */}
-      {id && <EnrollmentsBlock childId={id} canEdit={canEdit} canEditTariffs={isOwner} />}
+      {id && <EnrollmentsBlock childId={id} canEdit={canEdit} canEditTariffs={isOwner} viewedYm={ym} />}
     </div>
   )
 }
@@ -265,7 +266,7 @@ const EMPTY_TARIFF_FORM = {
   l2_refund_per_absence: '',
 }
 
-function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: string; canEdit: boolean; canEditTariffs: boolean }) {
+function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { childId: string; canEdit: boolean; canEditTariffs: boolean; viewedYm: string }) {
   const qc = useQueryClient()
   const [showForm, setShowForm]       = useState(false)
   const [freezeId, setFreezeId]       = useState<string | null>(null)
@@ -318,9 +319,17 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
     staleTime: 30_000,
   })
 
-  // Active individual tariff by activity_id
+  // Individual tariff active in the viewed month (not necessarily the current one)
+  const viewedMonthDate = new Date(`${viewedYm}-01`)
   const indTariffByActivity = individualTariffs.reduce<Record<string, IndividualTariff>>((acc, t) => {
-    if (t.valid_to === null) acc[t.activity_id] = t
+    const validFrom = new Date(t.valid_from)
+    const validTo   = t.valid_to ? new Date(t.valid_to) : null
+    if (validFrom <= viewedMonthDate && (validTo === null || validTo > viewedMonthDate)) {
+      // Prefer the most-recent valid_from if multiple overlap (shouldn't happen in correct SCD2 data)
+      if (!acc[t.activity_id] || new Date(acc[t.activity_id].valid_from) < validFrom) {
+        acc[t.activity_id] = t
+      }
+    }
     return acc
   }, {})
 
@@ -1071,9 +1080,8 @@ function computePreview(amount: number, accruals: OpenAccrual[]) {
   })
 }
 
-function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean }) {
+function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEdit: boolean; ym: string; setYm: (v: string) => void }) {
   const qc = useQueryClient()
-  const [ym, setYm] = useState(currentYM())
   const [showInitForm, setShowInitForm] = useState(false)
   const [showPayForm, setShowPayForm] = useState(false)
   const [initForm, setInitForm] = useState({ account_id: '', amount: '', note: '' })
