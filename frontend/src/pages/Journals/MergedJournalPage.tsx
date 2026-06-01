@@ -73,18 +73,18 @@ function isFrozen(status: string, frozenFrom: string | null, frozenTo: string | 
   return dateStr >= frozenFrom && dateStr <= frozenTo
 }
 
-// ─── Optimized Attendance cell ────────────────────────────────────────────────
+// ─── Attendance cell ──────────────────────────────────────────────────────────
 
 interface CellProps {
   enrollmentId: string
   dateStr:      string
   log:          any
-  frozen:        boolean
+  frozen:       boolean
   isHighlighted: boolean
-  onMark:        (enrollmentId: string, dateStr: string) => void
-  onOpenDialog:  (enrollmentId: string, dateStr: string, context: 'edit' | 'note') => void
-  onHover:       (dateStr: string | null) => void
-  pending:       boolean
+  onMark:       (enrollmentId: string, dateStr: string) => void
+  onOpenDialog: (enrollmentId: string, dateStr: string, context: 'edit' | 'note') => void
+  onHover:      (dateStr: string | null) => void
+  pending:      boolean
 }
 
 const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, onMark, onOpenDialog, onHover, pending }: CellProps) => {
@@ -125,7 +125,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
-      className={`${baseClasses} font-bold transition-all disabled:opacity-40 ${STATUS_STYLE[log.status as AttendanceStatus]}`}
+      className={`${baseClasses} font-bold disabled:opacity-40 ${STATUS_STYLE[log.status as AttendanceStatus]}`}
     >
       {log.status === 'special' ? (
         <span className="font-black leading-tight">{Number(log.custom_amount).toFixed(0)}</span>
@@ -147,6 +147,8 @@ const ACTIVITY_COLORS = [
   'bg-pink-100 text-pink-700',
   'bg-cyan-100 text-cyan-700',
 ]
+
+// ─── Attendance dialog ────────────────────────────────────────────────────────
 
 function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, onSave, onDelete, onClose }: any) {
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
@@ -207,14 +209,15 @@ export function MergedJournalPage() {
   const baseDate = searchParams.get('date') ?? toStr(new Date())
   const [from, to] = getRange(baseDate, mode)
 
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null)
-  const [dialogTarget, setDialogTarget] = useState<any | null>(null)
-
   const setMode = (m: Mode) => setSearchParams({ mode: m, date: baseDate })
   const setDate = (d: string) => setSearchParams({ mode, date: d })
 
   const [activeActivityIds, setActiveActivityIds] = useState<Set<string> | null>(null)
-  const [groupFilter, setGroupFilter] = useState<string>('')
+  const [groupFilter, setGroupFilter]             = useState<string>('')
+  const [groupMode, setGroupMode]                 = useState<'group' | 'alphabetical'>('group')
+  const [hoveredDate, setHoveredDate]             = useState<string | null>(null)
+  const [hoveredRowId, setHoveredRowId]           = useState<string | null>(null)
+  const [dialogTarget, setDialogTarget]           = useState<any | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['merged-journal', id, from, to],
@@ -242,9 +245,11 @@ export function MergedJournalPage() {
   }, [markMutation])
 
   const mj         = data?.merged_journal
-  const activities  = data?.activities ?? []
-  const dates       = data?.dates ?? []
-  const allRows     = data?.rows ?? []
+  const activities = data?.activities ?? []
+  const dates      = data?.dates ?? []
+  const allRows    = data?.rows ?? []
+  const hasActCol  = activities.length > 1
+  const totalCols  = 1 + (hasActCol ? 1 : 0) + dates.length
 
   const activityColorMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -260,13 +265,36 @@ export function MergedJournalPage() {
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }))
   }, [allRows])
 
-  const rows = useMemo(() => {
-    return allRows.filter(r => {
-      if (groupFilter && r.group_id !== groupFilter) return false
-      if (activeActivityIds !== null && !activeActivityIds.has(r.activity_id)) return false
-      return true
-    }).sort((a, b) => a.child_name.localeCompare(b.child_name))
-  }, [allRows, groupFilter, activeActivityIds])
+  const rows = useMemo(() => allRows.filter(r => {
+    if (groupFilter && r.group_id !== groupFilter) return false
+    if (activeActivityIds !== null && !activeActivityIds.has(r.activity_id)) return false
+    return true
+  }).sort((a, b) => a.child_name.localeCompare(b.child_name)), [allRows, groupFilter, activeActivityIds])
+
+  const groupedData = useMemo(() => {
+    if (groupMode === 'alphabetical') return [{ groupName: null, rows }]
+    const map: Record<string, typeof rows> = {}
+    rows.forEach(r => {
+      const g = r.group_name || 'БЕЗ ГРУПИ'
+      if (!map[g]) map[g] = []
+      map[g].push(r)
+    })
+    return Object.entries(map).map(([groupName, rows]) => ({ groupName, rows }))
+  }, [rows, groupMode])
+
+  const columnTotals = useMemo(() => {
+    const totals: Record<string, { present: number; excused: number; unexcused: number }> = {}
+    dates.forEach(d => { totals[d] = { present: 0, excused: 0, unexcused: 0 } })
+    rows.forEach(r => {
+      Object.entries(r.logs).forEach(([d, log]: [string, any]) => {
+        if (!totals[d]) return
+        if (log.status === 'present' || log.status === 'special') totals[d].present++
+        else if (log.status === 'absent_excused') totals[d].excused++
+        else if (log.status === 'absent_unexcused') totals[d].unexcused++
+      })
+    })
+    return totals
+  }, [dates, rows])
 
   const toggleActivity = (actId: string) => {
     setActiveActivityIds(prev => {
@@ -284,14 +312,17 @@ export function MergedJournalPage() {
   if (!mj) return <div className="py-12 text-center text-sm text-gray-400">Журнал не знайдено</div>
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pb-20">
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-gray-500">
         <Link to="/journals" className="hover:text-iris-600 transition-colors">Журнали</Link>
         <span>/</span>
         <span className="text-gray-900 font-bold">{mj.name}</span>
       </div>
 
+      {/* Controls */}
       <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex flex-wrap items-center gap-3">
+        {/* Mode switcher */}
         <div className="flex p-0.5 bg-gray-50 rounded-xl text-[10px] font-black">
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
@@ -301,6 +332,7 @@ export function MergedJournalPage() {
           ))}
         </div>
 
+        {/* Navigation */}
         <div className="flex items-center gap-1">
           <button onClick={() => setDate(navigate(baseDate, mode, -1))} className="p-1.5 border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-400">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
@@ -311,15 +343,31 @@ export function MergedJournalPage() {
           </button>
         </div>
 
+        {/* Group filter dropdown */}
         {groups.length > 0 && (
           <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
-            className="text-[10px] font-black border border-gray-100 rounded-xl px-3 py-1.5 text-gray-600 focus:ring-iris-500 focus:border-iris-500 uppercase">
+            className="text-[10px] font-black border border-gray-100 rounded-xl px-3 py-1.5 text-gray-600 focus:ring-iris-500 focus:border-iris-500 uppercase bg-gray-50">
             <option value="">УСІ ГРУПИ</option>
             {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         )}
+
+        {/* Group sort toggle */}
+        <div className="flex p-0.5 bg-gray-50 rounded-xl text-[10px] font-black">
+          <button onClick={() => setGroupMode('group')}
+            className={`px-3 py-1.5 rounded-lg transition-all ${groupMode === 'group' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>
+            ПО ГРУПАХ
+          </button>
+          <button onClick={() => setGroupMode('alphabetical')}
+            className={`px-3 py-1.5 rounded-lg transition-all ${groupMode === 'alphabetical' ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400'}`}>
+            ПО ФІО
+          </button>
+        </div>
+
+        <span className="text-[10px] font-bold text-gray-400 ml-auto">{rows.length} дітей</span>
       </div>
 
+      {/* Activity filter chips */}
       {activities.length > 1 && (
         <div className="flex flex-wrap gap-1.5">
           {activities.map(a => {
@@ -335,74 +383,139 @@ export function MergedJournalPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible relative">
-        <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-14 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            <tr>
-              <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100 min-w-[180px]">Дитина</th>
-              {activities.length > 1 && <th className="z-20 bg-gray-50 text-left px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-100">Журнал</th>}
-              {dates.map(d => {
-                const { day, num } = formatDayCol(d)
-                const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
-                const baseBg = isWeekend ? 'bg-amber-50' : 'bg-gray-50'
-                const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
-                return (
-                  <th key={d} onMouseEnter={() => setHoveredDate(d)} onMouseLeave={() => setHoveredDate(null)}
-                    className={`px-0.5 py-1 text-center border-b border-gray-100 transition-colors ${hoveredDate === d ? hoverBg : baseBg}`}>
-                    <div className="text-[9px] text-gray-400 font-bold uppercase">{day}</div>
-                    <div className={`text-xs font-black ${hoveredDate === d ? 'text-iris-600' : 'text-gray-800'}`}>{num}</div>
-                  </th>
-                )
-              })}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {rows.map(row => {
-              const actColor = activityColorMap.get(row.activity_id) ?? ACTIVITY_COLORS[0]
-              const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
-
-              return (
-                <tr key={row.enrollment_id} className="hover:bg-iris-100/50 transition-colors group">
-                  <td className="sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-gray-50 bg-white group-hover:bg-iris-100 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors">
-                    <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors">
-                      {row.child_name}
-                    </Link>
-                    {row.group_name && <div className="text-[8px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>}
-                  </td>
-                  {activities.length > 1 && (
-                    <td className="px-2 py-1.5">
-                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
-                    </td>
-                  )}
-                  {dates.map(dateStr => {
-                    const isColHovered = hoveredDate === dateStr
-                    const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
-                    
-                    let bgClass = ''
-                    if (isColHovered) bgClass = isWeekend ? 'bg-amber-100 group-hover:bg-amber-200/60' : 'bg-iris-100 group-hover:bg-iris-200/60'
-                    else if (isWeekend) bgClass = 'bg-amber-50/30'
-
-                    return (
-                      <td key={dateStr} className={`px-0.5 py-0.5 text-center transition-colors ${bgClass}`}>
-                        <AttendanceCell
-                        enrollmentId={row.enrollment_id}
-                        dateStr={dateStr}
-                        log={row.logs[dateStr]}
-                        frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
-                        isHighlighted={hoveredDate === dateStr}
-                        onMark={handleQuickMark}
-                        onOpenDialog={(eId, dStr, context) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr], context })}
-                        onHover={setHoveredDate}
-                        pending={markMutation.isPending}
-                      />
-                    </td>
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        {rows.length === 0 ? (
+          <div className="py-12 text-center text-sm text-gray-400">
+            {activities.length === 0
+              ? 'У цьому журналі ще немає активностей'
+              : 'Немає записаних дітей для вибраних фільтрів'}
+          </div>
+        ) : (
+          <table className="w-auto text-sm border-separate border-spacing-0">
+            <thead className="sticky top-14 z-30 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+              {/* Date header row */}
+              <tr>
+                <th className="sticky left-0 z-40 bg-gray-50 text-left px-4 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[180px]">Дитина</th>
+                {hasActCol && (
+                  <th className="bg-gray-50 text-left px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[100px]">Журнал</th>
+                )}
+                {dates.map(d => {
+                  const { day, num } = formatDayCol(d)
+                  const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                  const baseBg  = isWeekend ? 'bg-amber-50' : 'bg-gray-50'
+                  const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
+                  return (
+                    <th key={d}
+                      onMouseEnter={() => setHoveredDate(d)}
+                      onMouseLeave={() => setHoveredDate(null)}
+                      className={`px-0.5 py-1 text-center border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                      <div className="text-[8px] text-gray-400 font-bold uppercase leading-none">{day}</div>
+                      <div className={`text-[11px] font-black leading-tight ${hoveredDate === d ? 'text-iris-700' : 'text-gray-800'}`}>{num}</div>
+                    </th>
                   )
                 })}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              </tr>
+              {/* Підсумки row */}
+              <tr className="bg-white">
+                <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+                {hasActCol && <th className="bg-white border-b border-gray-200" />}
+                {dates.map(d => {
+                  const t = columnTotals[d]
+                  const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                  const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
+                  const baseBg  = isWeekend ? 'bg-amber-50/50' : ''
+                  return (
+                    <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                      <div className="flex flex-col items-center font-black leading-none">
+                        {t.present   > 0 && <span className="text-green-500">{t.present}</span>}
+                        {t.excused   > 0 && <span className="text-amber-500">{t.excused}</span>}
+                        {t.unexcused > 0 && <span className="text-red-500">{t.unexcused}</span>}
+                      </div>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {groupedData.map((group) => (
+                <React.Fragment key={group.groupName || 'all'}>
+                  {group.groupName && (
+                    <tr className="bg-gray-100/30">
+                      <td colSpan={totalCols}
+                        className="sticky left-0 z-10 px-4 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-200">
+                        {group.groupName}
+                      </td>
+                    </tr>
+                  )}
+                  {group.rows.map(row => {
+                    const isRowHovered = hoveredRowId === row.enrollment_id
+                    const actColor = activityColorMap.get(row.activity_id) ?? ACTIVITY_COLORS[0]
+                    const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
+
+                    return (
+                      <tr key={row.enrollment_id}
+                        onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
+                        onMouseLeave={() => setHoveredRowId(null)}
+                        className={`transition-colors ${isRowHovered ? 'bg-iris-100/50' : ''}`}>
+
+                        {/* Child name */}
+                        <td className={`sticky left-0 z-10 px-4 py-1.5 whitespace-nowrap border-r border-b border-gray-200 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors min-w-[180px] ${isRowHovered ? 'bg-iris-100' : 'bg-white'}`}>
+                          <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
+                            {row.child_name}
+                          </Link>
+                          {groupMode === 'alphabetical' && row.group_name && (
+                            <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                          )}
+                          {row.status === 'frozen' && (
+                            <div className="text-[7px] font-bold text-blue-400 leading-none mt-0.5">❄ Заморожено</div>
+                          )}
+                        </td>
+
+                        {/* Activity badge */}
+                        {hasActCol && (
+                          <td className={`px-2 py-1.5 border-r border-b border-gray-200 transition-colors ${isRowHovered ? 'bg-iris-50/50' : ''}`}>
+                            <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg uppercase whitespace-nowrap ${actColor}`}>{actName}</span>
+                          </td>
+                        )}
+
+                        {/* Attendance cells */}
+                        {dates.map(dateStr => {
+                          const isColHover = hoveredDate === dateStr
+                          const isCross    = isRowHovered && isColHover
+                          const isWeekend  = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
+
+                          let bg = ''
+                          if (isCross)        bg = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
+                          else if (isColHover) bg = isWeekend ? 'bg-amber-100'   : 'bg-iris-100'
+                          else if (isWeekend)  bg = 'bg-amber-50/30'
+                          else if (isRowHovered) bg = ''
+
+                          return (
+                            <td key={dateStr}
+                              className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${bg}`}>
+                              <AttendanceCell
+                                enrollmentId={row.enrollment_id}
+                                dateStr={dateStr}
+                                log={row.logs[dateStr]}
+                                frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
+                                isHighlighted={isCross}
+                                onMark={handleQuickMark}
+                                onOpenDialog={(eId, dStr, context) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr], context })}
+                                onHover={setHoveredDate}
+                                pending={markMutation.isPending}
+                              />
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {dialogTarget && (
