@@ -1568,7 +1568,12 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                       {/* Нарахування for archived-enrollment accounts */}
                       {archEnriched.length > 0 && (
                         <div>
-                          <p className="font-bold text-red-500 mb-1">Нарахування</p>
+                          <div className="flex justify-between mb-1">
+                            <p className="font-bold text-red-500">Нарахування</p>
+                            <span className="font-bold font-mono text-red-500">
+                              −{Object.values(archByActivity).reduce((s, { eff }) => s + eff, 0).toFixed(2)}
+                            </span>
+                          </div>
                           {Object.entries(archByActivity).map(([name, { orig, eff, adjusted, activityId }]) => {
                             const att = activityId ? attendanceCountMap[activityId] : undefined
                             return (
@@ -1706,7 +1711,14 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     {/* Accruals grouped by activity — with before→after for adjusted ones */}
                     {(enriched.length > 0 || zeroActivities.length > 0) && (
                       <div>
-                        <p className="font-bold text-red-500 mb-1">Нарахування</p>
+                        <div className="flex justify-between mb-1">
+                          <p className="font-bold text-red-500">Нарахування</p>
+                          {enriched.length > 0 && (
+                            <span className="font-bold font-mono text-red-500">
+                              −{Object.values(byActivity).reduce((s, { eff }) => s + eff, 0).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                         {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => {
                           const isArchived = activityId ? activityFlagsMap[activityId] === false : false
                           const att = activityId ? attendanceCountMap[activityId] : undefined
