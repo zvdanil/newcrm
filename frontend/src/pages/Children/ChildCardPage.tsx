@@ -1798,14 +1798,22 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                         {/* Activities enrolled but with no accrual this month */}
                         {zeroActivities.map((e) => {
                           const att = attendanceCountMap[e.activity_id]
+                          const tariffLabel = e.effective_tariff_type
+                            ? (TARIFF_TYPE_LABEL as Record<string, string>)[e.effective_tariff_type] ?? e.effective_tariff_type
+                            : null
                           return (
                             <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <span className="truncate">{e.activity_name}</span>
                                 {(att?.visit_count || att?.excused_count) && (
                                   <span className="shrink-0">
                                     {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
                                     {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                  </span>
+                                )}
+                                {tariffLabel && e.effective_tariff_price != null && (
+                                  <span className={`shrink-0 text-xs ${e.has_individual_tariff ? 'text-iris-400' : 'text-gray-300'}`}>
+                                    {tariffLabel} · {e.effective_tariff_price.toFixed(0)} грн
                                   </span>
                                 )}
                               </div>

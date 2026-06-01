@@ -1161,13 +1161,16 @@ export async function childrenRoutes(app: FastifyInstance) {
       const lastDay = new Date(y, m, 0).getDate()
       const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
-      const [enrollments, attendanceLogs] = await Promise.all([
+      const billingDate = new Date(from)
+
+      const [enrollments, attendanceLogs, indTariffs, baseTariffs] = await Promise.all([
         db.selectFrom('enrollments as e')
           .innerJoin('activities as a', 'a.id', 'e.activity_id')
           .select([
             'e.account_id', 'e.status as enrollment_status',
             'e.start_date', 'e.end_date',
             'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+            'a.tariff_type',
           ])
           .where('e.child_id', '=', id)
           .execute(),
@@ -1178,7 +1181,49 @@ export async function childrenRoutes(app: FastifyInstance) {
           .where('al.date', '>=', new Date(from))
           .where('al.date', '<=', new Date(to))
           .execute(),
+
+        // Individual tariffs active on the first day of the viewed month
+        db.selectFrom('child_individual_tariffs')
+          .select(['activity_id', 'tariff_type', 'price'])
+          .where('child_id', '=', id)
+          .where('valid_from', '<=', billingDate)
+          .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', billingDate)]))
+          .orderBy('valid_from', 'desc')
+          .execute(),
+
+        // Base tariffs active on the first day of the viewed month
+        db.selectFrom('tariffs')
+          .select(['activity_id', 'base_fee'])
+          .where('valid_from', '<=', billingDate)
+          .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', billingDate)]))
+          .orderBy('valid_from', 'desc')
+          .execute(),
       ])
+
+      // Maps: activity_id → tariff (first = most recent due to orderBy desc)
+      const indTariffMap = new Map<string, typeof indTariffs[0]>()
+      for (const t of indTariffs) if (!indTariffMap.has(t.activity_id)) indTariffMap.set(t.activity_id, t)
+      const baseTariffMap = new Map<string, typeof baseTariffs[0]>()
+      for (const t of baseTariffs) if (!baseTariffMap.has(t.activity_id)) baseTariffMap.set(t.activity_id, t)
+
+      const enrichedEnrollments = enrollments.map((e) => {
+        const ind  = indTariffMap.get(e.activity_id)
+        const base = baseTariffMap.get(e.activity_id)
+        return {
+          account_id:             e.account_id,
+          enrollment_status:      e.enrollment_status,
+          start_date:             e.start_date,
+          end_date:               e.end_date,
+          activity_id:            e.activity_id,
+          activity_name:          e.activity_name,
+          activity_is_active:     e.activity_is_active,
+          effective_tariff_type:  ind?.tariff_type ?? e.tariff_type ?? null,
+          effective_tariff_price: ind
+            ? parseFloat(ind.price as string)
+            : base ? parseFloat(base.base_fee as string) : null,
+          has_individual_tariff:  !!ind,
+        }
+      })
 
       const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
       for (const log of attendanceLogs) {
@@ -1189,7 +1234,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       }
 
       return {
-        enrollments,
+        enrollments: enrichedEnrollments,
         attendance: Object.entries(attendanceMap).map(([activity_id, data]) => ({ activity_id, ...data })),
       }
     }

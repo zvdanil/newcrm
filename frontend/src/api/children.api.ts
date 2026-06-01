@@ -151,6 +151,9 @@ export interface MonthStatsEnrollment {
   activity_id: string
   activity_name: string
   activity_is_active: boolean
+  effective_tariff_type:  string | null
+  effective_tariff_price: number | null
+  has_individual_tariff:  boolean
 }
 
 export interface MonthStatsAttendance {
