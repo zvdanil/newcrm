@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
@@ -232,7 +233,13 @@ export async function journalsRoutes(app: FastifyInstance) {
             'g.name as group_name'
           ])
           .where('e.activity_id', '=', activity_id)
-          .where('e.status', '!=', 'archived')
+          .where(eb => eb.or([
+            eb('e.status', '!=', 'archived'),
+            eb.and([
+              eb('e.end_date', '>=', sql<Date>`CAST(${from} AS DATE)`),
+              eb('e.start_date', '<=', sql<Date>`CAST(${to} AS DATE)`)
+            ])
+          ]))
           .orderBy('c.full_name', 'asc')
           .execute(),
 

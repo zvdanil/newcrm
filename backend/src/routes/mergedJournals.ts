@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 
@@ -175,7 +176,13 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
       .innerJoin('children as c', 'c.id', 'e.child_id')
       .leftJoin('groups as g', 'g.id', 'c.group_id')
       .where('e.activity_id', 'in', activityIds)
-      .where('e.status', '!=', 'archived')
+      .where(eb => eb.or([
+        eb('e.status', '!=', 'archived'),
+        eb.and([
+          eb('e.end_date', '>=', sql<Date>`CAST(${from} AS DATE)`),
+          eb('e.start_date', '<=', sql<Date>`CAST(${to} AS DATE)`)
+        ])
+      ]))
       .select([
         'e.id as enrollment_id', 'e.activity_id', 'e.status',
         'e.frozen_from', 'e.frozen_to', 'e.account_id',
