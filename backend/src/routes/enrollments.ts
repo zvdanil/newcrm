@@ -17,13 +17,20 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         .leftJoin('tariffs as t', (join) =>
           join.onRef('t.activity_id', '=', 'e.activity_id').on('t.valid_to', 'is', null)
         )
+        .leftJoin(
+          db.selectFrom('tariffs')
+            .select(['activity_id', db.fn.min('valid_from').as('first_valid_from')])
+            .groupBy('activity_id')
+            .as('t_first'),
+          (join) => join.onRef('t_first.activity_id', '=', 'e.activity_id')
+        )
         .select([
           'e.id', 'e.child_id', 'e.status', 'e.start_date', 'e.end_date',
           'e.frozen_from', 'e.frozen_to', 'e.note', 'e.created_at',
           'a.id as activity_id', 'a.name as activity_name',
           'a.tariff_type', 'a.is_rigid',
           'ac.id as account_id', 'ac.name as account_name',
-          't.base_fee', 't.valid_from as tariff_valid_from',
+          't.base_fee', 't_first.first_valid_from as tariff_valid_from',
         ])
         .where('e.child_id', '=', req.params.childId)
         .orderBy('e.status', 'asc')
