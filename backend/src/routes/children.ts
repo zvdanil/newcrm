@@ -1128,6 +1128,7 @@ export async function childrenRoutes(app: FastifyInstance) {
           .innerJoin('activities as a', 'a.id', 'e.activity_id')
           .select([
             'e.account_id', 'e.status as enrollment_status',
+            'e.start_date', 'e.end_date',
             'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
           ])
           .where('e.child_id', '=', id)

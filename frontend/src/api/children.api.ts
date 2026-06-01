@@ -142,6 +142,8 @@ export const childrenApi = {
 export interface MonthStatsEnrollment {
   account_id: string
   enrollment_status: 'active' | 'frozen' | 'archived'
+  start_date: string | null
+  end_date: string | null
   activity_id: string
   activity_name: string
   activity_is_active: boolean

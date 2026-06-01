@@ -1697,14 +1697,22 @@ function BalancesBlock({ childId, canEdit }: { childId: string; canEdit: boolean
                     const unlinkedTotal = unlinkedAdjs.reduce((s, a) => s + Number(a.amount), 0)
                     // billing_month for the selected month (used as fallback for per_lesson)
                     const selectedBillingMonth = `${ym}-01`
+                    const monthFirstDay = new Date(`${ym}-01`)
+                    const [ymY, ymM] = ym.split('-').map(Number)
+                    const monthLastDay = new Date(ymY, ymM, 0) // last day of selected month
                     // Active/frozen enrolled activities with no accrual this month for this account
                     const activityNamesWithAccrual = new Set(Object.keys(byActivity))
                     const zeroActivities = (monthStats?.enrollments ?? [])
-                      .filter(e =>
-                        e.account_id === bal.account_id &&
-                        (e.enrollment_status === 'active' || e.enrollment_status === 'frozen') &&
-                        !activityNamesWithAccrual.has(e.activity_name)
-                      )
+                      .filter(e => {
+                        if (e.account_id !== bal.account_id) return false
+                        if (e.enrollment_status !== 'active' && e.enrollment_status !== 'frozen') return false
+                        if (activityNamesWithAccrual.has(e.activity_name)) return false
+                        // hide if enrollment ended before this month started
+                        if (e.end_date && new Date(e.end_date) < monthFirstDay) return false
+                        // hide if enrollment hadn't started yet by end of this month
+                        if (e.start_date && new Date(e.start_date) > monthLastDay) return false
+                        return true
+                      })
                       .filter((e, i, arr) => arr.findIndex(x => x.activity_id === e.activity_id) === i)
                     return (
                   <div className="px-4 py-3 space-y-2 text-xs">
