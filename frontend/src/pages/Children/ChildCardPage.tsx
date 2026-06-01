@@ -806,15 +806,16 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                       <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
                         <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
                         {indTariff ? (
-                          <>
-                            {e.base_fee && <span className="line-through">{Number(e.base_fee).toFixed(0)} грн</span>}
-                            <span className="text-iris-600 font-medium">
-                              {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн
-                            </span>
-                          </>
-                        ) : (
-                          e.base_fee && <span>· {Number(e.base_fee).toFixed(0)} грн</span>
-                        )}
+                          <span className="text-iris-500">
+                            · (тариф з {new Date(indTariff.valid_from).toLocaleDateString('uk-UA')} {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн)
+                          </span>
+                        ) : e.base_fee ? (
+                          <span>
+                            · {e.current_tariff_valid_from
+                              ? `(тариф з ${new Date(e.current_tariff_valid_from).toLocaleDateString('uk-UA')} ${Number(e.base_fee).toFixed(0)} грн)`
+                              : `${Number(e.base_fee).toFixed(0)} грн`}
+                          </span>
+                        ) : null}
                         {e.status === 'frozen' && e.frozen_to && (
                           <span>· заморожена до {new Date(e.frozen_to).toLocaleDateString('uk-UA')}</span>
                         )}
