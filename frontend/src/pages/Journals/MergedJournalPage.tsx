@@ -384,7 +384,7 @@ export function MergedJournalPage() {
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible">
         {rows.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">
             {activities.length === 0
