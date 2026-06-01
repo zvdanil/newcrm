@@ -581,3 +581,49 @@ export async function recalcActivityAccruals(
 
   return { replaced, refunded }
 }
+
+/**
+ * Creates monthly ACCRUALs for a child who has a monthly individual tariff on a non-monthly activity.
+ * Called after recalcActivityAccruals, which already soft-deletes the per-lesson ACCRUALs but does not
+ * create the monthly ones (because the activity's tariff_type is not 'monthly').
+ */
+export async function recalcMonthlyOverrideForChild(
+  childId: string,
+  activityId: string,
+  fromDate: Date,
+  toDate: Date,
+  triggeredBy: string | null,
+): Promise<void> {
+  const enrollment = await db
+    .selectFrom('enrollments')
+    .select(['id as enrollment_id', 'account_id', 'start_date'])
+    .where('child_id', '=', childId)
+    .where('activity_id', '=', activityId)
+    .where('status', 'in', ['active', 'frozen'])
+    .executeTakeFirst()
+
+  if (!enrollment) return
+
+  const dummyResult: RunResult = { billing_month: '', created_count: 0, adjusted_count: 0, skipped_count: 0 }
+  const cur = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1)
+  const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1)
+
+  while (cur <= end) {
+    const monthStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
+    const billingDate = new Date(monthStr)
+
+    const ind = await getChildIndividualTariff(childId, activityId, billingDate)
+    if (ind?.tariff_type === 'monthly') {
+      const price = Math.round(parseFloat(ind.price as string) * 100) / 100
+      const startDate = new Date(String(enrollment.start_date))
+      if (price > 0 && startDate <= billingDate) {
+        await billMonthlyEnrollment(
+          enrollment.enrollment_id, childId, enrollment.account_id as string,
+          activityId, price, monthStr, billingDate, triggeredBy, dummyResult,
+        )
+      }
+    }
+
+    cur.setMonth(cur.getMonth() + 1)
+  }
+}

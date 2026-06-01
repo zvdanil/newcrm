@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
-import { recalcActivityAccruals } from '../services/billingRunService.js'
+import { recalcActivityAccruals, recalcMonthlyOverrideForChild } from '../services/billingRunService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
@@ -648,6 +648,16 @@ export async function childrenRoutes(app: FastifyInstance) {
         const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
         const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
         await recalcActivityAccruals(activity_id, monthStart, curMonthStart, req.user.sub, req.params.id)
+
+        // Monthly individual tariff on a non-monthly activity:
+        // recalcActivityAccruals deletes per-lesson ACCRUALs but cannot create monthly ones — do it here
+        if (tariff_type === 'monthly') {
+          const act = await db.selectFrom('activities').select('tariff_type')
+            .where('id', '=', activity_id).executeTakeFirst()
+          if (act && act.tariff_type !== 'monthly') {
+            await recalcMonthlyOverrideForChild(req.params.id, activity_id, monthStart, curMonthStart, req.user.sub)
+          }
+        }
 
         // For smart individual tariffs, also recalculate the smart benefit REFUND for each affected month
         if (tariff_type === 'smart') {
