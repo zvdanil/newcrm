@@ -414,6 +414,14 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
     },
   })
 
+  const recalcTariffMutation = useMutation({
+    mutationFn: (tariffId: string) => childrenApi.recalcIndividualTariff(childId, tariffId),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+    },
+  })
+
   const setDiscountMutation = useMutation({
     mutationFn: () => billingApi.setGlobalDiscount(childId, { discount_pct: Number(discountForm.discount_pct), valid_from: discountForm.valid_from }),
     onSuccess:  () => { qc.invalidateQueries({ queryKey: ['child-global-discount', childId] }); setShowDiscountForm(false); setDiscountError(null) },
@@ -809,10 +817,21 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs }: { childId: strin
                       </span>
                       <div className="flex gap-2 text-xs text-gray-400">
                         {canEditTariffs && (
-                          <button onClick={() => openTariffForm(e.id, e.activity_id)}
-                            className="hover:text-iris-600 transition-colors">
-                            {indTariff ? 'тариф' : '+ тариф'}
-                          </button>
+                          <>
+                            <button onClick={() => openTariffForm(e.id, e.activity_id)}
+                              className="hover:text-iris-600 transition-colors">
+                              {indTariff ? 'тариф' : '+ тариф'}
+                            </button>
+                            {indTariff && (
+                              <button
+                                onClick={() => recalcTariffMutation.mutate(indTariff.id)}
+                                disabled={recalcTariffMutation.isPending}
+                                className="hover:text-amber-600 transition-colors disabled:opacity-50"
+                                title="Перерахувати нарахування за індивідуальним тарифом">
+                                {recalcTariffMutation.isPending ? '...' : 'перерах.'}
+                              </button>
+                            )}
+                          </>
                         )}
                         {canEdit && (
                           <>

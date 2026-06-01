@@ -99,6 +99,10 @@ export const childrenApi = {
     await apiClient.delete(`/children/${childId}/individual-tariffs/${tariffId}${params}`)
   },
 
+  recalcIndividualTariff: async (childId: string, tariffId: string): Promise<void> => {
+    await apiClient.post(`/children/${childId}/individual-tariffs/${tariffId}/recalc`, {})
+  },
+
   getOpenAccruals: async (childId: string, accountId: string): Promise<OpenAccrual[]> => {
     const { data } = await apiClient.get<OpenAccrual[]>(`/children/${childId}/open-accruals?account_id=${accountId}`)
     return data

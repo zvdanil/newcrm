@@ -583,11 +583,14 @@ export async function recalcActivityAccruals(
 }
 
 /**
- * Creates monthly ACCRUALs for a child who has a monthly individual tariff on a non-monthly activity.
- * Called after recalcActivityAccruals, which already soft-deletes the per-lesson ACCRUALs but does not
- * create the monthly ones (because the activity's tariff_type is not 'monthly').
+ * Unconditional recalculation of accruals for a child's individual tariff.
+ * Does NOT depend on activity.tariff_type — uses the individual tariff as the sole source of truth.
+ * For each billing month:
+ *   - Wipes all non-custom ACCRUALs and ADJUSTMENTs (both per-lesson and monthly variants)
+ *   - Creates the correct ACCRUAL based on the individual tariff type for that month
+ * Safe to call multiple times (idempotent result).
  */
-export async function recalcMonthlyOverrideForChild(
+export async function recalcForIndividualTariff(
   childId: string,
   activityId: string,
   fromDate: Date,
@@ -604,24 +607,125 @@ export async function recalcMonthlyOverrideForChild(
 
   if (!enrollment) return
 
-  const dummyResult: RunResult = { billing_month: '', created_count: 0, adjusted_count: 0, skipped_count: 0 }
+  const softDeleteSet = { is_deleted: true as const, deleted_at: new Date().toISOString(), deleted_by: triggeredBy }
   const cur = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1)
   const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1)
 
   while (cur <= end) {
     const monthStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
     const billingDate = new Date(monthStr)
+    const nextMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1)
+    const monthLastDay = new Date(nextMonth.getTime() - 1).toISOString().slice(0, 10)
 
     const ind = await getChildIndividualTariff(childId, activityId, billingDate)
-    if (ind?.tariff_type === 'monthly') {
-      const price = Math.round(parseFloat(ind.price as string) * 100) / 100
+
+    // No individual tariff active this month — leave existing accruals untouched
+    if (!ind) {
+      cur.setMonth(cur.getMonth() + 1)
+      continue
+    }
+
+    // ── Wipe existing non-custom ACCRUALs for this month (both per-lesson and monthly) ──
+    const existingPerLesson = await db
+      .selectFrom('transactions')
+      .select(['id', 'metadata_json'])
+      .where('enrollment_id', '=', enrollment.enrollment_id)
+      .where('type', '=', 'ACCRUAL')
+      .where('is_deleted', '=', false)
+      .where('billing_month', 'is', null)
+      .where('transaction_date', '>=', billingDate)
+      .where('transaction_date', '<=', new Date(monthLastDay))
+      .execute()
+
+    for (const tx of existingPerLesson) {
+      const meta = tx.metadata_json as Record<string, unknown> | null
+      if (meta?.custom_amount != null && meta.custom_amount !== 'null') continue
+      await db.updateTable('transactions').set(softDeleteSet).where('id', '=', tx.id).execute()
+    }
+
+    await db.updateTable('transactions')
+      .set(softDeleteSet)
+      .where('enrollment_id', '=', enrollment.enrollment_id)
+      .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+      .where('is_deleted', '=', false)
+      .where('billing_month', '=', billingDate)
+      .execute()
+
+    const price = Math.round(parseFloat(ind.price as string) * 100) / 100
+
+    // ── Create new ACCRUAL based on individual tariff type ──
+    if (ind.tariff_type === 'monthly' || ind.tariff_type === 'smart') {
       const startDate = new Date(String(enrollment.start_date))
-      if (price > 0 && startDate <= billingDate) {
-        await billMonthlyEnrollment(
-          enrollment.enrollment_id, childId, enrollment.account_id as string,
-          activityId, price, monthStr, billingDate, triggeredBy, dummyResult,
-        )
+      const isMidMonthStart = startDate.getTime() > billingDate.getTime()
+      const startMonthKey = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-01`
+
+      if (isMidMonthStart && startMonthKey !== monthStr) {
+        await recalcBalance(childId, enrollment.account_id as string)
+        cur.setMonth(cur.getMonth() + 1)
+        continue
       }
+
+      let accrualAmount = price
+      let accrualNote = `Нарахування за ${monthStr.slice(0, 7)}`
+      let proRataMeta: Record<string, unknown> = {}
+
+      if (isMidMonthStart) {
+        const firstDay = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1))
+        const lastDay  = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 0))
+        const wdInMonth   = countWorkingDays(firstDay, lastDay)
+        const wdRemaining = countWorkingDays(startDate, lastDay)
+        if (wdInMonth > 0 && wdRemaining > 0) {
+          accrualAmount = Math.round((price / wdInMonth) * wdRemaining)
+          accrualNote = `Нарахування за ${monthStr.slice(0, 7)} (про-рата ${wdRemaining}/${wdInMonth} роб. дн.)`
+          proRataMeta = { pro_rata: true, working_days_remaining: wdRemaining, working_days_in_month: wdInMonth, full_price: price }
+        }
+      }
+
+      if (accrualAmount > 0) {
+        await createTransaction({
+          type: 'ACCRUAL',
+          child_id: childId,
+          account_id: enrollment.account_id as string,
+          activity_id: activityId,
+          enrollment_id: enrollment.enrollment_id,
+          amount: accrualAmount,
+          transaction_date: monthStr,
+          billing_month: monthStr,
+          note: accrualNote,
+          metadata_json: { tariff_snapshot: { price, billing_month: monthStr }, source: 'individual_tariff', ...proRataMeta },
+          created_by: triggeredBy,
+        })
+      }
+
+    } else if (ind.tariff_type === 'per_lesson') {
+      const marks = await db
+        .selectFrom('attendance_logs')
+        .select(['id as log_id', 'date'])
+        .where('enrollment_id', '=', enrollment.enrollment_id)
+        .where('status', 'in', ['present', 'special'])
+        .where('date', '>=', billingDate)
+        .where('date', '<=', new Date(monthLastDay))
+        .where('custom_amount', 'is', null)
+        .execute()
+
+      for (const mark of marks) {
+        if (price <= 0) continue
+        const lessonDateStr = new Date(mark.date as Date).toISOString().slice(0, 10)
+        await createTransaction({
+          type: 'ACCRUAL',
+          child_id: childId,
+          account_id: enrollment.account_id as string,
+          activity_id: activityId,
+          enrollment_id: enrollment.enrollment_id,
+          amount: price,
+          transaction_date: lessonDateStr,
+          billing_month: null,
+          note: `Нарахування за заняття ${lessonDateStr}`,
+          metadata_json: { tariff_snapshot: { price }, source: 'individual_tariff', attendance_log_id: mark.log_id },
+          created_by: triggeredBy,
+        })
+      }
+      await recalcBalance(childId, enrollment.account_id as string)
     }
 
     cur.setMonth(cur.getMonth() + 1)

@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
-import { recalcActivityAccruals, recalcMonthlyOverrideForChild } from '../services/billingRunService.js'
+import { recalcActivityAccruals, recalcForIndividualTariff } from '../services/billingRunService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
@@ -647,17 +647,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       if (validFromDate <= now) {
         const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
         const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-        await recalcActivityAccruals(activity_id, monthStart, curMonthStart, req.user.sub, req.params.id)
-
-        // Monthly individual tariff on a non-monthly activity:
-        // recalcActivityAccruals deletes per-lesson ACCRUALs but cannot create monthly ones — do it here
-        if (tariff_type === 'monthly') {
-          const act = await db.selectFrom('activities').select('tariff_type')
-            .where('id', '=', activity_id).executeTakeFirst()
-          if (act && act.tariff_type !== 'monthly') {
-            await recalcMonthlyOverrideForChild(req.params.id, activity_id, monthStart, curMonthStart, req.user.sub)
-          }
-        }
+        await recalcForIndividualTariff(req.params.id, activity_id, monthStart, curMonthStart, req.user.sub)
 
         // For smart individual tariffs, also recalculate the smart benefit REFUND for each affected month
         if (tariff_type === 'smart') {
@@ -758,6 +748,44 @@ export async function childrenRoutes(app: FastifyInstance) {
       }
 
       return reply.status(204).send()
+    }
+  )
+
+  // POST /api/children/:id/individual-tariffs/:tariffId/recalc — force-apply existing individual tariff
+  app.post<{ Params: { id: string; tariffId: string } }>(
+    '/:id/individual-tariffs/:tariffId/recalc',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const tariff = await db.selectFrom('child_individual_tariffs')
+        .select(['activity_id', 'tariff_type', 'valid_from'])
+        .where('id', '=', req.params.tariffId)
+        .where('child_id', '=', req.params.id)
+        .executeTakeFirst()
+
+      if (!tariff) return reply.status(404).send({ error: 'NotFound' })
+
+      const validFromDate = new Date(String(tariff.valid_from))
+      const now = new Date()
+      const monthStart = new Date(validFromDate.getFullYear(), validFromDate.getMonth(), 1)
+      const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      await recalcForIndividualTariff(req.params.id, tariff.activity_id, monthStart, curMonthStart, req.user.sub)
+
+      if (tariff.tariff_type === 'smart') {
+        const enrollment = await db.selectFrom('enrollments').select('id')
+          .where('child_id', '=', req.params.id).where('activity_id', '=', tariff.activity_id)
+          .where('status', 'in', ['active', 'frozen']).executeTakeFirst()
+        if (enrollment) {
+          const cur2 = new Date(monthStart)
+          while (cur2 <= curMonthStart) {
+            const mStr = `${cur2.getFullYear()}-${String(cur2.getMonth() + 1).padStart(2, '0')}-01`
+            await recalcSmartBenefit(enrollment.id, mStr)
+            cur2.setMonth(cur2.getMonth() + 1)
+          }
+        }
+      }
+
+      return reply.send({ ok: true })
     }
   )
 
