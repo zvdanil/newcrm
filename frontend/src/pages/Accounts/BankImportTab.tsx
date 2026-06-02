@@ -520,7 +520,7 @@ export function BankImportTab({ accountId }: Props) {
               <th className="px-3 py-2.5 w-8"></th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600 whitespace-nowrap">Дата</th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600">Контрагент</th>
-              <th className="px-3 py-2.5 text-left font-medium text-gray-600 whitespace-nowrap">ІНН</th>
+              <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[160px]">Призначення</th>
               <th className="px-3 py-2.5 text-right font-medium text-gray-600 whitespace-nowrap">Сума</th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600">Статус</th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[180px]">Сімʼя</th>
@@ -560,8 +560,8 @@ export function BankImportTab({ accountId }: Props) {
                     {row.counterparty_name || <span className="text-gray-400">—</span>}
                   </td>
 
-                  <td className="px-3 py-2 text-gray-500 tabular-nums whitespace-nowrap">
-                    {row.edrpou ?? <span className="text-gray-300">—</span>}
+                  <td className="px-3 py-2 text-gray-600 text-xs max-w-[220px] truncate" title={row.description || undefined}>
+                    {row.description || <span className="text-gray-300">—</span>}
                   </td>
 
                   <td className="px-3 py-2 text-right font-medium text-green-700 tabular-nums whitespace-nowrap">
@@ -607,7 +607,55 @@ export function BankImportTab({ accountId }: Props) {
                           className="text-xs text-gray-400 hover:text-gray-600" title="Змінити сімʼю"
                         >✎</button>
                       </div>
-                    ) : (row.status === 'conflict' || row.status === 'partial') && !override ? (
+                    ) : row.status === 'partial' && !override ? (
+                      familySearch.has(row.row_index) ? (
+                        <div className="space-y-1">
+                          <TargetCombobox
+                            families={allFamilies ?? []}
+                            children={allChildren ?? []}
+                            search={familySearch.get(row.row_index) ?? ''}
+                            onSearchChange={(s) => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, s); return n })}
+                            onSelect={(target) => {
+                              setOverride(row.row_index, target)
+                              setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })}
+                            className="text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            ← До списку схожих
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const i = parseInt(e.target.value)
+                              if (!isNaN(i)) {
+                                const f = row.candidate_families[i]
+                                if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
+                              }
+                            }}
+                            className="text-xs border border-orange-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
+                          >
+                            <option value="">Оберіть зі схожих...</option>
+                            {row.candidate_families.map((f, i) => (
+                              <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })}
+                            className="text-xs text-iris-600 hover:text-iris-800 underline underline-offset-2"
+                          >
+                            Обрати вручну
+                          </button>
+                        </div>
+                      )
+                    ) : row.status === 'conflict' && !override ? (
                       <select
                         value=""
                         onChange={(e) => {
@@ -617,7 +665,7 @@ export function BankImportTab({ accountId }: Props) {
                             if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
                           }
                         }}
-                        className={`text-xs border rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full ${row.status === 'partial' ? 'border-orange-300' : 'border-amber-300'}`}
+                        className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
                       >
                         <option value="">Оберіть...</option>
                         {row.candidate_families.map((f, i) => (
