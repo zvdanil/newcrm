@@ -31,7 +31,15 @@ function parseExcelDate(raw: unknown): string {
   return s
 }
 
-function normalizeHeader(s: unknown) { return String(s ?? '').trim().toLowerCase() }
+function normalizeHeader(s: unknown): string {
+  return String(s ?? '')
+    .normalize('NFKC')                          // canonical form, fixes e.g. full-width chars
+    .replace(/[   -​  　﻿]/g, ' ') // all Unicode spaces → space
+    .replace(/[\n\r\t]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
 
 function findColIdx(headers: unknown[], name: string | null): number {
   if (!name) return -1
@@ -58,21 +66,19 @@ export function readSheetRows(file: File): Promise<unknown[][]> {
 function parseExpenseSheet(file: File, template: ImportTemplate | null): Promise<ExpenseBankRow[]> {
   return readSheetRows(file).then((rows) => {
     if (template === null) {
-      // Hardcoded PrivatBank debit format (no template selected)
-      // Row 0 = bank info, row 1..N = data
-      // Cols: 0=№doc, 1=date, 2=type, 3=amount, 4=currency, 5=description, 6=edrpou, 7=counterparty, 8=iban, 9=reference
+      // Built-in PrivatBank format (no template selected)
+      // Filter: negative amounts only (expenses = debits)
+      // Cols: 0=№doc, 1=date, 2=Ч, 3=amount, 4=currency, 5=description, 6=edrpou, 7=counterparty, 8=iban, 9=reference
       const result: ExpenseBankRow[] = []
       let dataIdx = 0
       for (let i = 1; i < rows.length; i++) {
         const r = rows[i] as unknown[]
         if (r.every(cell => String(cell ?? '').trim() === '')) continue
-        const typeCell = normalizeHeader(r[2])
-        if (typeCell !== 'дебет' && typeCell !== 'дебит' && typeCell !== 'd' && typeCell !== '1') continue
         const rawAmount = parseFloat(String(r[3] ?? '').replace(',', '.'))
-        if (isNaN(rawAmount) || rawAmount === 0) continue
+        if (isNaN(rawAmount) || rawAmount >= 0) continue   // skip income (positive) rows
         const amount = Math.abs(rawAmount)
         const edrpouRaw = String(r[6] ?? '').replace(/\D/g, '')
-        const ibanRaw = String(r[8] ?? '').replace(/\s/g, '').trim()
+        const ibanRaw   = String(r[8] ?? '').replace(/\s/g, '').trim()
         result.push({
           row_index:         dataIdx++,
           date:              parseExcelDate(r[1]),
@@ -100,8 +106,19 @@ function parseExpenseSheet(file: File, template: ImportTemplate | null): Promise
     const docNumIdx       = findColIdx(headerRow, template.col_doc_number ?? null)
     const refIdx          = findColIdx(headerRow, template.col_reference ?? null)
 
-    if (dateIdx === -1) throw new Error(`Колонку "${template.col_date}" не знайдено у файлі`)
-    if (amountIdx === -1) throw new Error(`Колонку "${template.col_amount}" не знайдено у файлі`)
+    const foundHeaders = headerRow
+      .map(h => String(h ?? '').trim())
+      .filter(Boolean)
+      .join(' | ')
+
+    if (dateIdx === -1) throw new Error(
+      `Колонку «${template.col_date}» не знайдено у файлі.\n` +
+      `Знайдені колонки (рядок ${template.header_row_index}): ${foundHeaders || '(порожній рядок)'}`
+    )
+    if (amountIdx === -1) throw new Error(
+      `Колонку «${template.col_amount}» не знайдено у файлі.\n` +
+      `Знайдені колонки (рядок ${template.header_row_index}): ${foundHeaders || '(порожній рядок)'}`
+    )
 
     const result: ExpenseBankRow[] = []
     let dataIdx = 0
@@ -690,7 +707,9 @@ export function ExpenseImportTab({ accountId }: Props) {
   const [overrides, setOverrides]     = useState<Map<number, ClassifyState>>(new Map())
   const [classifyRow, setClassifyRow] = useState<ExpensePreviewRow | null>(null)
   const [result, setResult]           = useState<{ imported: number; errors: { row_index: number; message: string }[] } | null>(null)
+  const [scanRows, setScanRows]       = useState<{ rowIdx: number; headers: string[] }[] | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const scanFileRef  = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
 
   const { data: templates = [], refetch: refetchTemplates } = useQuery({
@@ -750,6 +769,22 @@ export function ExpenseImportTab({ accountId }: Props) {
   }
 
   function handleDrop(e: React.DragEvent) { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }
+
+  async function handleScanFile(file: File) {
+    try {
+      const allRows = await readSheetRows(file)
+      // Show first 5 non-empty rows with their index and cell values
+      const result: { rowIdx: number; headers: string[] }[] = []
+      for (let i = 0; i < Math.min(allRows.length, 15) && result.length < 5; i++) {
+        const row = allRows[i] as unknown[]
+        const cells = row.map(c => String(c ?? '').trim()).filter(Boolean)
+        if (cells.length > 0) result.push({ rowIdx: i, headers: cells })
+      }
+      setScanRows(result)
+    } catch {
+      setScanRows([])
+    }
+  }
 
   function getEffective(row: ExpensePreviewRow) {
     const ov = overrides.get(row.row_index)
@@ -853,14 +888,58 @@ export function ExpenseImportTab({ accountId }: Props) {
           </button>
         </div>
 
-        {/* Hint when no template and first use */}
-        {!selectedTemplateId && !previewRows && !result && (
+        {/* Column scanner */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-400">Не знаєте які колонки у файлі?</span>
+          <button
+            onClick={() => { setScanRows(null); scanFileRef.current?.click() }}
+            className="text-xs text-gray-500 hover:text-iris-700 border border-gray-200 rounded px-2 py-1 transition-colors"
+          >
+            🔍 Визначити колонки файлу
+          </button>
+          <input ref={scanFileRef} type="file" accept=".xlsx,.xls" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleScanFile(f); e.target.value = '' }} />
+        </div>
+
+        {scanRows !== null && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-gray-700">Знайдені рядки у файлі:</p>
+              <button onClick={() => setScanRows(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            {scanRows.length === 0 ? (
+              <p className="text-gray-400">Файл порожній або не вдалося прочитати</p>
+            ) : (
+              <div className="space-y-1.5">
+                {scanRows.map(({ rowIdx, headers }) => (
+                  <div key={rowIdx} className="flex gap-2 items-start">
+                    <span className="text-gray-400 shrink-0 w-14">Рядок {rowIdx}:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {headers.slice(0, 12).map((h, i) => (
+                        <span key={i} className="bg-white border border-gray-200 rounded px-1.5 py-0.5 text-gray-700 font-mono text-xs">
+                          {h.length > 30 ? h.substring(0, 30) + '…' : h}
+                        </span>
+                      ))}
+                      {headers.length > 12 && <span className="text-gray-400">+{headers.length - 12}</span>}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-gray-400 pt-1 border-t border-gray-100">
+                  Вкажіть у шаблоні: «Рядок заголовків» — номер рядка з назвами колонок, «Перший рядок даних» — наступний рядок.
+                  Назви колонок копіюйте точно як показано вище.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Hint when no template */}
+        {!selectedTemplateId && !previewRows && !result && !scanRows && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-800 space-y-1">
             <p className="font-medium">Як починати роботу</p>
             <p>
-              Вбудований формат ПриватБанку розпізнає колонки виписки автоматично.
-              Якщо ваш файл має іншу структуру — натисніть <b>«+ Новий шаблон»</b>,
-              завантажте зразок файлу і вкажіть відповідність колонок.
+              Вбудований формат ПриватБанку фільтрує рядки з від'ємними сумами — спробуйте без шаблону.
+              Якщо ваш файл має іншу структуру — натисніть <b>«Визначити колонки»</b>, потім <b>«+ Новий шаблон»</b>.
             </p>
           </div>
         )}
@@ -883,16 +962,23 @@ export function ExpenseImportTab({ accountId }: Props) {
         )}
 
         {parseError && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-1">
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-2">
             <p className="font-medium">Помилка читання файлу</p>
-            <p>{parseError}</p>
-            {parseError.includes('не знайдено') && (
-              <p className="text-red-600 mt-1">
-                💡 Перевірте шаблон або створіть новий —{' '}
-                <button onClick={() => { setEditingTemplate(null); setView('editor') }}
-                  className="underline hover:no-underline">відкрити редактор шаблону</button>
-              </p>
-            )}
+            {parseError.split('\n').map((line, i) => (
+              <p key={i} className={i === 0 ? '' : 'text-red-500 font-mono break-all'}>{line}</p>
+            ))}
+            <div className="flex gap-3 pt-1 flex-wrap">
+              <button onClick={() => { setScanRows(null); scanFileRef.current?.click() }}
+                className="text-red-700 underline hover:no-underline">
+                🔍 Визначити колонки файлу
+              </button>
+              {selectedTemplateId && (
+                <button onClick={() => { setEditingTemplate(templates.find(t => t.id === selectedTemplateId) ?? null); setView('editor') }}
+                  className="text-red-700 underline hover:no-underline">
+                  ✎ Редагувати шаблон
+                </button>
+              )}
+            </div>
           </div>
         )}
 
