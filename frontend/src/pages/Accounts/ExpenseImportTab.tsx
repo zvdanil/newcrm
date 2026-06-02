@@ -504,15 +504,13 @@ function CategoryPicker({
       className="w-full text-xs border border-gray-300 rounded px-2 py-1.5 focus:border-iris-500 focus:ring-iris-500">
       <option value="">{placeholder ?? '— оберіть категорію —'}</option>
       {tree.map(parent => (
-        parent.children.length > 0 ? (
-          <optgroup key={parent.id} label={parent.name}>
-            {parent.children.map(child => (
-              <option key={child.id} value={child.id}>{child.name}</option>
-            ))}
-          </optgroup>
-        ) : (
-          <option key={parent.id} value={parent.id}>{parent.name}</option>
-        )
+        <optgroup key={parent.id} label={parent.name}>
+          {/* Parent category is always selectable as its own option */}
+          <option value={parent.id}>{parent.name}</option>
+          {parent.children.map(child => (
+            <option key={child.id} value={child.id}>{'  └ '}{child.name}</option>
+          ))}
+        </optgroup>
       ))}
     </select>
   )
