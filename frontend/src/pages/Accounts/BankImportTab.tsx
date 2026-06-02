@@ -236,6 +236,7 @@ export function BankImportTab({ accountId }: Props) {
       qc.invalidateQueries({ queryKey: ['ledger'] })
       qc.invalidateQueries({ queryKey: ['balance'] })
       qc.invalidateQueries({ queryKey: ['account-ledger', accountId] })
+      qc.invalidateQueries({ queryKey: ['account', accountId] })
       qc.invalidateQueries({ queryKey: ['child-bank-payers'] })
     },
   })
