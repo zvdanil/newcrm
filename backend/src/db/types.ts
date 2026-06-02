@@ -494,10 +494,26 @@ export interface ImportTemplatesTable {
   col_inn:              string | null
   col_iban:             string | null
   col_description:      string | null
+  col_doc_number:       string | null
+  col_reference:        string | null
   amount_negate:        Generated<boolean>
   created_by:           string | null
   created_at:           Generated<Date>
   updated_at:           Generated<Date>
+}
+
+export interface ExpenseImportRulesTable {
+  id:              Generated<string>
+  account_id:      string
+  edrpou:          string | null
+  iban:            string | null
+  keyword_pattern: string | null
+  category_id:     string | null
+  is_skip:         Generated<boolean>
+  match_count:     Generated<number>
+  last_matched_at: Date | null
+  created_at:      Generated<Date>
+  updated_at:      Generated<Date>
 }
 
 export interface BankPayerProfilesTable {
@@ -584,6 +600,7 @@ export interface Database {
   user_invites:               UserInvitesTable
   child_parents:              ChildParentsTable
   import_templates:           ImportTemplatesTable
+  expense_import_rules:       ExpenseImportRulesTable
   bank_payer_profiles:        BankPayerProfilesTable
   account_income:             AccountIncomeTable
   account_corrections:        AccountCorrectionsTable

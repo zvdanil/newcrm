@@ -142,6 +142,7 @@ const EMPTY_TEMPLATE: ImportTemplateInput = {
   col_type: null, col_type_credit_value: null,
   col_counterparty: null, col_inn: null,
   col_iban: null, col_description: null,
+  col_doc_number: null, col_reference: null,
   amount_negate: false,
 }
 
@@ -154,6 +155,8 @@ const COL_FIELDS: { key: keyof ImportTemplateInput; label: string; required?: bo
   { key: 'col_inn',                label: 'ІНН',                    hint: 'ІНН / ЄДРПОУ платника' },
   { key: 'col_iban',               label: 'IBAN' },
   { key: 'col_description',        label: 'Призначення' },
+  { key: 'col_doc_number',         label: '№ документу',            hint: 'для контролю дублів' },
+  { key: 'col_reference',          label: 'Референс банку',         hint: 'для контролю дублів' },
 ]
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -665,6 +668,8 @@ function TemplateEditorView({
           col_type: initial.col_type, col_type_credit_value: initial.col_type_credit_value,
           col_counterparty: initial.col_counterparty, col_inn: initial.col_inn,
           col_iban: initial.col_iban, col_description: initial.col_description,
+          col_doc_number: initial.col_doc_number ?? null,
+          col_reference: initial.col_reference ?? null,
           amount_negate: initial.amount_negate,
         }
       : { ...EMPTY_TEMPLATE }

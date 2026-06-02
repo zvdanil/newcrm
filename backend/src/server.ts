@@ -25,6 +25,7 @@ import { salaryRoutes } from './routes/salary.js'
 import { mergedJournalsRoutes } from './routes/mergedJournals.js'
 import { importRoutes } from './routes/import.js'
 import { importTemplatesRoutes } from './routes/import_templates.js'
+import { expenseImportRoutes } from './routes/expense_import.js'
 import { calendarRoutes } from './routes/calendar.js'
 import { dividendsRoutes } from './routes/dividends.js'
 import { reportsRoutes } from './routes/reports.js'
@@ -74,6 +75,7 @@ await app.register(salaryRoutes,         { prefix: '/api' })
 await app.register(mergedJournalsRoutes, { prefix: '/api/merged-journals' })
 await app.register(importRoutes,          { prefix: '/api/import' })
 await app.register(importTemplatesRoutes, { prefix: '/api/import-templates' })
+await app.register(expenseImportRoutes,   { prefix: '/api/expense-import' })
 await app.register(calendarRoutes,       { prefix: '/api/calendar' })
 await app.register(dividendsRoutes,      { prefix: '/api/dividends' })
 await app.register(reportsRoutes,        { prefix: '/api/reports' })

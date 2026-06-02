@@ -14,6 +14,8 @@ export interface ImportTemplate {
   col_inn: string | null
   col_iban: string | null
   col_description: string | null
+  col_doc_number: string | null
+  col_reference: string | null
   amount_negate: boolean
   created_at: string
   updated_at: string

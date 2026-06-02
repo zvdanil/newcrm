@@ -15,6 +15,8 @@ interface TemplateBody {
   col_inn?: string | null
   col_iban?: string | null
   col_description?: string | null
+  col_doc_number?: string | null
+  col_reference?: string | null
   amount_negate?: boolean
 }
 
@@ -58,6 +60,8 @@ export async function importTemplatesRoutes(app: FastifyInstance) {
           col_inn:              b.col_inn ?? null,
           col_iban:             b.col_iban ?? null,
           col_description:      b.col_description ?? null,
+          col_doc_number:       b.col_doc_number ?? null,
+          col_reference:        b.col_reference ?? null,
           amount_negate:        b.amount_negate ?? false,
           created_by:           request.user.sub,
         })
@@ -94,6 +98,8 @@ export async function importTemplatesRoutes(app: FastifyInstance) {
           col_inn:              b.col_inn ?? null,
           col_iban:             b.col_iban ?? null,
           col_description:      b.col_description ?? null,
+          col_doc_number:       b.col_doc_number ?? null,
+          col_reference:        b.col_reference ?? null,
           amount_negate:        b.amount_negate ?? false,
           updated_at:           new Date(),
         })

@@ -7,6 +7,7 @@ import type { LedgerKind, LedgerRow, PayerSearchResult } from '../../api/account
 import { billingApi } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { BankImportTab } from './BankImportTab'
+import { ExpenseImportTab } from './ExpenseImportTab'
 
 const TYPE_LABELS = { fop: 'ФОП', cash: 'Готівка', bank: 'Банк' } as const
 
@@ -137,7 +138,7 @@ export function AccountCardPage() {
   const { id } = useParams<{ id: string }>()
   const canImport = useCanAccess('owner', 'admin')
   const qc = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'ledger' | 'import' | 'entry'>('ledger')
+  const [activeTab, setActiveTab] = useState<'ledger' | 'import' | 'expense-import' | 'entry'>('ledger')
 
   const defaultRange = thisMonthRange()
   const [from, setFrom] = useState(defaultRange.from)
@@ -331,7 +332,17 @@ export function AccountCardPage() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Імпорт виписки
+              Імпорт доходів
+            </button>
+            <button
+              onClick={() => setActiveTab('expense-import')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors ${
+                activeTab === 'expense-import'
+                  ? 'bg-white border border-b-white border-gray-200 text-iris-700 -mb-px'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Імпорт витрат
             </button>
           </>
         )}
@@ -609,10 +620,17 @@ export function AccountCardPage() {
         </div>
       )}
 
-      {/* Import tab */}
+      {/* Import income tab */}
       {activeTab === 'import' && canImport && id && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <BankImportTab accountId={id} />
+        </div>
+      )}
+
+      {/* Import expenses tab */}
+      {activeTab === 'expense-import' && canImport && id && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <ExpenseImportTab accountId={id} />
         </div>
       )}
 
