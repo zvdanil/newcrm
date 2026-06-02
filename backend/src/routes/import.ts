@@ -219,6 +219,53 @@ function partialMatchScore(haystack: string, needle: string[]): number {
   return sig.filter((t) => h.includes(t)).length / sig.length
 }
 
+type ProfileRow = { child_id: string; full_name: string; family_id: string | null }
+
+function profilesToCandidates(profiles: ProfileRow[]): CandidateFamily[] {
+  return deduplicateFamilies(
+    profiles.map((p) => ({
+      family_id: p.family_id,
+      child_id: p.family_id ? null : p.child_id,
+      family_name: p.full_name,
+      parent_name: p.full_name,
+    })),
+  )
+}
+
+/** Learned payer profiles — last resort; shared PSP ІНН/IBAN need text disambiguation. */
+async function matchByPayerProfiles(
+  row: BankRow,
+  field: 'inn' | 'iban',
+  value: string,
+): Promise<MatchResult> {
+  const method = field === 'inn' ? 'profile_inn' : 'profile_iban'
+  const profiles = await db
+    .selectFrom('bank_payer_profiles as bpp')
+    .innerJoin('children as c', 'c.id', 'bpp.child_id')
+    .select(['c.id as child_id', 'c.full_name', 'c.family_id'])
+    .where(field === 'inn' ? 'bpp.inn' : 'bpp.iban', '=', value)
+    .execute()
+
+  if (profiles.length === 0) return { method: null, families: [] }
+  if (profiles.length === 1) return { method, families: profilesToCandidates(profiles) }
+
+  // Same ІНН/IBAN у кількох дітей (типово — платіжна система): звужуємо за призначенням / контрагентом
+  const searchTexts = [row.description.trim(), row.counterparty_name.trim()].filter(Boolean)
+  if (searchTexts.length > 0) {
+    const narrowed = profiles.filter((p) => {
+      const childTokens = tokens(p.full_name)
+      if (childTokens.length === 0) return false
+      return searchTexts.some((text) => containsAllTokens(text, childTokens))
+    })
+    const families = profilesToCandidates(narrowed)
+    if (families.length === 1) return { method, families }
+    if (families.length > 1) return { method, families }
+  }
+
+  // Не вдалося відрізнити — конфлікт для ручного вибору
+  return { method, families: profilesToCandidates(profiles) }
+}
+
 async function matchRow(
   row: BankRow,
   allParents: { id: string; full_name: string; note: string | null; edrpou: string | null; iban: string | null }[],
@@ -228,7 +275,7 @@ async function matchRow(
   allFamilies: { id: string; name: string }[],
 ): Promise<MatchResult> {
 
-  // 1. ЄДРПОУ match
+  // 1–2. ІНН/IBAN батьків у картці (особисті реквізити, не платіжна система)
   if (row.edrpou) {
     const matched = allParents.filter((p) => p.edrpou === row.edrpou)
     if (matched.length > 0) {
@@ -237,7 +284,6 @@ async function matchRow(
     }
   }
 
-  // 2. IBAN match
   if (row.iban) {
     const matched = allParents.filter((p) => p.iban === row.iban)
     if (matched.length > 0) {
@@ -246,47 +292,7 @@ async function matchRow(
     }
   }
 
-  // 3. INN in bank_payer_profiles (learned payer → child mapping)
-  if (row.edrpou) {
-    const profiles = await db
-      .selectFrom('bank_payer_profiles as bpp')
-      .innerJoin('children as c', 'c.id', 'bpp.child_id')
-      .select(['c.id as child_id', 'c.full_name', 'c.family_id'])
-      .where('bpp.inn', '=', row.edrpou)
-      .execute()
-
-    if (profiles.length > 0) {
-      const families: CandidateFamily[] = profiles.map((p) => ({
-        family_id: p.family_id,
-        child_id: p.family_id ? null : p.child_id,
-        family_name: p.full_name,
-        parent_name: p.full_name,
-      }))
-      return { method: 'profile_inn', families: deduplicateFamilies(families) }
-    }
-  }
-
-  // 4. IBAN in bank_payer_profiles
-  if (row.iban) {
-    const profiles = await db
-      .selectFrom('bank_payer_profiles as bpp')
-      .innerJoin('children as c', 'c.id', 'bpp.child_id')
-      .select(['c.id as child_id', 'c.full_name', 'c.family_id'])
-      .where('bpp.iban', '=', row.iban)
-      .execute()
-
-    if (profiles.length > 0) {
-      const families: CandidateFamily[] = profiles.map((p) => ({
-        family_id: p.family_id,
-        child_id: p.family_id ? null : p.child_id,
-        family_name: p.full_name,
-        parent_name: p.full_name,
-      }))
-      return { method: 'profile_iban', families: deduplicateFamilies(families) }
-    }
-  }
-
-  // 5–6. Fuzzy name: призначення платежу first, then контрагент
+  // 3–4. Fuzzy: призначення, потім контрагент (головний ідентифікатор для PSP)
   const description = row.description.trim()
   if (description) {
     const descMatch = collectFuzzyCandidates(
@@ -303,6 +309,17 @@ async function matchRow(
     )
     if (cpMatch.full.length > 0) return { method: 'counterparty_fuzzy', families: cpMatch.full }
     if (cpMatch.partial.length > 0) return { method: 'counterparty_partial', families: cpMatch.partial }
+  }
+
+  // 5–6. Відомі платники — після тексту; при спільному ІНН звужуємо за ФІО в призначенні
+  if (row.edrpou) {
+    const profileMatch = await matchByPayerProfiles(row, 'inn', row.edrpou)
+    if (profileMatch.families.length > 0) return profileMatch
+  }
+
+  if (row.iban) {
+    const profileMatch = await matchByPayerProfiles(row, 'iban', row.iban)
+    if (profileMatch.families.length > 0) return profileMatch
   }
 
   return { method: null, families: [] }
