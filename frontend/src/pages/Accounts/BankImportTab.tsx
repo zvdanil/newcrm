@@ -37,10 +37,27 @@ function readSheetRows(file: File): Promise<unknown[][]> {
     reader.onerror = reject
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array', raw: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        resolve(XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '' }))
+        const data  = new Uint8Array(e.target!.result as ArrayBuffer)
+        const wb    = XLSX.read(data, { type: 'array', raw: true })
+        const ws    = wb.Sheets[wb.SheetNames[0]]
+        const ref = ws['!ref']
+        if (!ref) { resolve([]); return }
+        const range = XLSX.utils.decode_range(ref)
+        const result: unknown[][] = []
+        // Read every row 0..range.e.r so result[i] = 0-indexed Excel row i.
+        for (let r = 0; r <= range.e.r; r++) {
+          if (r < range.s.r) {
+            result.push([])
+          } else {
+            const row: unknown[] = []
+            for (let c = range.s.c; c <= range.e.c; c++) {
+              const cell = ws[XLSX.utils.encode_cell({ r, c })]
+              row.push(cell != null ? cell.v : '')
+            }
+            result.push(row)
+          }
+        }
+        resolve(result)
       } catch (err) { reject(err) }
     }
     reader.readAsArrayBuffer(file)
@@ -737,20 +754,28 @@ function TemplateEditorView({
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Рядок заголовків (з 0)</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Рядок заголовків
+            <span className="font-normal text-gray-400 ml-1">(Excel рядок − 1)</span>
+          </label>
           <input
             type="number" min={0} value={form.header_row_index}
             onChange={(e) => { setField('header_row_index', Number(e.target.value)); setSampleHeaders([]) }}
             className="w-full text-sm rounded border-gray-300 shadow-sm focus:border-iris-500 focus:ring-iris-500"
           />
+          <p className="text-xs text-gray-400 mt-0.5">Напр. Excel рядок 13 → введіть 12</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Перший рядок даних (з 0)</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Перший рядок даних
+            <span className="font-normal text-gray-400 ml-1">(Excel рядок − 1)</span>
+          </label>
           <input
             type="number" min={0} value={form.data_start_row_index}
             onChange={(e) => setField('data_start_row_index', Number(e.target.value))}
             className="w-full text-sm rounded border-gray-300 shadow-sm focus:border-iris-500 focus:ring-iris-500"
           />
+          <p className="text-xs text-gray-400 mt-0.5">Зазвичай = рядок заголовків + 1</p>
         </div>
       </div>
 

@@ -54,9 +54,30 @@ export function readSheetRows(file: File): Promise<unknown[][]> {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer)
-        const wb = XLSX.read(data, { type: 'array', raw: true })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        resolve(XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '' }))
+        const wb   = XLSX.read(data, { type: 'array', raw: true })
+        const ws   = wb.Sheets[wb.SheetNames[0]]
+        const ref = ws['!ref']
+        if (!ref) { resolve([]); return }
+        const range = XLSX.utils.decode_range(ref)
+        const result: unknown[][] = []
+
+        // Read every row 0..range.e.r so result[i] always = 0-indexed Excel row i.
+        // We cannot rely on sheet_to_json because it skips physically-empty rows (no
+        // cells defined in the XML), which causes an off-by-one when the file's used
+        // range starts at row 2 but row 1 is empty.
+        for (let r = 0; r <= range.e.r; r++) {
+          if (r < range.s.r) {
+            result.push([])   // before used range
+          } else {
+            const row: unknown[] = []
+            for (let c = range.s.c; c <= range.e.c; c++) {
+              const cell = ws[XLSX.utils.encode_cell({ r, c })]
+              row.push(cell != null ? cell.v : '')
+            }
+            result.push(row)
+          }
+        }
+        resolve(result)
       } catch (err) { reject(err) }
     }
     reader.readAsArrayBuffer(file)
@@ -344,16 +365,24 @@ function TemplateEditorView({
             className="w-full text-sm rounded border-gray-300 shadow-sm focus:border-iris-500 focus:ring-iris-500" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Рядок заголовків (з 0)</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Рядок заголовків
+            <span className="font-normal text-gray-400 ml-1">(Excel рядок − 1)</span>
+          </label>
           <input type="number" min={0} value={form.header_row_index}
             onChange={e => { setField('header_row_index', Number(e.target.value)); setSampleHeaders([]) }}
             className="w-full text-sm rounded border-gray-300 shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          <p className="text-xs text-gray-400 mt-0.5">Напр. Excel рядок 13 → введіть 12</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Перший рядок даних (з 0)</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            Перший рядок даних
+            <span className="font-normal text-gray-400 ml-1">(Excel рядок − 1)</span>
+          </label>
           <input type="number" min={0} value={form.data_start_row_index}
             onChange={e => setField('data_start_row_index', Number(e.target.value))}
             className="w-full text-sm rounded border-gray-300 shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+          <p className="text-xs text-gray-400 mt-0.5">Зазвичай = рядок заголовків + 1</p>
         </div>
       </div>
 
@@ -911,13 +940,18 @@ export function ExpenseImportTab({ accountId }: Props) {
               <p className="text-gray-400">Файл порожній або не вдалося прочитати</p>
             ) : (
               <div className="space-y-1.5">
+                <p className="text-gray-500 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  <b>Ліва колонка</b> = індекс для шаблону (вводьте це число у «Рядок заголовків» / «Перший рядок даних»).
+                  Рядок Excel = індекс + 1.
+                </p>
                 {scanRows.map(({ rowIdx, headers }) => (
                   <div key={rowIdx} className="flex gap-2 items-start">
-                    <span className="text-gray-400 shrink-0 w-14">Рядок {rowIdx}:</span>
+                    <span className="text-iris-700 font-mono font-semibold shrink-0 w-8 text-right">{rowIdx}</span>
+                    <span className="text-gray-300 shrink-0">│</span>
                     <div className="flex flex-wrap gap-1">
                       {headers.slice(0, 12).map((h, i) => (
-                        <span key={i} className="bg-white border border-gray-200 rounded px-1.5 py-0.5 text-gray-700 font-mono text-xs">
-                          {h.length > 30 ? h.substring(0, 30) + '…' : h}
+                        <span key={i} className="bg-white border border-gray-200 rounded px-1.5 py-0.5 text-gray-700 font-mono">
+                          {h.length > 35 ? h.substring(0, 35) + '…' : h}
                         </span>
                       ))}
                       {headers.length > 12 && <span className="text-gray-400">+{headers.length - 12}</span>}
@@ -925,8 +959,8 @@ export function ExpenseImportTab({ accountId }: Props) {
                   </div>
                 ))}
                 <p className="text-gray-400 pt-1 border-t border-gray-100">
-                  Вкажіть у шаблоні: «Рядок заголовків» — номер рядка з назвами колонок, «Перший рядок даних» — наступний рядок.
-                  Назви колонок копіюйте точно як показано вище.
+                  Знайдіть рядок з назвами колонок («Дата операції», «Сума» тощо) — це і є «Рядок заголовків».
+                  «Перший рядок даних» = наступний індекс. Назви колонок копіюйте точно як показано.
                 </p>
               </div>
             )}
