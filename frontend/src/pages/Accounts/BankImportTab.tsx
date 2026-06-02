@@ -233,6 +233,7 @@ export function BankImportTab({ accountId }: Props) {
     onSuccess: (resp) => {
       setResult({ imported: resp.imported, skipped: resp.skipped_duplicates, errors: resp.errors })
       setPreviewRows(null)
+      qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['ledger'] })
       qc.invalidateQueries({ queryKey: ['balance'] })
       qc.invalidateQueries({ queryKey: ['account-ledger', accountId] })
