@@ -13,7 +13,7 @@ import { enrollmentsApi } from '../../api/enrollments.api'
 import type { RebindPayment } from '../../api/enrollments.api'
 import type { ParentAccessRow } from '../../api/children.api'
 import { billingApi } from '../../api/billing.api'
-import type { LedgerEntry, GlobalDiscount } from '../../api/billing.api'
+import type { LedgerEntry, GlobalDiscount, BillingForecastAccount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
@@ -231,8 +231,154 @@ export function ChildCardPage() {
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} ym={ym} setYm={setYm} />}
 
+      {/* Billing forecast */}
+      {id && <BillingForecastBlock childId={id} />}
+
       {/* Enrollments (includes individual tariff management) */}
       {id && <EnrollmentsBlock childId={id} canEdit={canEdit} canEditTariffs={isOwner} viewedYm={ym} />}
+    </div>
+  )
+}
+
+// ─── Billing Forecast Block ─────────────────────────────────────────────────
+
+function nextBillingYM() {
+  const now = new Date()
+  const d = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function prevForecastMonth(ym: string) {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, m - 2, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function nextForecastMonth(ym: string) {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, m, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function fmtBalance(n: number) {
+  const abs = Math.abs(n).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n >= 0 ? `+${abs}` : `−${abs}`
+}
+
+function BalanceBadge({ value, label }: { value: number; label: string }) {
+  const isPositive = value >= 0
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-xs text-gray-500">{label}</span>
+      <span className={`text-sm font-semibold tabular-nums ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
+        {fmtBalance(value)} грн
+      </span>
+    </div>
+  )
+}
+
+function BillingForecastBlock({ childId }: { childId: string }) {
+  const [open, setOpen] = useState(false)
+  const [forecastYm, setForecastYm] = useState(nextBillingYM)
+
+  const monthStr = `${forecastYm}-01`
+
+  const { data: forecast = [], isLoading } = useQuery<BillingForecastAccount[]>({
+    queryKey: ['billing-forecast', childId, forecastYm],
+    queryFn: () => billingApi.getForecast(childId, monthStr),
+    enabled: open,
+    staleTime: 30 * 1000,
+  })
+
+  const [y, m] = forecastYm.split('-').map(Number)
+  const monthLabel = `${UA_MONTHS[m - 1]} ${y}`
+  const isCurrentOrFuture = forecastYm >= currentYM()
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <button
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-900">Прогноз нарахувань</span>
+          <span className="text-xs text-gray-400 font-normal">· {monthLabel}</span>
+          {!isCurrentOrFuture && (
+            <span className="text-xs text-gray-400 font-normal">· факт</span>
+          )}
+        </div>
+        <span className="text-gray-400 text-sm select-none">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-4 space-y-4 border-t border-gray-100">
+          {/* Month navigation */}
+          <div className="flex items-center gap-3 pt-3">
+            <button
+              onClick={() => setForecastYm(prevForecastMonth(forecastYm))}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors text-sm"
+            >
+              ‹
+            </button>
+            <span className="text-sm font-medium text-gray-700 min-w-[90px] text-center">{monthLabel}</span>
+            <button
+              onClick={() => setForecastYm(nextForecastMonth(forecastYm))}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors text-sm"
+            >
+              ›
+            </button>
+          </div>
+
+          {isLoading && (
+            <p className="text-sm text-gray-400 text-center py-3">Завантаження...</p>
+          )}
+
+          {!isLoading && forecast.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-3">Немає активних підписок з абонплатою</p>
+          )}
+
+          {!isLoading && forecast.map((acc) => (
+            <div key={acc.account_id} className="rounded-lg border border-gray-100 overflow-hidden">
+              {/* Account header */}
+              <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{acc.account_name}</span>
+                {acc.billing_run_done && (
+                  <span className="text-xs text-green-600 font-medium">✓ нарахування виконані</span>
+                )}
+              </div>
+
+              <div className="px-4 py-2 divide-y divide-gray-50">
+                <BalanceBadge value={acc.balance_start} label="Баланс на початку місяця" />
+
+                {/* Accrual lines */}
+                {acc.lines.length > 0 && (
+                  <div className="py-1.5 space-y-1">
+                    {acc.lines.map((line) => (
+                      <div key={line.enrollment_id} className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500 truncate pr-2">{line.activity_name}</span>
+                        <span className="text-xs text-red-500 tabular-nums shrink-0">
+                          −{line.expected_amount.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} грн
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {acc.lines.length === 0 && (
+                  <div className="py-1.5">
+                    <span className="text-xs text-gray-400">Нарахувань не очікується</span>
+                  </div>
+                )}
+
+                <BalanceBadge
+                  value={acc.balance_after_accruals}
+                  label="Нараховано на початок місяця"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

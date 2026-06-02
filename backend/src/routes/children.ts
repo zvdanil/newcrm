@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
-import { recalcActivityAccruals, recalcForIndividualTariff } from '../services/billingRunService.js'
+import { recalcActivityAccruals, recalcForIndividualTariff, getChildIndividualTariff, getEffectivePrice } from '../services/billingRunService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
@@ -1131,6 +1131,156 @@ export async function childrenRoutes(app: FastifyInstance) {
 
       await recalcBalance(childId, enrollment.account_id)
       return { ok: true }
+    }
+  )
+
+  // GET /api/children/:id/billing-forecast?month=YYYY-MM-01
+  // Returns projected accruals (monthly/smart tariffs) for the given billing month.
+  // balance_start = balance at end of previous month (all txns before monthStart).
+  // expected_accruals = what the Billing Run will charge on the 1st.
+  app.get<{ Params: { id: string }; Querystring: { month?: string } }>(
+    '/:id/billing-forecast',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const childId = request.params.id
+
+      const child = await db.selectFrom('children').select('id').where('id', '=', childId).executeTakeFirst()
+      if (!child) return reply.status(404).send({ error: 'NotFound' })
+
+      // Default: next calendar month
+      const now = new Date()
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      const defaultMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`
+      const monthStr = request.query.month ?? defaultMonth
+
+      const billingDate = new Date(monthStr)
+
+      // All active/frozen enrollments with activity + account info
+      const enrollments = await db
+        .selectFrom('enrollments as e')
+        .innerJoin('activities as act', 'act.id', 'e.activity_id')
+        .innerJoin('accounts as acc', 'acc.id', 'e.account_id')
+        .select([
+          'e.id as enrollment_id', 'e.child_id', 'e.account_id', 'e.activity_id',
+          'e.start_date', 'e.status',
+          'act.name as activity_name', 'act.tariff_type as activity_tariff_type',
+          'acc.name as account_name',
+        ])
+        .where('e.child_id', '=', childId)
+        .where('e.status', 'in', ['active', 'frozen'])
+        .execute()
+
+      // All accounts relevant to this child (from balances + enrollments)
+      const balanceAccounts = await db
+        .selectFrom('child_balances as cb')
+        .innerJoin('accounts as acc', 'acc.id', 'cb.account_id')
+        .select(['cb.account_id', 'acc.name as account_name'])
+        .where('cb.child_id', '=', childId)
+        .execute()
+
+      const accountMap = new Map<string, string>()
+      for (const ba of balanceAccounts) accountMap.set(ba.account_id, ba.account_name)
+      for (const e of enrollments) accountMap.set(e.account_id, e.account_name)
+
+      if (accountMap.size === 0) return []
+
+      // Billing run already done for this month? (per account)
+      const runDoneRows = await db
+        .selectFrom('transactions')
+        .select('account_id')
+        .where('child_id', '=', childId)
+        .where('billing_month', '=', billingDate)
+        .where('type', '=', 'ACCRUAL')
+        .where('is_deleted', '=', false)
+        .execute()
+      const billingRunDoneAccounts = new Set(runDoneRows.map((r) => r.account_id))
+
+      // Initial balances
+      const initialBalances = await db
+        .selectFrom('initial_balances')
+        .select(['account_id', 'amount'])
+        .where('child_id', '=', childId)
+        .execute()
+      const initBalMap = new Map<string, number>()
+      for (const ib of initialBalances) initBalMap.set(ib.account_id, parseFloat(ib.amount as string))
+
+      // All transactions before billing month start (for balance_start)
+      const txBefore = await db
+        .selectFrom('transactions')
+        .select(['type', 'amount', 'account_id'])
+        .where('child_id', '=', childId)
+        .where('is_deleted', '=', false)
+        .where('transaction_date', '<', billingDate)
+        .execute()
+
+      const balanceAtStart = new Map<string, number>()
+      for (const tx of txBefore) {
+        const cur = balanceAtStart.get(tx.account_id) ?? 0
+        const amt = parseFloat(tx.amount as string)
+        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+          balanceAtStart.set(tx.account_id, cur + amt)
+        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+          balanceAtStart.set(tx.account_id, cur - amt)
+        }
+      }
+      for (const [accId, initAmt] of initBalMap) {
+        balanceAtStart.set(accId, (balanceAtStart.get(accId) ?? 0) + initAmt)
+      }
+
+      // Build forecast per account
+      const result = []
+
+      for (const [accountId, accountName] of accountMap) {
+        const balStart = Math.round((balanceAtStart.get(accountId) ?? 0) * 100) / 100
+
+        const lines: Array<{
+          enrollment_id: string
+          activity_name: string
+          expected_amount: number
+          tariff_type: string
+        }> = []
+
+        const accountEnrollments = enrollments.filter((e) => e.account_id === accountId)
+
+        for (const e of accountEnrollments) {
+          // Billing run skips frozen and enrollments starting after the 1st
+          if (e.status === 'frozen') continue
+          const startDate = new Date(String(e.start_date))
+          if (startDate > billingDate) continue
+
+          const ind = await getChildIndividualTariff(e.child_id, e.activity_id, billingDate)
+          const effectiveType: string = ind ? ind.tariff_type : e.activity_tariff_type
+
+          if (effectiveType !== 'monthly' && effectiveType !== 'smart') continue
+
+          const price = ind
+            ? Math.round(parseFloat(ind.price as string) * 100) / 100
+            : await getEffectivePrice(e.child_id, e.activity_id, billingDate)
+
+          if (!price || price <= 0) continue
+
+          lines.push({
+            enrollment_id: e.enrollment_id,
+            activity_name: e.activity_name,
+            expected_amount: price,
+            tariff_type: effectiveType,
+          })
+        }
+
+        const expectedAccruals = Math.round(lines.reduce((s, l) => s + l.expected_amount, 0) * 100) / 100
+
+        result.push({
+          account_id: accountId,
+          account_name: accountName,
+          balance_start: balStart,
+          expected_accruals: expectedAccruals,
+          balance_after_accruals: Math.round((balStart - expectedAccruals) * 100) / 100,
+          billing_run_done: billingRunDoneAccounts.has(accountId),
+          lines,
+        })
+      }
+
+      return result
     }
   )
 

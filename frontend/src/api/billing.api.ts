@@ -56,6 +56,23 @@ export interface GlobalDiscount {
   created_at: string
 }
 
+export interface BillingForecastLine {
+  enrollment_id: string
+  activity_name: string
+  expected_amount: number
+  tariff_type: string
+}
+
+export interface BillingForecastAccount {
+  account_id: string
+  account_name: string
+  balance_start: number
+  expected_accruals: number
+  balance_after_accruals: number
+  billing_run_done: boolean
+  lines: BillingForecastLine[]
+}
+
 export const billingApi = {
   getBalance: async (childId: string): Promise<ChildBalance[]> => {
     const { data } = await apiClient.get<ChildBalance[]>(`/children/${childId}/balance`)
@@ -154,6 +171,13 @@ export const billingApi = {
       is_per_lesson: isPerLesson,
       reason,
     })
+    return data
+  },
+
+  getForecast: async (childId: string, month: string): Promise<BillingForecastAccount[]> => {
+    const { data } = await apiClient.get<BillingForecastAccount[]>(
+      `/children/${childId}/billing-forecast?month=${month}`
+    )
     return data
   },
 
