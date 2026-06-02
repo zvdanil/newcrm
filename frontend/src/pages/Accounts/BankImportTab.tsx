@@ -1,7 +1,28 @@
 import { useState, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { importApi, type BankRow, type PreviewRow, type ApplyRow } from '../../api/import.api'
+import {
+  importApi,
+  type BankRow,
+  type PreviewRow,
+  type ApplyRow,
+  type DuplicateFingerprints,
+} from '../../api/import.api'
+
+function isEffectiveDuplicate(
+  row: PreviewRow,
+  familyId: string | null,
+  childId: string | null,
+  fingerprints: DuplicateFingerprints | null,
+): boolean {
+  if (row.is_duplicate) return true
+  if (!fingerprints || (!familyId && !childId)) return false
+  const amt = row.amount.toFixed(2)
+  const date = row.date.substring(0, 10)
+  if (familyId && fingerprints.family.includes(`${familyId}|${date}|${amt}`)) return true
+  if (childId && fingerprints.child.includes(`child:${childId}|${date}|${amt}`)) return true
+  return false
+}
 import { familiesApi } from '../../api/families.api'
 import { childrenApi } from '../../api/children.api'
 import { importTemplatesApi, type ImportTemplate, type ImportTemplateInput } from '../../api/import_templates.api'
@@ -187,11 +208,17 @@ export function BankImportTab({ accountId }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [parseError, setParseError]   = useState<string | null>(null)
   const [previewRows, setPreviewRows] = useState<PreviewRow[] | null>(null)
+  const [duplicateFingerprints, setDuplicateFingerprints] = useState<DuplicateFingerprints | null>(null)
   const [checked, setChecked]         = useState<Set<number>>(new Set())
   const [forceImport, setForceImport] = useState<Set<number>>(new Set())
   const [familyOverride, setFamilyOverride] = useState<Map<number, { family_id: string | null; child_id: string | null; display_name: string }>>(new Map())
   const [familySearch, setFamilySearch]     = useState<Map<number, string>>(new Map())
-  const [result, setResult] = useState<{ imported: number; skipped: number; errors: { row_index: number; message: string }[] } | null>(null)
+  const [result, setResult] = useState<{
+    imported: number
+    skipped: number
+    profiles: number
+    errors: { row_index: number; message: string }[]
+  } | null>(null)
 
   const { data: templates = [], refetch: refetchTemplates } = useQuery({
     queryKey: ['import-templates'],
@@ -217,8 +244,11 @@ export function BankImportTab({ accountId }: Props) {
     onSuccess: (resp) => {
       const rows = resp.rows
       setPreviewRows(rows)
+      setDuplicateFingerprints(resp.duplicate_fingerprints)
       const defaultChecked = new Set<number>()
-      for (const r of rows) if (r.status === 'matched') defaultChecked.add(r.row_index)
+      for (const r of rows) {
+        if (r.status === 'matched' && !r.is_duplicate) defaultChecked.add(r.row_index)
+      }
       setChecked(defaultChecked)
       setForceImport(new Set())
       setFamilyOverride(new Map())
@@ -231,8 +261,14 @@ export function BankImportTab({ accountId }: Props) {
   const applyMutation = useMutation({
     mutationFn: (rows: ApplyRow[]) => importApi.apply(accountId, rows),
     onSuccess: (resp) => {
-      setResult({ imported: resp.imported, skipped: resp.skipped_duplicates, errors: resp.errors })
+      setResult({
+        imported: resp.imported,
+        skipped: resp.skipped_duplicates,
+        profiles: resp.profiles_updated,
+        errors: resp.errors,
+      })
       setPreviewRows(null)
+      setDuplicateFingerprints(null)
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['ledger'] })
       qc.invalidateQueries({ queryKey: ['balance'] })
@@ -243,7 +279,7 @@ export function BankImportTab({ accountId }: Props) {
   })
 
   async function handleFile(file: File) {
-    setParseError(null); setPreviewRows(null); setResult(null)
+    setParseError(null); setPreviewRows(null); setDuplicateFingerprints(null); setResult(null)
     try {
       const rows = await parseSheet(file, selectedTemplate)
       if (rows.length === 0) { setParseError('У файлі не знайдено жодного рядка із позитивною сумою'); return }
@@ -286,18 +322,34 @@ export function BankImportTab({ accountId }: Props) {
     setChecked((p) => { const n = new Set(p); n.has(row_index) ? n.delete(row_index) : n.add(row_index); return n })
   }
 
+  function rowTargets(row: PreviewRow) {
+    const ov = familyOverride.get(row.row_index)
+    return {
+      familyId: ov?.family_id ?? row.matched_family_id,
+      childId: ov?.child_id ?? row.matched_child_id,
+    }
+  }
+
   const checkedCount = previewRows
     ? [...checked].filter((idx) => {
         const r = previewRows.find((r) => r.row_index === idx)
         if (!r) return false
-        if (r.is_duplicate && !forceImport.has(idx)) return false
-        const ov = familyOverride.get(idx)
-        return !!(ov?.family_id || ov?.child_id || r.matched_family_id || r.matched_child_id)
+        const { familyId, childId } = rowTargets(r)
+        if (isEffectiveDuplicate(r, familyId, childId, duplicateFingerprints) && !forceImport.has(idx)) return false
+        return !!(familyId || childId)
       }).length
     : 0
 
-  const duplicateCount = previewRows?.filter((r) => r.is_duplicate).length ?? 0
-  const partialCount   = previewRows?.filter((r) => r.status === 'partial').length ?? 0
+  const duplicateCount = previewRows
+    ? previewRows.filter((r) => {
+        const { familyId, childId } = rowTargets(r)
+        return isEffectiveDuplicate(r, familyId, childId, duplicateFingerprints)
+      }).length
+    : 0
+  const partialCount   = previewRows?.filter((r) => {
+    const { familyId, childId } = rowTargets(r)
+    return r.status === 'partial' && !isEffectiveDuplicate(r, familyId, childId, duplicateFingerprints)
+  }).length ?? 0
   const unmatchedCount = previewRows?.filter((r) => r.status === 'unmatched').length ?? 0
 
   // ── Template management views ─────────────────────────────────────────────────
@@ -336,6 +388,9 @@ export function BankImportTab({ accountId }: Props) {
           <p className="text-sm font-semibold text-green-800">Імпорт завершено</p>
           <p className="text-sm text-green-700">Імпортовано: <strong>{result.imported}</strong></p>
           <p className="text-sm text-gray-600">Пропущено дублікатів: <strong>{result.skipped}</strong></p>
+          {result.profiles > 0 && (
+            <p className="text-sm text-gray-600">Оновлено відомих платників: <strong>{result.profiles}</strong></p>
+          )}
           {result.errors.length > 0 && (
             <div>
               <p className="text-sm font-medium text-red-700 mt-2">Помилки ({result.errors.length}):</p>
@@ -346,7 +401,7 @@ export function BankImportTab({ accountId }: Props) {
           )}
         </div>
         <button
-          onClick={() => { setResult(null); setPreviewRows(null) }}
+          onClick={() => { setResult(null); setPreviewRows(null); setDuplicateFingerprints(null) }}
           className="text-sm px-4 py-2 bg-iris-600 hover:bg-iris-700 text-white rounded-lg transition-colors"
         >
           Новий імпорт
@@ -474,11 +529,15 @@ export function BankImportTab({ accountId }: Props) {
           <tbody className="divide-y divide-gray-100">
             {previewRows.map((row) => {
               const isForced   = forceImport.has(row.row_index)
-              const isDisabled = row.is_duplicate && !isForced
               const override   = familyOverride.get(row.row_index)
               const effectiveFamilyId = override?.family_id ?? row.matched_family_id
               const effectiveChildId  = override?.child_id  ?? row.matched_child_id
               const hasTarget  = !!(effectiveFamilyId || effectiveChildId)
+              const effectiveDuplicate = isEffectiveDuplicate(row, effectiveFamilyId, effectiveChildId, duplicateFingerprints)
+              const isDisabled = effectiveDuplicate && !isForced
+              const displayStatus: PreviewRow['status'] = isForced
+                ? (hasTarget ? 'matched' : row.status)
+                : (effectiveDuplicate ? 'duplicate' : row.status)
 
               return (
                 <tr key={row.row_index} className={`transition-colors ${isDisabled ? 'opacity-50 bg-gray-50' : 'hover:bg-gray-50'}`}>
@@ -511,8 +570,8 @@ export function BankImportTab({ accountId }: Props) {
 
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-1 items-start">
-                      <StatusBadge status={isForced ? 'matched' : row.status} />
-                      {row.is_duplicate && !isForced && (
+                      <StatusBadge status={displayStatus} />
+                      {effectiveDuplicate && !isForced && (
                         <button
                           onClick={() => {
                             setForceImport((p) => { const n = new Set(p); n.add(row.row_index); return n })
@@ -538,7 +597,7 @@ export function BankImportTab({ accountId }: Props) {
                   </td>
 
                   <td className="px-3 py-2">
-                    {row.status === 'duplicate' ? (
+                    {displayStatus === 'duplicate' ? (
                       <span className="text-xs text-gray-400 line-through">{row.matched_family_name ?? 'вже імпортовано'}</span>
                     ) : row.status === 'matched' && !override ? (
                       <div className="flex items-center gap-1">

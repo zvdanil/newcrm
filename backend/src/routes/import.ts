@@ -24,9 +24,15 @@ interface CandidateFamily {
   parent_name: string
 }
 
+export type NameMatchMethod =
+  | 'description_fuzzy'
+  | 'description_partial'
+  | 'counterparty_fuzzy'
+  | 'counterparty_partial'
+
 export interface PreviewRow extends BankRow {
   status: 'matched' | 'conflict' | 'unmatched' | 'duplicate' | 'partial'
-  match_method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | 'name_fuzzy' | 'name_partial' | null
+  match_method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | NameMatchMethod | null
   matched_family_id: string | null
   matched_child_id: string | null
   matched_family_name: string | null
@@ -79,10 +85,129 @@ function makeBankRef(row: BankRow): string {
   return `${row.date}|${row.amount.toFixed(2)}|${key}`
 }
 
+function normalizeTxDate(d: string): string {
+  return d.substring(0, 10)
+}
+
+function paymentAmountKey(amount: number): string {
+  return amount.toFixed(2)
+}
+
+// ─── Duplicate index (preview + apply) ─────────────────────────────────────
+
+interface DuplicateHit {
+  txId: string
+  childId: string
+}
+
+interface DuplicateIndex {
+  byBankRef: Map<string, DuplicateHit>
+  byFamily: Map<string, DuplicateHit>
+  byChild: Map<string, DuplicateHit>
+}
+
+function buildDuplicateIndex(
+  existingTxRows: {
+    id: string
+    child_id: string
+    amount: string
+    transaction_date: string
+    family_id: string | null
+    metadata_json_raw: string | null
+  }[],
+): DuplicateIndex {
+  const byBankRef = new Map<string, DuplicateHit>()
+  const byFamily = new Map<string, DuplicateHit>()
+  const byChild = new Map<string, DuplicateHit>()
+
+  for (const tx of existingTxRows) {
+    const hit: DuplicateHit = { txId: tx.id, childId: tx.child_id }
+    const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
+    if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
+      byBankRef.set(meta['bank_ref'] as string, hit)
+    }
+    const amt = paymentAmountKey(parseFloat(tx.amount))
+    const date = normalizeTxDate(tx.transaction_date)
+    if (tx.family_id) {
+      byFamily.set(`${tx.family_id}|${date}|${amt}`, hit)
+    } else {
+      byChild.set(`child:${tx.child_id}|${date}|${amt}`, hit)
+    }
+  }
+
+  return { byBankRef, byFamily, byChild }
+}
+
+function findPaymentDuplicate(
+  index: DuplicateIndex,
+  row: { date: string; amount: number; bank_ref?: string },
+  familyId: string | null,
+  childId: string | null,
+): DuplicateHit | null {
+  if (row.bank_ref) {
+    const byRef = index.byBankRef.get(row.bank_ref)
+    if (byRef) return byRef
+  }
+  const amt = paymentAmountKey(row.amount)
+  const date = normalizeTxDate(row.date)
+  if (familyId) {
+    const hit = index.byFamily.get(`${familyId}|${date}|${amt}`)
+    if (hit) return hit
+  }
+  if (childId) {
+    const hit = index.byChild.get(`child:${childId}|${date}|${amt}`)
+    if (hit) return hit
+  }
+  return null
+}
+
+function duplicateFingerprintsFromIndex(index: DuplicateIndex): { family: string[]; child: string[] } {
+  return {
+    family: [...index.byFamily.keys()],
+    child: [...index.byChild.keys()],
+  }
+}
+
+function registerImportedPayment(
+  index: DuplicateIndex,
+  row: { bank_ref: string; date: string; amount: number; family_id?: string | null },
+  txId: string,
+  childId: string,
+): void {
+  const hit: DuplicateHit = { txId, childId }
+  index.byBankRef.set(row.bank_ref, hit)
+  const amt = paymentAmountKey(row.amount)
+  const date = normalizeTxDate(row.date)
+  if (row.family_id) {
+    index.byFamily.set(`${row.family_id}|${date}|${amt}`, hit)
+  } else {
+    index.byChild.set(`child:${childId}|${date}|${amt}`, hit)
+  }
+}
+
+async function resolveChildIdsForPayerProfile(
+  row: ApplyRow,
+  duplicateHit: DuplicateHit | null,
+): Promise<string[]> {
+  if (row.child_id && !row.family_id) return [row.child_id]
+  if (duplicateHit) return [duplicateHit.childId]
+  if (row.family_id) {
+    const firstChild = await db
+      .selectFrom('children')
+      .select('id')
+      .where('family_id', '=', row.family_id)
+      .where('is_active', '=', true)
+      .orderBy('full_name', 'asc')
+      .executeTakeFirst()
+    return firstChild ? [firstChild.id] : []
+  }
+  return []
+}
+
 // ─── Matching ─────────────────────────────────────────────────────────────────
 
 interface MatchResult {
-  method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | 'name_fuzzy' | 'name_partial' | null
+  method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | NameMatchMethod | null
   families: CandidateFamily[]
 }
 
@@ -161,20 +286,48 @@ async function matchRow(
     }
   }
 
-  // 5. Fuzzy name match across all searchable fields
-  const needle = tokens(row.counterparty_name)
-  if (needle.length === 0) return { method: null, families: [] }
+  // 5–6. Fuzzy name: призначення платежу first, then контрагент
+  const description = row.description.trim()
+  if (description) {
+    const descMatch = collectFuzzyCandidates(
+      description, allParents, parentFamilies, allChildren, childFamilies, allFamilies,
+    )
+    if (descMatch.full.length > 0) return { method: 'description_fuzzy', families: descMatch.full }
+    if (descMatch.partial.length > 0) return { method: 'description_partial', families: descMatch.partial }
+  }
 
-  const matchedKeys = new Set<string>()  // family_id or "child:<id>"
+  const counterparty = row.counterparty_name.trim()
+  if (counterparty) {
+    const cpMatch = collectFuzzyCandidates(
+      counterparty, allParents, parentFamilies, allChildren, childFamilies, allFamilies,
+    )
+    if (cpMatch.full.length > 0) return { method: 'counterparty_fuzzy', families: cpMatch.full }
+    if (cpMatch.partial.length > 0) return { method: 'counterparty_partial', families: cpMatch.partial }
+  }
+
+  return { method: null, families: [] }
+}
+
+function collectFuzzyCandidates(
+  searchText: string,
+  allParents: { id: string; full_name: string; note: string | null }[],
+  parentFamilies: Map<string, CandidateFamily[]>,
+  allChildren: { id: string; full_name: string; note: string | null; family_id: string | null }[],
+  childFamilies: Map<string, { family_id: string; family_name: string }>,
+  allFamilies: { id: string; name: string }[],
+): { full: CandidateFamily[]; partial: CandidateFamily[] } {
+  const needle = tokens(searchText)
+  if (needle.length === 0) return { full: [], partial: [] }
+
+  const matchedKeys = new Set<string>()
   const candidates: CandidateFamily[] = []
 
-  // Check parents (full_name + note)
   for (const p of allParents) {
     const matchesName = containsAllTokens(p.full_name, needle)
     const matchesNote = p.note ? containsAllTokens(p.note, needle) : false
     if (matchesName || matchesNote) {
       for (const fam of parentFamilies.get(p.id) ?? []) {
-        const key = fam.family_id!
+        const key = fam.family_id ?? `child:${fam.child_id}`
         if (!matchedKeys.has(key)) {
           matchedKeys.add(key)
           candidates.push(fam)
@@ -183,7 +336,6 @@ async function matchRow(
     }
   }
 
-  // Check children (full_name + note) — family_id is optional
   for (const c of allChildren) {
     const matchesName = containsAllTokens(c.full_name, needle)
     const matchesNote = c.note ? containsAllTokens(c.note, needle) : false
@@ -195,7 +347,6 @@ async function matchRow(
           candidates.push({ family_id: fam.family_id, child_id: null, family_name: fam.family_name, parent_name: c.full_name })
         }
       } else {
-        // Child without family — direct child payment target
         const childKey = `child:${c.id}`
         if (!matchedKeys.has(childKey)) {
           matchedKeys.add(childKey)
@@ -205,12 +356,9 @@ async function matchRow(
     }
   }
 
-  // Check families by name:
-  // direction is REVERSE — family name tokens must ALL appear in the counterparty string.
-  // e.g. family "Долінце" → token ["долінце"] → contained in "Долінце Марина Сергіївна" ✓
   for (const f of allFamilies) {
     const familyTokens = tokens(f.name)
-    if (familyTokens.length > 0 && containsAllTokens(row.counterparty_name, familyTokens)) {
+    if (familyTokens.length > 0 && containsAllTokens(searchText, familyTokens)) {
       if (!matchedKeys.has(f.id)) {
         matchedKeys.add(f.id)
         candidates.push({ family_id: f.id, child_id: null, family_name: f.name, parent_name: f.name })
@@ -218,9 +366,6 @@ async function matchRow(
     }
   }
 
-  if (candidates.length > 0) return { method: 'name_fuzzy', families: candidates }
-
-  // 6. Partial match — some but not all tokens found (e.g. shared surname, different given name)
   const partialMap = new Map<string, { candidate: CandidateFamily; score: number }>()
 
   function tryPartial(candidate: CandidateFamily, score: number) {
@@ -250,12 +395,26 @@ async function matchRow(
     }
   }
 
-  const partialCandidates = [...partialMap.values()]
+  const partial = [...partialMap.values()]
     .sort((a, b) => b.score - a.score)
     .map((x) => x.candidate)
 
-  if (partialCandidates.length > 0) return { method: 'name_partial', families: partialCandidates }
-  return { method: null, families: [] }
+  return { full: candidates, partial }
+}
+
+function isPartialMatchMethod(method: MatchResult['method']): boolean {
+  return method === 'description_partial' || method === 'counterparty_partial'
+}
+
+function applyDuplicateToPreview(
+  row: BankRow & { bank_ref: string },
+  index: DuplicateIndex,
+  familyId: string | null,
+  childId: string | null,
+): { is_duplicate: boolean; duplicate_tx_id: string | null; status: PreviewRow['status'] | null } {
+  const hit = findPaymentDuplicate(index, row, familyId, childId)
+  if (!hit) return { is_duplicate: false, duplicate_tx_id: null, status: null }
+  return { is_duplicate: true, duplicate_tx_id: hit.txId, status: 'duplicate' }
 }
 
 function deduplicateFamilies(input: CandidateFamily[]): CandidateFamily[] {
@@ -397,31 +556,17 @@ export async function importRoutes(app: FastifyInstance) {
         .where('t.account_id', '=', account_id)
         .execute()
 
-      const duplicateMap = new Map<string, string>()      // bank_ref → tx_id
-      const familyPaymentSet = new Map<string, string>()  // family_id|date|amount → tx_id
-      const childPaymentSet = new Map<string, string>()   // child_id|date|amount → tx_id (non-family children)
-
-      for (const tx of existingTxRows) {
-        const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
-        if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
-          duplicateMap.set(meta['bank_ref'] as string, tx.id)
-        }
-        const amt = parseFloat(tx.amount).toFixed(2)
-        if (tx.family_id) {
-          familyPaymentSet.set(`${tx.family_id}|${tx.transaction_date}|${amt}`, tx.id)
-        } else {
-          childPaymentSet.set(`child:${tx.child_id}|${tx.transaction_date}|${amt}`, tx.id)
-        }
-      }
+      const dupIndex = buildDuplicateIndex(existingTxRows)
+      const duplicate_fingerprints = duplicateFingerprintsFromIndex(dupIndex)
 
       // Process each row
       const result: PreviewRow[] = []
 
       for (const row of rows) {
         const bank_ref = makeBankRef(row)
-        const dup_tx_id = duplicateMap.get(bank_ref) ?? null
+        const bankRefHit = dupIndex.byBankRef.get(bank_ref) ?? null
 
-        if (dup_tx_id) {
+        if (bankRefHit) {
           result.push({
             ...row,
             status: 'duplicate',
@@ -433,7 +578,7 @@ export async function importRoutes(app: FastifyInstance) {
             candidate_families: [],
             bank_ref,
             is_duplicate: true,
-            duplicate_tx_id: dup_tx_id,
+            duplicate_tx_id: bankRefHit.txId,
           })
           continue
         }
@@ -449,8 +594,7 @@ export async function importRoutes(app: FastifyInstance) {
 
         if (match.families.length === 0) {
           status = 'unmatched'
-        } else if (match.method === 'name_partial') {
-          // Partial match: show all candidates, require explicit user confirmation
+        } else if (isPartialMatchMethod(match.method)) {
           status = 'partial'
           candidate_families = match.families
         } else if (match.families.length === 1) {
@@ -464,25 +608,36 @@ export async function importRoutes(app: FastifyInstance) {
           candidate_families = match.families
         }
 
-        // Secondary duplicate check: same family|child + date + amount on this account
-        // Catches manually entered payments that correspond to the same bank row
         let is_duplicate = false
         let duplicate_tx_id: string | null = null
-        if (matched_family_id) {
-          const key = `${matched_family_id}|${row.date}|${row.amount.toFixed(2)}`
-          const existing = familyPaymentSet.get(key)
-          if (existing) {
-            is_duplicate = true
-            duplicate_tx_id = existing
-            status = 'duplicate'
-          }
+
+        const primaryDup = applyDuplicateToPreview(
+          { ...row, bank_ref },
+          dupIndex,
+          matched_family_id,
+          matched_child_id,
+        )
+        if (primaryDup.is_duplicate) {
+          is_duplicate = true
+          duplicate_tx_id = primaryDup.duplicate_tx_id
+          status = 'duplicate'
         }
-        if (matched_child_id && !is_duplicate) {
-          const key = `child:${matched_child_id}|${row.date}|${row.amount.toFixed(2)}`
-          const existing = childPaymentSet.get(key)
-          if (existing) {
+
+        // Among candidates: if exactly one would duplicate an existing manual payment, pre-select it
+        if (!is_duplicate && candidate_families.length > 0) {
+          const dupCandidates = candidate_families.filter((c) =>
+            findPaymentDuplicate(dupIndex, { ...row, bank_ref }, c.family_id, c.child_id) !== null,
+          )
+          if (dupCandidates.length === 1) {
+            const c = dupCandidates[0]
+            matched_family_id = c.family_id
+            matched_child_id = c.child_id
+            matched_family_name = c.family_name
+            matched_parent_name = c.parent_name
+            candidate_families = []
+            const hit = findPaymentDuplicate(dupIndex, { ...row, bank_ref }, c.family_id, c.child_id)!
             is_duplicate = true
-            duplicate_tx_id = existing
+            duplicate_tx_id = hit.txId
             status = 'duplicate'
           }
         }
@@ -502,7 +657,7 @@ export async function importRoutes(app: FastifyInstance) {
         })
       }
 
-      return { rows: result }
+      return { rows: result, duplicate_fingerprints }
     }
   )
 
@@ -534,22 +689,7 @@ export async function importRoutes(app: FastifyInstance) {
         .where('t.account_id', '=', account_id)
         .execute()
 
-      const duplicateSet = new Set<string>()
-      const familyPaymentSet = new Set<string>()
-      const childPaymentSet = new Set<string>()
-
-      for (const tx of existingTxRows) {
-        const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
-        if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
-          duplicateSet.add(meta['bank_ref'] as string)
-        }
-        const amt = parseFloat(tx.amount).toFixed(2)
-        if (tx.family_id) {
-          familyPaymentSet.add(`${tx.family_id}|${tx.transaction_date}|${amt}`)
-        } else {
-          childPaymentSet.add(`child:${tx.child_id}|${tx.transaction_date}|${amt}`)
-        }
-      }
+      const dupIndex = buildDuplicateIndex(existingTxRows)
 
       const createdBy = request.user.sub
 
@@ -558,17 +698,17 @@ export async function importRoutes(app: FastifyInstance) {
       const errors: { row_index: number; message: string }[] = []
       let imported = 0
       let skipped_duplicates = 0
+      let profiles_updated = 0
 
       for (const row of rows) {
-        const familyKey = row.family_id ? `${row.family_id}|${row.date}|${row.amount.toFixed(2)}` : null
-        const childKey = row.child_id ? `child:${row.child_id}|${row.date}|${row.amount.toFixed(2)}` : null
+        const duplicateHit = findPaymentDuplicate(dupIndex, row, row.family_id, row.child_id ?? null)
 
-        const isDuplicate =
-          duplicateSet.has(row.bank_ref) ||
-          (familyKey !== null && familyPaymentSet.has(familyKey)) ||
-          (childKey !== null && childPaymentSet.has(childKey))
-
-        if (!row.force && isDuplicate) {
+        if (!row.force && duplicateHit) {
+          const profileChildIds = await resolveChildIdsForPayerProfile(row, duplicateHit)
+          for (const childId of profileChildIds) {
+            await upsertPayerProfile(childId, row.counterparty_name, row.edrpou, row.iban ?? null, row.date)
+            profiles_updated++
+          }
           skipped_duplicates++
           continue
         }
@@ -611,7 +751,7 @@ export async function importRoutes(app: FastifyInstance) {
               family_name: child.full_name,
               allocations: [{ child_id: child.id, child_name: child.full_name, amount: row.amount, tx_id }],
             })
-            duplicateSet.add(row.bank_ref)
+            registerImportedPayment(dupIndex, row, tx_id, child.id)
             imported++
 
           } else if (row.family_id) {
@@ -723,7 +863,10 @@ export async function importRoutes(app: FastifyInstance) {
               })
             }
 
-            duplicateSet.add(row.bank_ref)
+            const lastAlloc = allocationsOut[allocationsOut.length - 1]?.allocations[0]
+            if (lastAlloc) {
+              registerImportedPayment(dupIndex, { ...row, family_id: row.family_id }, lastAlloc.tx_id, lastAlloc.child_id)
+            }
             imported++
 
           } else {
@@ -735,7 +878,7 @@ export async function importRoutes(app: FastifyInstance) {
         }
       }
 
-      return { imported, skipped_duplicates, errors, allocations: allocationsOut }
+      return { imported, skipped_duplicates, profiles_updated, errors, allocations: allocationsOut }
     }
   )
 }

@@ -17,9 +17,20 @@ export interface CandidateFamily {
   parent_name: string
 }
 
+export type NameMatchMethod =
+  | 'description_fuzzy'
+  | 'description_partial'
+  | 'counterparty_fuzzy'
+  | 'counterparty_partial'
+
+export interface DuplicateFingerprints {
+  family: string[]
+  child: string[]
+}
+
 export interface PreviewRow extends BankRow {
   status: 'matched' | 'conflict' | 'unmatched' | 'duplicate' | 'partial'
-  match_method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | 'name_fuzzy' | 'name_partial' | null
+  match_method: 'edrpou' | 'iban' | 'profile_inn' | 'profile_iban' | NameMatchMethod | null
   matched_family_id: string | null
   matched_child_id: string | null
   matched_family_name: string | null
@@ -32,6 +43,7 @@ export interface PreviewRow extends BankRow {
 
 export interface PreviewResponse {
   rows: PreviewRow[]
+  duplicate_fingerprints: DuplicateFingerprints
 }
 
 export interface ApplyRow {
@@ -58,6 +70,7 @@ export interface ApplyAllocation {
 export interface ApplyResponse {
   imported: number
   skipped_duplicates: number
+  profiles_updated: number
   errors: { row_index: number; message: string }[]
   allocations: {
     row_index: number
