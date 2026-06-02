@@ -130,6 +130,24 @@ function matchRule(
   return null
 }
 
+// ─── Note helpers ─────────────────────────────────────────────────────────────
+
+// Format: "bank_ref:REF\nCounterparty | Description"
+// Line 1 = machine key for deduplication (starts with bank_ref:)
+// Line 2+ = human-readable content shown in UI
+function buildExpenseNote(row: ApplyExpenseRow): string {
+  const parts: string[] = []
+  if (row.counterparty_name) parts.push(row.counterparty_name)
+  if (row.description)       parts.push(row.description)
+  const human = parts.filter(Boolean).join(' | ')
+  return `bank_ref:${row.bank_ref}` + (human ? `\n${human}` : '')
+}
+
+// Extract the bank_ref key (first line only, strip "bank_ref:" prefix)
+function parseBankRefKey(note: string): string {
+  return note.split('\n')[0].replace('bank_ref:', '').trim()
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 export async function expenseImportRoutes(app: FastifyInstance) {
@@ -282,7 +300,7 @@ export async function expenseImportRoutes(app: FastifyInstance) {
       const bankRefSet = new Map<string, string>()
       for (const e of existingRefs) {
         if (e.note && e.note.startsWith('bank_ref:')) {
-          bankRefSet.set(e.note.replace('bank_ref:', '').trim(), e.id)
+          bankRefSet.set(parseBankRefKey(e.note), e.id)
         }
       }
 
@@ -430,7 +448,7 @@ export async function expenseImportRoutes(app: FastifyInstance) {
               payment_date: row.date,
               status:       'paid',
               is_instant:   true,
-              note:         `bank_ref:${row.bank_ref}${row.note ? ' ' + row.note : ''}`,
+              note:         buildExpenseNote(row),
               created_by:   request.user.sub,
             })
             .execute()

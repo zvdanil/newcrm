@@ -67,6 +67,17 @@ function thisMonthRange() {
 
 const TODAY = localDateStr(new Date())
 
+function formatLedgerNote(note: string | null | undefined): string {
+  if (!note) return ''
+  if (note.startsWith('bank_ref:')) {
+    // Line 1 = bank_ref key (machine use only), line 2+ = human content
+    const lines = note.split('\n')
+    const human = lines.slice(1).join(' ').trim()
+    return human || 'Імпорт виписки'
+  }
+  return note
+}
+
 function PayerSearch({ value, onChange }: { value: PayerSearchResult | null; onChange: (v: PayerSearchResult | null) => void }) {
   const [query, setQuery] = useState(value?.full_name ?? '')
   const [results, setResults] = useState<PayerSearchResult[]>([])
@@ -683,7 +694,14 @@ export function AccountCardPage() {
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-gray-400">Операцій за вибраний період немає</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-28" />
+              <col className="w-36" />
+              <col className="w-32" />
+              <col />
+              <col className="w-32" />
+            </colgroup>
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-2.5 font-medium text-gray-600">Дата</th>
@@ -761,11 +779,15 @@ export function AccountCardPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-700">
-                      {row.detail ?? <span className="text-gray-400">—</span>}
+                    <td className="px-4 py-2.5 text-gray-700 max-w-0">
+                      <div className="truncate" title={row.detail ?? ''}>
+                        {row.detail ?? <span className="text-gray-400">—</span>}
+                      </div>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-400 hidden sm:table-cell">
-                      {row.note ?? ''}
+                    <td className="px-4 py-2.5 text-gray-400 hidden sm:table-cell max-w-0">
+                      <div className="truncate" title={formatLedgerNote(row.note)}>
+                        {formatLedgerNote(row.note)}
+                      </div>
                     </td>
                     <td className={`px-4 py-2.5 text-right tabular-nums font-medium whitespace-nowrap ${KIND_COLOR[row.kind]}`}>
                       <div className="flex items-center justify-end gap-2">

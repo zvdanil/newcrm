@@ -11,6 +11,15 @@ import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
 function fmt(v: string | number) { return Number(v).toFixed(2) }
 
+function fmtNote(note: string | null | undefined): string {
+  if (!note) return ''
+  if (note.startsWith('bank_ref:')) {
+    const human = note.split('\n').slice(1).join(' ').trim()
+    return human || 'Імпорт виписки'
+  }
+  return note
+}
+
 function useCategoryTree(categories: ExpenseCategory[]) {
   return useMemo(() => {
     const parents = categories.filter(c => !c.parent_id)
@@ -840,9 +849,9 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
             <span className="font-mono font-medium">{fmt(expense.amount)}</span>
           </div>
           {expense.note && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Опис</span>
-              <span className="text-gray-700">{expense.note}</span>
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 shrink-0">Опис</span>
+              <span className="text-gray-700 text-right">{fmtNote(expense.note)}</span>
             </div>
           )}
         </div>
@@ -1003,7 +1012,11 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           )}
           <span>{categoryLabel(expense)}</span>
         </div>
-        {expense.note && <p className="text-xs text-gray-400 mt-0.5">{expense.note} {expense.staff_name ? `(${expense.staff_name})` : ''}</p>}
+        {(expense.note || expense.staff_name) && (
+          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs" title={fmtNote(expense.note)}>
+            {fmtNote(expense.note)}{expense.staff_name ? ` (${expense.staff_name})` : ''}
+          </p>
+        )}
       </td>
       <td className="px-4 py-2.5 text-sm text-gray-500">{expense.account_name}</td>
       <td className="px-4 py-2.5 text-sm font-mono font-medium text-gray-900 text-right">
