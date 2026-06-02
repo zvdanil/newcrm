@@ -31,6 +31,7 @@ export function ChildCardPage() {
   const { id } = useParams<{ id: string }>()
   const qc = useQueryClient()
   const canEdit = useCanAccess('owner', 'admin', 'manager')
+  const canEditBankPayers = useCanAccess('owner', 'admin')
   const isOwner = useCanAccess('owner')
 
   const [editing, setEditing] = useState(false)
@@ -223,7 +224,7 @@ export function ChildCardPage() {
       <ParentsBlock child={child} />
 
       {/* Known payers from bank statements */}
-      {id && <BankPayersBlock childId={id} />}
+      {id && <BankPayersBlock childId={id} canEdit={canEditBankPayers} />}
 
       {/* Parent cabinet access */}
       {id && <ParentAccessBlock childId={id} />}

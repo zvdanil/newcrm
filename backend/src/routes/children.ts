@@ -1299,6 +1299,105 @@ export async function childrenRoutes(app: FastifyInstance) {
     }
   )
 
+  // PATCH /api/children/:id/bank-payers/:payerId
+  app.patch<{
+    Params: { id: string; payerId: string }
+    Body: { counterparty_name?: string; inn?: string | null; iban?: string | null; note?: string | null }
+  }>(
+    '/:id/bank-payers/:payerId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const { id, payerId } = request.params
+      const existing = await db
+        .selectFrom('bank_payer_profiles')
+        .select(['id', 'counterparty_name', 'inn', 'iban', 'note'])
+        .where('id', '=', payerId)
+        .where('child_id', '=', id)
+        .executeTakeFirst()
+
+      if (!existing) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Платника не знайдено' })
+      }
+
+      const body = request.body
+      const counterparty_name = body.counterparty_name !== undefined
+        ? body.counterparty_name.trim()
+        : existing.counterparty_name
+      if (!counterparty_name) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Назва платника обовʼязкова' })
+      }
+
+      let inn: string | null = existing.inn
+      if (body.inn !== undefined) {
+        const raw = body.inn?.replace(/\D/g, '') ?? ''
+        inn = raw.length >= 8 ? raw : null
+      }
+
+      let iban: string | null = existing.iban
+      if (body.iban !== undefined) {
+        const raw = body.iban?.replace(/\s/g, '').toUpperCase() ?? ''
+        iban = raw.startsWith('UA') && raw.length >= 29 ? raw : null
+      }
+
+      const note = body.note !== undefined ? (body.note?.trim() || null) : existing.note
+
+      if (!inn && !iban) {
+        return reply.status(400).send({
+          error: 'BadRequest',
+          message: 'Вкажіть ІНН (мін. 8 цифр) або IBAN (UA..., мін. 29 символів)',
+        })
+      }
+
+      try {
+        const row = await db
+          .updateTable('bank_payer_profiles')
+          .set({
+            counterparty_name,
+            inn,
+            iban,
+            note,
+            updated_at: new Date(),
+          })
+          .where('id', '=', payerId)
+          .where('child_id', '=', id)
+          .returning(['id', 'counterparty_name', 'inn', 'iban', 'import_count', 'last_import_date', 'note'])
+          .executeTakeFirstOrThrow()
+
+        return row
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('unique') || msg.includes('duplicate')) {
+          return reply.status(409).send({
+            error: 'Conflict',
+            message: 'Платник з таким ІНН або IBAN вже є у цієї дитини',
+          })
+        }
+        throw err
+      }
+    }
+  )
+
+  // DELETE /api/children/:id/bank-payers/:payerId
+  app.delete<{ Params: { id: string; payerId: string } }>(
+    '/:id/bank-payers/:payerId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (request, reply) => {
+      const { id, payerId } = request.params
+      const deleted = await db
+        .deleteFrom('bank_payer_profiles')
+        .where('id', '=', payerId)
+        .where('child_id', '=', id)
+        .returning('id')
+        .executeTakeFirst()
+
+      if (!deleted) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Платника не знайдено' })
+      }
+
+      return { ok: true }
+    }
+  )
+
   // GET /api/children/:id/month-stats?month=YYYY-MM
   app.get<{ Params: { id: string }; Querystring: { month?: string } }>(
     '/:id/month-stats',

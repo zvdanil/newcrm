@@ -54,9 +54,28 @@ export interface BankPayerProfile {
   note: string | null
 }
 
+export interface BankPayerUpdateInput {
+  counterparty_name?: string
+  inn?: string | null
+  iban?: string | null
+  note?: string | null
+}
+
 export const bankPayersApi = {
   listForChild: async (childId: string): Promise<BankPayerProfile[]> => {
     const { data } = await apiClient.get<BankPayerProfile[]>(`/children/${childId}/bank-payers`)
     return data
+  },
+
+  update: async (childId: string, payerId: string, payload: BankPayerUpdateInput): Promise<BankPayerProfile> => {
+    const { data } = await apiClient.patch<BankPayerProfile>(
+      `/children/${childId}/bank-payers/${payerId}`,
+      payload,
+    )
+    return data
+  },
+
+  delete: async (childId: string, payerId: string): Promise<void> => {
+    await apiClient.delete(`/children/${childId}/bank-payers/${payerId}`)
   },
 }
