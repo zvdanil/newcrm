@@ -1039,7 +1039,7 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           <span>{categoryLabel(expense)}</span>
         </div>
         {(expense.note || expense.staff_name) && (
-          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs" title={fmtNote(expense.note)}>
+          <p className="text-xs text-gray-400 mt-0.5 break-words">
             {fmtNote(expense.note)}{expense.staff_name ? ` (${expense.staff_name})` : ''}
           </p>
         )}
@@ -1616,6 +1616,7 @@ export function ExpensesPage() {
   if (filters.search.trim()) {
     const q = filters.search.trim().toLowerCase()
     expenses = expenses.filter(e =>
+      fmtNote(e.note).toLowerCase().includes(q) ||
       e.note?.toLowerCase().includes(q) ||
       (categoryLabel(e) || '').toLowerCase().includes(q) ||
       e.account_name.toLowerCase().includes(q) ||
