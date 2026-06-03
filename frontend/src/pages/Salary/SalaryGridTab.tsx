@@ -159,8 +159,11 @@ function PaymentDayDialog({
     queryFn:  accountsApi.list,
   })
 
-  const [form, setForm] = useState({ gross_amount: '', account_id: '', note: '' })
+  const [form, setForm] = useState({ gross_amount: '', account_id: '', note: '', commission: '' })
   const [error, setError] = useState<string | null>(null)
+
+  const commissionAmt = parseFloat(form.commission) || 0
+  const hasCommission = commissionAmt > 0
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['salary', staffId] })
@@ -173,6 +176,7 @@ function PaymentDayDialog({
       transaction_date: date,
       account_id:       form.account_id || undefined,
       note:             form.note || undefined,
+      commission:       commissionAmt > 0 ? commissionAmt : undefined,
     }),
     onSuccess: () => { invalidateAll(); onClose() },
     onError:   () => setError('Помилка збереження'),
@@ -251,7 +255,7 @@ function PaymentDayDialog({
                 ))}
               </select>
             </div>
-            <div className="col-span-2">
+            <div>
               <label className="block text-xs text-gray-600 mb-1">Примітка</label>
               <input
                 value={form.note}
@@ -260,12 +264,26 @@ function PaymentDayDialog({
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Комісія (грн)</label>
+              <input
+                type="number" min="0" step="0.01" placeholder="0.00"
+                value={form.commission}
+                onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            {hasCommission && !form.account_id && (
+              <div className="col-span-2">
+                <p className="text-xs text-amber-600">Для запису комісії необхідно вказати рахунок</p>
+              </div>
+            )}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
               onClick={() => { setError(null); addMutation.mutate() }}
-              disabled={addMutation.isPending || !form.gross_amount || parseFloat(form.gross_amount) <= 0}
+              disabled={addMutation.isPending || !form.gross_amount || parseFloat(form.gross_amount) <= 0 || (hasCommission && !form.account_id)}
               className="flex-1 py-2 bg-green-700 text-white text-sm rounded-lg hover:bg-green-800 disabled:opacity-50"
             >
               {addMutation.isPending ? '...' : 'Виплатити'}
