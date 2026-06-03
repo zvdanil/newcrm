@@ -235,10 +235,13 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('e.activity_id', '=', activity_id)
           .where(eb => eb.or([
             eb('e.status', '!=', 'archived'),
-            eb.and([
-              eb('e.end_date', '>=', sql<Date>`CAST(${from} AS DATE)`),
-              eb('e.start_date', '<=', sql<Date>`CAST(${to} AS DATE)`)
-            ])
+            eb('e.id', 'in',
+              db.selectFrom('attendance_logs')
+                .select('enrollment_id')
+                .where('activity_id', '=', activity_id)
+                .where('date', '>=', sql<Date>`CAST(${from} AS DATE)`)
+                .where('date', '<=', sql<Date>`CAST(${to} AS DATE)`)
+            )
           ]))
           .orderBy('c.full_name', 'asc')
           .execute(),
