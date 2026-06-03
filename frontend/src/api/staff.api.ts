@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 export type StaffType    = 'employee' | 'partner'
 export type RateCategory = 'auto' | 'manual'
-export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'smart_per_child'
+export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'smart_per_child' | 'monthly_by_day'
 export type ValueMode    = 'fixed' | 'percent_of_revenue'
 export type SalaryTxType = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 

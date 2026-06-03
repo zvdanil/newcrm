@@ -6,6 +6,7 @@ import { accountsApi } from '../../api/accounts.api'
 import {
   TxPopup,
   AccrualGroupPopup,
+  DailyMarkDialog,
   fmt,
 } from '../../components/SalaryTransactionPopups'
 import { ManualAccrualForm } from '../Staff/StaffCardPage'
@@ -34,13 +35,14 @@ function dayOfWeekShort(dateStr: string): string {
 // ── rate helpers ───────────────────────────────────────────────────────────
 
 const RATE_TYPE_SHORT: Record<string, string> = {
-  per_lesson:    'Заняття',
-  per_child:     'Дитина',
-  group_lesson:  'Група',
-  fixed_monthly: 'Оклад',
-  hourly:        'Год.',
-  smart:         'Смарт',
-  bonus:         'Бонус',
+  per_lesson:     'Заняття',
+  per_child:      'Дитина',
+  group_lesson:   'Група',
+  fixed_monthly:  'Оклад',
+  hourly:         'Год.',
+  smart:          'Смарт',
+  bonus:          'Бонус',
+  monthly_by_day: 'По днях',
 }
 
 function rateRowLabel(rate: SalaryGridRate): string {
@@ -342,6 +344,7 @@ type DialogState =
   | { type: 'accrualGroup'; txs: SalaryTransaction[]; staffId: string }
   | { type: 'paymentDay';   staffId: string; date: string }
   | { type: 'newAccrual';   staffId: string; date: string; rateId?: string }
+  | { type: 'dailyMark';    staffId: string; date: string; rate: SalaryGridRate; existingTx: SalaryTransaction | null }
   | null
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -419,6 +422,16 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
           initialDate={dialog.date}
           initialRateId={dialog.rateId}
           onDone={() => invalidateAfterMutation(dialog.staffId)}
+        />
+      )}
+      {dialog?.type === 'dailyMark' && (
+        <DailyMarkDialog
+          staffId={dialog.staffId}
+          date={dialog.date}
+          rate={dialog.rate}
+          existingTx={dialog.existingTx}
+          onClose={() => invalidateAfterMutation(dialog.staffId)}
+          invalidateKeys={[gridKey, ['salary-journal']]}
         />
       )}
 
@@ -572,21 +585,33 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                       </td>
                       {dates.map(d => {
                         const txs = rateTxsByDate.get(d) ?? []
+                        const isMonthlyByDay = group.rates[0]?.rate_type === 'monthly_by_day'
                         return (
                           <td key={d} className={`px-0.5 py-1 text-center border-r border-gray-100 ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
                             <AccrualCell
                               txs={txs}
-                              onClickExisting={ts =>
-                                ts.length === 1
-                                  ? setDialog({ type: 'tx', tx: ts[0], staffId: row.id })
-                                  : setDialog({ type: 'accrualGroup', txs: ts, staffId: row.id })
-                              }
+                              onClickExisting={ts => {
+                                if (isMonthlyByDay) {
+                                  const activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to > d))
+                                    ?? group.rates.find(r => !r.valid_to)
+                                    ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
+                                  setDialog({ type: 'dailyMark', staffId: row.id, date: d, rate: activeRate, existingTx: ts[0] })
+                                } else {
+                                  ts.length === 1
+                                    ? setDialog({ type: 'tx', tx: ts[0], staffId: row.id })
+                                    : setDialog({ type: 'accrualGroup', txs: ts, staffId: row.id })
+                                }
+                              }}
                               onClickEmpty={() => {
                                 let activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to > d))
                                 if (!activeRate) {
                                   activeRate = group.rates.find(r => !r.valid_to) ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
                                 }
-                                setDialog({ type: 'newAccrual', staffId: row.id, date: d, rateId: activeRate.id })
+                                if (isMonthlyByDay) {
+                                  setDialog({ type: 'dailyMark', staffId: row.id, date: d, rate: activeRate, existingTx: null })
+                                } else {
+                                  setDialog({ type: 'newAccrual', staffId: row.id, date: d, rateId: activeRate.id })
+                                }
                               }}
                             />
                           </td>

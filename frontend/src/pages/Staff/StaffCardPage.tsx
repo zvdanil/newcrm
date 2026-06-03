@@ -12,6 +12,8 @@ import {
   TxPopup,
   AccrualGroupPopup,
   PaymentGroupPopup,
+  dailyRate,
+  workingDaysInMonth,
 } from '../../components/SalaryTransactionPopups'
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -173,9 +175,9 @@ function AddRateForm({ staffId, activities, onDone }: {
   const mutation = useMutation({
     mutationFn: () => staffApi.createRate(staffId, {
       activity_id:   form.activity_id || undefined,
-      rate_category: form.rate_category,
+      rate_category: form.rate_type === 'monthly_by_day' ? 'manual' : form.rate_category,
       rate_type:     form.rate_type,
-      value_mode:    form.value_mode,
+      value_mode:    form.rate_type === 'monthly_by_day' ? 'fixed' : form.value_mode,
       rate_value:    form.rate_type === 'smart_per_child' ? 0 : parseFloat(form.rate_value),
       deduction_pct: parseFloat(form.deduction_pct) || 0,
       valid_from:    form.valid_from,
@@ -211,8 +213,9 @@ function AddRateForm({ staffId, activities, onDone }: {
     mutation.mutate()
   }
 
-  const needsActivity = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
-  const isSmartPC = form.rate_type === 'smart_per_child'
+  const needsActivity    = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
+  const isSmartPC        = form.rate_type === 'smart_per_child'
+  const isMonthlyByDay   = form.rate_type === 'monthly_by_day'
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
@@ -243,7 +246,7 @@ function AddRateForm({ staffId, activities, onDone }: {
             </select>
           </div>
         )}
-        {!isSmartPC && (
+        {!isSmartPC && !isMonthlyByDay && (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Режим значення</label>
             <select value={form.value_mode} onChange={e => setForm(f => ({ ...f, value_mode: e.target.value as ValueMode }))}
@@ -256,9 +259,11 @@ function AddRateForm({ staffId, activities, onDone }: {
         {!isSmartPC && (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              {form.value_mode === 'percent_of_revenue'
-                ? '% від виручки'
-                : form.rate_type === 'smart' ? 'Базова ставка (B)' : 'Ставка / Сума'}
+              {isMonthlyByDay
+                ? 'Ставка за місяць (грн)'
+                : form.value_mode === 'percent_of_revenue'
+                  ? '% від виручки'
+                  : form.rate_type === 'smart' ? 'Базова ставка (B)' : 'Ставка / Сума'}
             </label>
             <input
               type="number"
@@ -269,7 +274,12 @@ function AddRateForm({ staffId, activities, onDone }: {
               value={form.rate_value}
               onChange={e => setForm(f => ({ ...f, rate_value: e.target.value }))}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {form.value_mode === 'percent_of_revenue' && (
+            {isMonthlyByDay && form.rate_value && (() => {
+              const wd = workingDaysInMonth(form.valid_from)
+              const dr = Math.round(parseFloat(form.rate_value) / wd * 100) / 100
+              return <p className="text-xs text-gray-400 mt-0.5">≈ {fmt(dr)} грн/день ({wd} роб. днів у місяці)</p>
+            })()}
+            {!isMonthlyByDay && form.value_mode === 'percent_of_revenue' && (
               <p className="text-xs text-gray-400 mt-0.5">Система розрахує суму від нарахувань батьків за цю активність</p>
             )}
           </div>
@@ -820,9 +830,21 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
     }
   }, [form.transaction_date, rates])
 
-  const selectedRate    = rates.find(r => r.id === form.rate_id)
-  const isPctMode       = selectedRate?.value_mode === 'percent_of_revenue'
-  const usesQuantity    = !isPctMode && selectedRate && (selectedRate.rate_type in QUANTITY_LABEL)
+  const selectedRate      = rates.find(r => r.id === form.rate_id)
+  const isMonthlyByDayR   = selectedRate?.rate_type === 'monthly_by_day'
+  const isPctMode         = !isMonthlyByDayR && selectedRate?.value_mode === 'percent_of_revenue'
+  const usesQuantity      = !isPctMode && !isMonthlyByDayR && selectedRate && (selectedRate.rate_type in QUANTITY_LABEL)
+
+  const computedDailyRate = isMonthlyByDayR && selectedRate
+    ? dailyRate(selectedRate, form.transaction_date)
+    : null
+
+  // When monthly_by_day is selected, pre-fill gross_amount with daily rate on date/rate change
+  useEffect(() => {
+    if (isMonthlyByDayR && computedDailyRate !== null) {
+      setForm(f => ({ ...f, gross_amount: fmt(computedDailyRate) }))
+    }
+  }, [isMonthlyByDayR, computedDailyRate])
 
   const computedGross = (() => {
     const q = parseFloat(form.quantity)
@@ -832,9 +854,11 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
     return null
   })()
 
-  const isValid = (usesQuantity || isPctMode)
-    ? form.quantity !== '' && !isNaN(parseFloat(form.quantity)) && parseFloat(form.quantity) >= 0
-    : form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
+  const isValid = isMonthlyByDayR
+    ? form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
+    : (usesQuantity || isPctMode)
+      ? form.quantity !== '' && !isNaN(parseFloat(form.quantity)) && parseFloat(form.quantity) >= 0
+      : form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
 
   const mutation = useMutation({
     mutationFn: () => staffApi.addManualAccrual(staffId, {
@@ -883,7 +907,24 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
           </div>
         )}
 
-        {isPctMode ? (
+        {isMonthlyByDayR ? (
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Сума за день *
+            </label>
+            <input type="number" min="0" step="0.01" placeholder="0.00"
+              value={form.gross_amount}
+              onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+              autoFocus
+              onFocus={e => e.target.select()}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+            {computedDailyRate !== null && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Розрахункова: {fmt(computedDailyRate)} грн ({workingDaysInMonth(form.transaction_date)} роб. дн.)
+              </p>
+            )}
+          </div>
+        ) : isPctMode ? (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Виручка (база, грн) × {Number(selectedRate.rate_value).toFixed(1)}% *

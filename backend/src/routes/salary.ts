@@ -2,6 +2,17 @@ import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
 
+function workingDaysInMonth(dateStr: string): number {
+  const [y, m] = dateStr.slice(0, 7).split('-').map(Number)
+  const total = new Date(y, m, 0).getDate()
+  let count = 0
+  for (let d = 1; d <= total; d++) {
+    const dow = new Date(y, m - 1, d).getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 export async function salaryRoutes(app: FastifyInstance) {
 
   // GET /api/staff/:id/salary?month=YYYY-MM
@@ -104,7 +115,18 @@ export async function salaryRoutes(app: FastifyInstance) {
 
         finalDeduction = Number(rate.deduction_pct)
 
-        if (quantity !== undefined) {
+        if (rate.rate_type === 'monthly_by_day') {
+          const monthlyRate  = Number(rate.rate_value)
+          const workingDays  = workingDaysInMonth(txDate)
+          const dailyRate    = Math.round(monthlyRate / workingDays * 100) / 100
+          finalGross         = gross_amount !== undefined ? gross_amount : dailyRate
+          metadata = {
+            source:       'manual_daily',
+            monthly_rate: monthlyRate,
+            working_days: workingDays,
+            daily_rate:   dailyRate,
+          }
+        } else if (quantity !== undefined) {
           if (rate.value_mode === 'percent_of_revenue') {
             finalGross = Math.round(quantity * Number(rate.rate_value) / 100 * 100) / 100
             metadata = { source: 'manual', revenue: quantity, rate_pct: Number(rate.rate_value), rate_type: rate.rate_type }

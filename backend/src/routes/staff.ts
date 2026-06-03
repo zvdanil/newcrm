@@ -120,7 +120,7 @@ export async function staffRoutes(app: FastifyInstance) {
     Body: {
       activity_id?: string
       rate_category?: 'auto' | 'manual'
-      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'smart_per_child' | 'bonus'
+      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'smart_per_child' | 'bonus' | 'monthly_by_day'
       value_mode?: 'fixed' | 'percent_of_revenue'
       rate_value: number
       deduction_pct?: number

@@ -5,6 +5,19 @@ function billingMonthOf(date: string): string {
   return date.slice(0, 7) + '-01'
 }
 
+function workingDaysInMonthFromDate(date: Date | string): number {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const y = d.getFullYear()
+  const m = d.getMonth() + 1
+  const total = new Date(y, m, 0).getDate()
+  let count = 0
+  for (let dd = 1; dd <= total; dd++) {
+    const dow = new Date(y, m - 1, dd).getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
 function toLocalDateString(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date
   const year = d.getFullYear()
@@ -297,6 +310,11 @@ export async function recalcRetroAccruals(
     if (revenue !== null) {
       // percent_of_revenue mode — reapply new % to the same revenue base
       newAmount = Math.round(revenue * newRateValue / 100 * 100) / 100
+    } else if (source === 'manual_daily') {
+      // monthly_by_day: recompute daily rate from new monthly rate
+      const workingDays = typeof meta?.working_days === 'number' ? meta.working_days as number
+        : workingDaysInMonthFromDate(accrual.transaction_date as Date | string)
+      newAmount = Math.round(newRateValue / workingDays * 100) / 100
     } else if (quantity !== null && quantity > 0) {
       // fixed mode with quantity: per_lesson (qty=1), per_child (qty=N), hourly/manual
       newAmount = Math.round(quantity * newRateValue * 100) / 100

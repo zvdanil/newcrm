@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { staffApi, type SalaryTransaction, type RateType } from '../api/staff.api'
+import { staffApi, type SalaryTransaction, type RateType, type SalaryGridRate } from '../api/staff.api'
 
 export function fmt(v: string | number) { return Number(v).toFixed(2) }
 
@@ -13,6 +13,24 @@ export const RATE_TYPE_LABELS: Record<RateType, string> = {
   smart:           'Смарт',
   bonus:           'Бонус',
   smart_per_child: 'Смарт за дитину',
+  monthly_by_day:  'Місяць по днях',
+}
+
+export function workingDaysInMonth(dateStr: string): number {
+  const [y, m] = dateStr.slice(0, 7).split('-').map(Number)
+  const total = new Date(y, m, 0).getDate()
+  let count = 0
+  for (let d = 1; d <= total; d++) {
+    const dow = new Date(y, m - 1, d).getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
+export function dailyRate(rate: SalaryGridRate | { rate_value: string }, dateStr: string): number {
+  const monthly = Number(rate.rate_value)
+  const days    = workingDaysInMonth(dateStr)
+  return Math.round(monthly / days * 100) / 100
 }
 
 export const TX_TYPE_LABELS: Record<string, string> = {
@@ -76,6 +94,16 @@ export function metaDetail(tx: SalaryTransaction): string | null {
   if (src === 'retro_correction') {
     const delta = typeof m.delta === 'number' ? m.delta : null
     return delta != null ? `Ретро Δ ${delta > 0 ? '+' : ''}${fmt(delta)} грн` : 'Ретро-коригування'
+  }
+
+  if (src === 'manual_daily') {
+    const mr = typeof m.monthly_rate === 'number' ? m.monthly_rate : null
+    const wd = typeof m.working_days === 'number' ? m.working_days : null
+    const dr = typeof m.daily_rate   === 'number' ? m.daily_rate   : null
+    if (mr != null && wd != null && dr != null) {
+      return `${fmt(mr)} ÷ ${wd} дн = ${fmt(dr)} грн/день`
+    }
+    return 'Денне нарахування'
   }
 
   if (src === 'manual') {
@@ -378,6 +406,186 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
             </button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── DailyMarkDialog (monthly_by_day) ──────────────────────────────────────────
+
+export function DailyMarkDialog({
+  staffId,
+  date,
+  rate,
+  existingTx,
+  onClose,
+  invalidateKeys,
+}: {
+  staffId:        string
+  date:           string
+  rate:           SalaryGridRate | { id: string; rate_value: string; deduction_pct: string; rate_type: string }
+  existingTx:     SalaryTransaction | null
+  onClose:        () => void
+  invalidateKeys?: string[][]
+}) {
+  const qc = useQueryClient()
+
+  const computed  = dailyRate(rate, date)
+  const initAmt   = existingTx ? fmt(existingTx.gross_amount) : fmt(computed)
+  const initNote  = existingTx?.note ?? ''
+
+  const [present, setPresent] = useState<boolean>(existingTx !== null)
+  const [amount, setAmount]   = useState(initAmt)
+  const [note, setNote]       = useState(initNote)
+  const [error, setError]     = useState<string | null>(null)
+
+  const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA')
+  const wd          = workingDaysInMonth(date)
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['salary', staffId] })
+    invalidateKeys?.forEach(k => qc.invalidateQueries({ queryKey: k }))
+  }
+
+  const createMutation = useMutation({
+    mutationFn: () => staffApi.addManualAccrual(staffId, {
+      rate_id:          rate.id,
+      gross_amount:     parseFloat(amount),
+      transaction_date: date,
+      note:             note || undefined,
+    }),
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError:   () => setError('Помилка збереження'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => staffApi.deleteAccrual(staffId, existingTx!.id),
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError:   (e: { response?: { status?: number } }) => {
+      if (e.response?.status === 404) { invalidateAll(); onClose() }
+      else setError('Помилка видалення')
+    },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: () => staffApi.editAccrual(staffId, existingTx!.id, {
+      gross_amount:  parseFloat(amount),
+      edit_note:     note || 'Ручне коригування суми',
+    }),
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError:   () => setError('Помилка збереження'),
+  })
+
+  function handleSubmit() {
+    setError(null)
+    if (present) {
+      const amt = parseFloat(amount)
+      if (isNaN(amt) || amt < 0) { setError('Введіть коректну суму'); return }
+      if (existingTx) {
+        // amount or note changed — edit
+        editMutation.mutate()
+      } else {
+        createMutation.mutate()
+      }
+    } else {
+      if (existingTx) {
+        deleteMutation.mutate()
+      } else {
+        onClose()
+      }
+    }
+  }
+
+  const isPending = createMutation.isPending || deleteMutation.isPending || editMutation.isPending
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Відмітка · {displayDate}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Місяць по днях · {fmt(rate.rate_value)} ÷ {wd} дн = {fmt(computed)} грн/день
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        {/* Present / Absent toggle */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPresent(true)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
+              present
+                ? 'border-iris-500 bg-iris-50 text-iris-700'
+                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+          >
+            Присутній
+          </button>
+          <button
+            type="button"
+            onClick={() => setPresent(false)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
+              !present
+                ? 'border-rose-400 bg-rose-50 text-rose-600'
+                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+          >
+            Відсутній
+          </button>
+        </div>
+
+        {/* Amount + note — shown only when present */}
+        {present && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Сума за день (грн)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                autoFocus
+                onFocus={e => e.target.select()}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              />
+              {parseFloat(amount) !== computed && (
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Змінено з {fmt(computed)} грн (розрахункова ставка)
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Примітка</label>
+              <input
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="Необов'язково"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || (present && (amount === '' || isNaN(parseFloat(amount))))}
+            className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-xl hover:bg-iris-700 disabled:opacity-50 transition-colors"
+          >
+            {isPending ? '...' : 'Зберегти'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 rounded-xl hover:bg-gray-100">
+            Скасувати
+          </button>
+        </div>
       </div>
     </div>
   )
