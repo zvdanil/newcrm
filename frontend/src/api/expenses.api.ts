@@ -32,6 +32,7 @@ export interface Expense {
   advance_staff_id: string | null
   pool_advance_amount: string
   withdrawal_transfer_id: string | null
+  withdrawal_amount: string | null
   dividend_payout_id: string | null
   note: string | null
   created_by_email: string | null
@@ -183,6 +184,7 @@ export const expensesApi = {
 
   withdraw: async (id: string, payload: {
     target_account_id: string
+    withdrawal_amount?: number
     commission: number
     transfer_date?: string
   }) => {

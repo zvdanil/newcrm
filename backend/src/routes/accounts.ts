@@ -106,6 +106,8 @@ export async function accountsRoutes(app: FastifyInstance) {
         detail: string | null
         is_advance: boolean | null
         utilized_advance_amount: string | null
+        is_obnal: boolean
+        obnal_amount: string | null
       }>`
         SELECT
           id,
@@ -115,7 +117,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           note,
           (SELECT full_name FROM children WHERE id = child_id) AS detail,
           false                  AS is_advance,
-          NULL::numeric          AS utilized_advance_amount
+          NULL::numeric          AS utilized_advance_amount,
+          false                  AS is_obnal,
+          NULL::numeric          AS obnal_amount
         FROM transactions
         WHERE account_id = ${id}
           AND type       = 'PAYMENT'
@@ -141,7 +145,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           note,
           (SELECT name FROM expense_categories WHERE id = category_id) AS detail,
           is_advance,
-          utilized_advance_amount
+          utilized_advance_amount,
+          (withdrawal_transfer_id IS NOT NULL) AS is_obnal,
+          withdrawal_amount                    AS obnal_amount
         FROM expenses
         WHERE account_id = ${id}
           AND status     = 'paid'
@@ -165,7 +171,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           note,
           (SELECT name FROM expense_categories WHERE id = category_id) AS detail,
           false              AS is_advance,
-          NULL::numeric      AS utilized_advance_amount
+          NULL::numeric      AS utilized_advance_amount,
+          false              AS is_obnal,
+          NULL::numeric      AS obnal_amount
         FROM expenses
         WHERE account_id = ${id}
           AND status     = 'paid'
@@ -184,7 +192,15 @@ export async function accountsRoutes(app: FastifyInstance) {
           at.note,
           a_from.name            AS detail,
           false                  AS is_advance,
-          NULL::numeric          AS utilized_advance_amount
+          NULL::numeric          AS utilized_advance_amount,
+          (
+            EXISTS (SELECT 1 FROM expenses e WHERE e.withdrawal_transfer_id = at.id AND e.is_deleted = false)
+            OR EXISTS (SELECT 1 FROM salary_transactions st WHERE st.withdrawal_transfer_id = at.id AND st.is_deleted = false)
+          )                      AS is_obnal,
+          CASE WHEN (
+            EXISTS (SELECT 1 FROM expenses e WHERE e.withdrawal_transfer_id = at.id AND e.is_deleted = false)
+            OR EXISTS (SELECT 1 FROM salary_transactions st WHERE st.withdrawal_transfer_id = at.id AND st.is_deleted = false)
+          ) THEN at.amount ELSE NULL END AS obnal_amount
         FROM account_transfers at
         LEFT JOIN accounts a_from ON a_from.id = at.from_account_id
         WHERE at.to_account_id = ${id}
@@ -201,7 +217,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           at.note,
           a_to.name              AS detail,
           false                  AS is_advance,
-          NULL::numeric          AS utilized_advance_amount
+          NULL::numeric          AS utilized_advance_amount,
+          false                  AS is_obnal,
+          NULL::numeric          AS obnal_amount
         FROM account_transfers at
         LEFT JOIN accounts a_to ON a_to.id = at.to_account_id
         WHERE at.from_account_id = ${id}
@@ -220,7 +238,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           st.note,
           (SELECT full_name FROM staff WHERE id = st.staff_id) AS detail,
           false                     AS is_advance,
-          NULL::numeric             AS utilized_advance_amount
+          NULL::numeric             AS utilized_advance_amount,
+          (st.withdrawal_transfer_id IS NOT NULL) AS is_obnal,
+          st.gross_amount           AS obnal_amount
         FROM salary_transactions st
         WHERE st.account_id = ${id}
           AND st.type       = 'PAYMENT'
@@ -246,7 +266,9 @@ export async function accountsRoutes(app: FastifyInstance) {
             WHERE tx.id = iai.transaction_id
           ) AS detail,
           false                AS is_advance,
-          NULL::numeric        AS utilized_advance_amount
+          NULL::numeric        AS utilized_advance_amount,
+          false                AS is_obnal,
+          NULL::numeric        AS obnal_amount
         FROM inter_account_imbalances iai
         WHERE iai.from_account_id = ${id}
           AND iai.transaction_id IS NOT NULL
@@ -267,7 +289,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           ai.note,
           ai.payer_name        AS detail,
           false                AS is_advance,
-          NULL::numeric        AS utilized_advance_amount
+          NULL::numeric        AS utilized_advance_amount,
+          false                AS is_obnal,
+          NULL::numeric        AS obnal_amount
         FROM account_income ai
         WHERE ai.account_id = ${id}
           AND ai.is_deleted = false
@@ -284,7 +308,9 @@ export async function accountsRoutes(app: FastifyInstance) {
           ac.note,
           NULL                     AS detail,
           false                    AS is_advance,
-          NULL::numeric            AS utilized_advance_amount
+          NULL::numeric            AS utilized_advance_amount,
+          false                    AS is_obnal,
+          NULL::numeric            AS obnal_amount
         FROM account_corrections ac
         WHERE ac.account_id = ${id}
           AND ac.is_deleted = false

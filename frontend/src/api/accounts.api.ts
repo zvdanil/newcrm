@@ -23,6 +23,8 @@ export interface LedgerRow {
   detail: string | null
   is_advance: boolean | null
   utilized_advance_amount: string | null
+  is_obnal: boolean
+  obnal_amount: string | null
 }
 
 export interface LedgerFilters {

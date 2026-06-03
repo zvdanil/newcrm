@@ -777,6 +777,14 @@ export function AccountCardPage() {
                         {!row.is_advance && row.utilized_advance_amount && Number(row.utilized_advance_amount) > 0 && (
                           <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded whitespace-nowrap">з авансу {Number(row.utilized_advance_amount).toFixed(2)} ₴</span>
                         )}
+                        {row.is_obnal && (
+                          <span
+                            className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
+                            title={row.obnal_amount ? `Сума обналичування: ${Number(row.obnal_amount).toFixed(2)} ₴` : undefined}
+                          >
+                            обналичивание{row.obnal_amount ? ` ${Number(row.obnal_amount).toFixed(2)} ₴` : ''}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-gray-700 max-w-0">

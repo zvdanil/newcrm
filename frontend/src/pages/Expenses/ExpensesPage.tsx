@@ -796,23 +796,29 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
 
   const [form, setForm] = useState({
     target_account_id: '',
+    withdrawal_amount: String(amount),
     commission: '0',
     transfer_date: today,
   })
   const [error, setError] = useState<string | null>(null)
 
-  const commission   = parseFloat(form.commission) || 0
-  const returnAmount = Math.round((amount - commission) * 100) / 100
+  const withdrawalAmount = parseFloat(form.withdrawal_amount) || 0
+  const commissionPct      = parseFloat(form.commission) || 0
+  const commissionUah    = Math.round(withdrawalAmount * commissionPct * 100) / 10000
+  const returnAmount     = Math.round((withdrawalAmount - commissionUah) * 100) / 100
 
   const mutation = useMutation({
     mutationFn: () => expensesApi.withdraw(expense.id, {
       target_account_id: form.target_account_id,
-      commission,
+      withdrawal_amount: withdrawalAmount,
+      commission: commissionPct,
       transfer_date: form.transfer_date,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['account-ledger'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
       onSuccess()
       onClose()
     },
@@ -826,7 +832,10 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
     setError(null)
     if (!form.target_account_id) return setError('Оберіть рахунок зарахування')
     if (form.target_account_id === expense.account_id) return setError('Рахунок зарахування повинен відрізнятись від рахунку списання')
-    if (commission >= amount) return setError('Комісія не може перевищувати суму')
+    if (withdrawalAmount <= 0) return setError('Введіть суму виводу')
+    if (withdrawalAmount > amount + 0.001) return setError('Сума виводу не може перевищувати суму витрати')
+    if (commissionPct < 0 || commissionPct > 100) return setError('Комісія має бути від 0 до 100 %')
+    if (commissionUah >= withdrawalAmount) return setError('Комісія не може перевищувати суму виводу')
     mutation.mutate()
   }
 
@@ -845,7 +854,7 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
             <span className="font-medium">{expense.account_name}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-500">Сума</span>
+            <span className="text-gray-500">Сума витрати</span>
             <span className="font-mono font-medium">{fmt(expense.amount)}</span>
           </div>
           {expense.note && (
@@ -874,11 +883,24 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
             </select>
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Сума виводу на інший рахунок, ₴ *
+            </label>
+            <input
+              type="number" min="0.01" step="0.01" max={amount}
+              value={form.withdrawal_amount}
+              onChange={e => setForm(f => ({ ...f, withdrawal_amount: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+            />
+            <p className="text-xs text-gray-400 mt-0.5">Максимум — повна сума витрати ({amount.toFixed(2)} ₴)</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Комісія</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
               <input
-                type="number" min="0" step="0.01" placeholder="0.00"
+                type="number" min="0" max="100" step="0.01" placeholder="0"
                 value={form.commission}
                 onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
@@ -897,13 +919,17 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
           {/* Summary */}
           <div className="bg-iris-50 rounded-xl p-3 text-sm space-y-1.5">
             <div className="flex justify-between">
-              <span className="text-gray-600">Буде зараховано на рахунок</span>
-              <span className="font-mono font-semibold text-green-700">+{returnAmount.toFixed(2)}</span>
+              <span className="text-gray-600">Переказ на рахунок</span>
+              <span className="font-mono font-medium">+{withdrawalAmount.toFixed(2)} ₴</span>
             </div>
-            {commission > 0 && (
+            <div className="flex justify-between">
+              <span className="text-gray-600">Буде зараховано (після комісії)</span>
+              <span className="font-mono font-semibold text-green-700">+{returnAmount.toFixed(2)} ₴</span>
+            </div>
+            {commissionUah > 0 && (
               <div className="flex justify-between">
-                <span className="text-gray-600">Окремий витрат «Комісія»</span>
-                <span className="font-mono text-red-600">−{commission.toFixed(2)}</span>
+                <span className="text-gray-600">Окремий витрат «Комісія» ({commissionPct}%)</span>
+                <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
               </div>
             )}
           </div>
@@ -1073,7 +1099,9 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           )}
           {isOwner && (
             expense.withdrawal_transfer_id ? (
-              <span className="text-xs text-green-600 font-medium" title="Обналичено">↗ обнал.</span>
+              <span className="text-xs text-amber-700 font-medium" title="Обналичено">
+                ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''}
+              </span>
             ) : (
               <button
                 onClick={() => setWithdrawing(true)}
@@ -1195,13 +1223,14 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
   })
   const [error, setError] = useState<string | null>(null)
 
-  const commission   = parseFloat(form.commission) || 0
-  const returnAmount = Math.round((amount - commission) * 100) / 100
+  const commissionPct   = parseFloat(form.commission) || 0
+  const commissionUah   = Math.round(amount * commissionPct * 100) / 10000
+  const returnAmount    = Math.round((amount - commissionUah) * 100) / 100
 
   const mutation = useMutation({
     mutationFn: () => salaryPaymentsApi.withdraw(payment.id, {
       target_account_id: form.target_account_id,
-      commission,
+      commission: commissionPct,
       transfer_date: form.transfer_date,
     }),
     onSuccess: () => {
@@ -1220,7 +1249,8 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
     setError(null)
     if (!form.target_account_id) return setError('Оберіть рахунок зарахування')
     if (form.target_account_id === payment.account_id) return setError('Рахунок зарахування повинен відрізнятись від рахунку списання')
-    if (commission >= amount) return setError('Комісія не може перевищувати суму')
+    if (commissionPct < 0 || commissionPct > 100) return setError('Комісія має бути від 0 до 100 %')
+    if (commissionUah >= amount) return setError('Комісія не може перевищувати суму')
     mutation.mutate()
   }
 
@@ -1271,9 +1301,9 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Комісія</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
             <input
-              type="number" min="0" step="0.01"
+              type="number" min="0" max="100" step="0.01"
               value={form.commission}
               onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
@@ -1293,12 +1323,12 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
           <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
             <div className="flex justify-between">
               <span className="text-gray-500">Буде зараховано на рахунок</span>
-              <span className="font-mono font-medium text-green-700">{amount.toFixed(2)}</span>
+              <span className="font-mono font-medium text-green-700">{returnAmount.toFixed(2)} ₴</span>
             </div>
-            {commission > 0 && (
+            {commissionUah > 0 && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Окремий витрат «Комісія»</span>
-                <span className="font-mono text-red-600">{commission.toFixed(2)}</span>
+                <span className="text-gray-500">Окремий витрат «Комісія» ({commissionPct}%)</span>
+                <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
               </div>
             )}
           </div>

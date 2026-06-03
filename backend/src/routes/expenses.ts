@@ -110,7 +110,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
           'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
-          'e.withdrawal_transfer_id', 'e.dividend_payout_id',
+          'e.withdrawal_transfer_id', 'e.withdrawal_amount', 'e.dividend_payout_id',
           'e.account_id', 'a.name as account_name',
           'e.category_id',
           'c.name as category_name',
@@ -557,36 +557,50 @@ export async function expensesRoutes(app: FastifyInstance) {
     }
   )
 
-  // POST /api/expenses/:id/withdraw — cash-out: transfer full amount back to target account
+  // POST /api/expenses/:id/withdraw — cash-out (full or partial) to target account
   app.post<{
     Params: { id: string }
-    Body: { target_account_id: string; commission: number; transfer_date?: string }
+    Body: { target_account_id: string; withdrawal_amount?: number; commission: number; transfer_date?: string }
   }>(
     '/:id/withdraw',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { target_account_id, commission, transfer_date } = req.body
-
-      if (!target_account_id) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'target_account_id є обовʼязковим' })
-      }
-      if (commission < 0) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути від\'ємною' })
-      }
-
-      const expense = await db.selectFrom('expenses')
+      const { target_account_id, transfer_date } = req.body
+      const commissionPct = Number(req.body.commission)
+      const expenseTotal = await db.selectFrom('expenses')
         .select(['id', 'account_id', 'amount', 'note', 'is_deleted', 'withdrawal_transfer_id'])
         .where('id', '=', req.params.id)
         .executeTakeFirst()
 
-      if (!expense || expense.is_deleted) return reply.status(404).send({ error: 'NotFound' })
+      if (!expenseTotal || expenseTotal.is_deleted) return reply.status(404).send({ error: 'NotFound' })
+      const expense = expenseTotal
+
+      if (!target_account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'target_account_id є обовʼязковим' })
+      }
+      if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія має бути від 0 до 100 %' })
+      }
+
       if (expense.withdrawal_transfer_id) {
         return reply.status(409).send({ error: 'AlreadyWithdrawn', message: 'Обналичування вже було виконано' })
       }
 
-      const amount = parseFloat(expense.amount as string)
-      if (commission >= amount) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму транзакції' })
+      const maxAmount = parseFloat(expense.amount as string)
+      const withdrawalAmount = req.body.withdrawal_amount != null
+        ? Number(req.body.withdrawal_amount)
+        : maxAmount
+
+      if (!Number.isFinite(withdrawalAmount) || withdrawalAmount <= 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Сума виводу має бути більше 0' })
+      }
+      if (withdrawalAmount > maxAmount + 0.001) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Сума виводу не може перевищувати суму витрати' })
+      }
+
+      const roundedCommission = Math.round(withdrawalAmount * commissionPct * 100) / 10000
+      if (roundedCommission >= withdrawalAmount) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму виводу' })
       }
 
       const dateStr = transfer_date ?? new Date().toISOString().slice(0, 10)
@@ -597,12 +611,11 @@ export async function expensesRoutes(app: FastifyInstance) {
         .executeTakeFirst()
       const categoryId = withdrawalCategory ? withdrawalCategory.id : null
 
-      // 1. Transfer: money comes back (FULL amount) to target account
       const transfer = await db.insertInto('account_transfers')
         .values({
           from_account_id: expense.account_id,
           to_account_id:   target_account_id,
-          amount:          amount,
+          amount:          withdrawalAmount,
           commission:      0,
           transfer_date:   dateStr,
           note: `Обналичування: ${expense.note ?? expense.id}`,
@@ -611,14 +624,13 @@ export async function expensesRoutes(app: FastifyInstance) {
         .returningAll()
         .executeTakeFirstOrThrow()
 
-      // 2. Commission as a separate expense on target account (if commission > 0)
       let commissionExpense = null
-      if (commission > 0) {
+      if (roundedCommission > 0) {
         commissionExpense = await db.insertInto('expenses')
           .values({
             account_id:   target_account_id,
             category_id:  categoryId,
-            amount:       commission,
+            amount:       roundedCommission,
             accrual_date: dateStr,
             payment_date: dateStr,
             status:       'paid',
@@ -631,15 +643,19 @@ export async function expensesRoutes(app: FastifyInstance) {
           .executeTakeFirstOrThrow()
       }
 
-      // 3. Mark original expense as withdrawn
       await db.updateTable('expenses')
-        .set({ withdrawal_transfer_id: transfer.id })
+        .set({
+          withdrawal_transfer_id: transfer.id,
+          withdrawal_amount: withdrawalAmount,
+        })
         .where('id', '=', req.params.id)
         .execute()
 
       return reply.status(201).send({
         ok: true,
         transfer,
+        withdrawal_amount: withdrawalAmount,
+        commission_amount: roundedCommission,
         commission_expense: commissionExpense,
       })
     }

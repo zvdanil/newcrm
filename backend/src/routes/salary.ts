@@ -508,8 +508,9 @@ export async function salaryRoutes(app: FastifyInstance) {
       if (!target_account_id) {
         return reply.status(400).send({ error: 'BadRequest', message: 'target_account_id є обовʼязковим' })
       }
-      if (commission < 0) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути від\'ємною' })
+      const commissionPct = Number(commission)
+      if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія має бути від 0 до 100 %' })
       }
 
       const tx = await db.selectFrom('salary_transactions')
@@ -533,7 +534,8 @@ export async function salaryRoutes(app: FastifyInstance) {
       }
 
       const amount = Number(tx.gross_amount)
-      if (commission >= amount) {
+      const roundedCommission = Math.round(amount * commissionPct * 100) / 10000
+      if (roundedCommission >= amount) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму транзакції' })
       }
 
@@ -562,12 +564,12 @@ export async function salaryRoutes(app: FastifyInstance) {
 
       // 2. Commission as a separate expense on target account (if commission > 0)
       let commissionExpense = null
-      if (commission > 0) {
+      if (roundedCommission > 0) {
         commissionExpense = await db.insertInto('expenses')
           .values({
             account_id:   target_account_id,
             category_id:  categoryId,
-            amount:       commission,
+            amount:       roundedCommission,
             accrual_date: dateStr,
             payment_date: dateStr,
             status:       'paid',
