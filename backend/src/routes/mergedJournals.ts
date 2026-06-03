@@ -178,10 +178,13 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
       .where('e.activity_id', 'in', activityIds)
       .where(eb => eb.or([
         eb('e.status', '!=', 'archived'),
-        eb.and([
-          eb('e.end_date', '>=', sql<Date>`CAST(${from} AS DATE)`),
-          eb('e.start_date', '<=', sql<Date>`CAST(${to} AS DATE)`)
-        ])
+        eb('e.id', 'in',
+          db.selectFrom('attendance_logs')
+            .select('enrollment_id')
+            .where('activity_id', 'in', activityIds)
+            .where('date', '>=', sql<Date>`CAST(${from} AS DATE)`)
+            .where('date', '<=', sql<Date>`CAST(${to} AS DATE)`)
+        )
       ]))
       .select([
         'e.id as enrollment_id', 'e.activity_id', 'e.status',
