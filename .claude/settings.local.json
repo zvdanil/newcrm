@@ -45,7 +45,8 @@
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(git -C /workspaces/newcrm log --oneline -5)",
       "Read(//tmp/**)",
-      "Bash(DATABASE_URL=postgresql://iris:iris_pass@localhost:5432/iris_db node migrate.js)"
+      "Bash(DATABASE_URL=postgresql://iris:iris_pass@localhost:5432/iris_db node migrate.js)",
+      "Bash(xargs ls -la)"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"

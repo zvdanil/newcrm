@@ -236,8 +236,9 @@ export const staffApi = {
     billing_month?: string
     account_id?: string
     note?: string
-  }): Promise<SalaryTransaction> => {
-    const { data } = await apiClient.post<SalaryTransaction>(`/staff/${staffId}/salary/pay`, payload)
+    commission?: number
+  }): Promise<{ tx: SalaryTransaction; commission_expense: unknown | null }> => {
+    const { data } = await apiClient.post<{ tx: SalaryTransaction; commission_expense: unknown | null }>(`/staff/${staffId}/salary/pay`, payload)
     return data
   },
 

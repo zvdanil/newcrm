@@ -680,13 +680,16 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
 export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onDone: () => void; initialDate?: string }) {
   const qc = useQueryClient()
   const today = todayStr()
-  const [form, setForm] = useState({ gross_amount: '', transaction_date: initialDate ?? today, billing_month: '', account_id: '', note: '' })
+  const [form, setForm] = useState({ gross_amount: '', transaction_date: initialDate ?? today, billing_month: '', account_id: '', note: '', commission: '' })
   const [error, setError] = useState<string | null>(null)
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => import('../../api/accounts.api').then(m => m.accountsApi.list()),
   })
+
+  const commissionAmt = parseFloat(form.commission) || 0
+  const hasCommission = commissionAmt > 0
 
   const mutation = useMutation({
     mutationFn: () => staffApi.pay(staffId, {
@@ -695,10 +698,13 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
       billing_month:    form.billing_month || undefined,
       account_id:       form.account_id || undefined,
       note:             form.note || undefined,
+      commission:       commissionAmt > 0 ? commissionAmt : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); onDone() },
     onError: () => setError('Помилка збереження'),
   })
+
+  const canSubmit = !!form.gross_amount && (!hasCommission || !!form.account_id)
 
   return (
     <form onSubmit={e => { e.preventDefault(); setError(null); mutation.mutate() }}
@@ -740,10 +746,22 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
             placeholder="За травень 2026..."
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
         </div>
+        <div className="col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Комісія (грн)
+            <span className="ml-1 text-gray-400 font-normal">— окремий розхід з рахунку</span>
+          </label>
+          <input type="number" min="0" step="0.01" placeholder="0.00" value={form.commission}
+            onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
+          {hasCommission && !form.account_id && (
+            <p className="text-xs text-amber-600 mt-1">Для запису комісії необхідно вказати рахунок списання</p>
+          )}
+        </div>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={mutation.isPending || !form.gross_amount}
+        <button type="submit" disabled={mutation.isPending || !canSubmit}
           className="px-4 py-2 bg-green-700 text-white text-sm rounded-lg hover:bg-green-800 disabled:opacity-50">
           {mutation.isPending ? '...' : 'Виплатити'}
         </button>

@@ -188,14 +188,23 @@ export async function salaryRoutes(app: FastifyInstance) {
       billing_month?: string
       account_id?: string
       note?: string
+      commission?: number
     }
   }>(
     '/staff/:id/salary/pay',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
-      const { gross_amount, transaction_date, billing_month, account_id, note } = req.body
+      const { gross_amount, transaction_date, billing_month, account_id, note, commission } = req.body
       if (!gross_amount || gross_amount <= 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
+      }
+
+      const commissionAmt = Number(commission ?? 0)
+      if (!Number.isFinite(commissionAmt) || commissionAmt < 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути від\'ємною' })
+      }
+      if (commissionAmt > 0 && !account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Для запису комісії необхідно вказати рахунок' })
       }
 
       const today   = new Date().toISOString().slice(0, 10)
@@ -216,7 +225,31 @@ export async function salaryRoutes(app: FastifyInstance) {
         created_by:       req.user.sub,
       }).returningAll().executeTakeFirstOrThrow()
 
-      return reply.status(201).send(tx)
+      let commissionExpense = null
+      if (commissionAmt > 0) {
+        const staff = await db.selectFrom('staff').select('full_name').where('id', '=', req.params.id).executeTakeFirst()
+        const staffName = staff?.full_name ?? req.params.id
+
+        const salaryCategory = await db.selectFrom('expense_categories')
+          .select('id')
+          .where('name', '=', 'Зарплата')
+          .executeTakeFirst()
+
+        commissionExpense = await db.insertInto('expenses').values({
+          account_id:   account_id!,
+          category_id:  salaryCategory?.id ?? null,
+          amount:       commissionAmt,
+          accrual_date: txDate,
+          payment_date: txDate,
+          status:       'paid',
+          is_instant:   true,
+          is_dividend:  false,
+          note:         `Комісія за виплату ЗП: ${staffName}`,
+          created_by:   req.user.sub,
+        }).returningAll().executeTakeFirstOrThrow()
+      }
+
+      return reply.status(201).send({ tx, commission_expense: commissionExpense })
     }
   )
 
