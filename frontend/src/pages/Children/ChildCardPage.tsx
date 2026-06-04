@@ -1049,16 +1049,98 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
         <details className="text-sm">
           <summary className="text-gray-400 cursor-pointer hover:text-gray-600">Архів ({archivedEnrollments.length})</summary>
           <ul className="mt-2 divide-y divide-gray-100">
-            {archivedEnrollments.map((e) => (
-              <li key={e.id} className="py-2 flex items-center justify-between text-gray-400">
-                <span>{e.activity_name}</span>
-                <span className="text-xs">
-                  {e.end_date
-                    ? `відписка ${new Date(e.end_date).toLocaleDateString('uk-UA')}`
-                    : 'архів'}
-                </span>
-              </li>
-            ))}
+            {archivedEnrollments.map((e) => {
+              const anyIndTariff = individualTariffs.find((t) => t.activity_id === e.activity_id)
+              return (
+                <li key={e.id} className="py-2">
+                  {tariffEnrollId === e.id ? (
+                    <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
+                      <p className="text-xs font-medium text-gray-700">Індивідуальний тариф · {e.activity_name}</p>
+                      <div className="flex gap-4">
+                        {(['monthly', 'per_lesson', 'smart'] as IndTariffType[]).map((t) => (
+                          <label key={t} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="radio" checked={tariffForm.tariff_type === t}
+                              onChange={() => setTariffForm({ ...tariffForm, tariff_type: t })} />
+                            {TARIFF_TYPE_LABEL[t]}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 items-end flex-wrap">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Ціна (грн)</label>
+                          <input type="number" min="0.01" step="0.01" value={tariffForm.price}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, price: ev.target.value })}
+                            className="w-28 rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-0.5">Діє з</label>
+                          <input type="date" value={tariffForm.valid_from}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, valid_from: ev.target.value })}
+                            className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                        </div>
+                        <button
+                          onClick={() => { if (!tariffForm.price) { setTariffError('Введіть ціну'); return } setTariffMutation.mutate(e.activity_id) }}
+                          disabled={setTariffMutation.isPending}
+                          className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md">
+                          {setTariffMutation.isPending ? '...' : 'Зберегти'}
+                        </button>
+                        <button onClick={() => { setTariffEnrollId(null); setTariffError(null) }} className="text-xs text-gray-400 hover:text-gray-700">Скасувати</button>
+                      </div>
+                      {anyIndTariff && (
+                        <div className="pt-2 border-t border-iris-100 flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-500">Скасувати тариф з</span>
+                          <input type="date" value={tariffForm.close_date}
+                            onChange={(ev) => setTariffForm({ ...tariffForm, close_date: ev.target.value })}
+                            className="rounded border-gray-300 text-xs shadow-sm" />
+                          <button
+                            onClick={() => closeTariffMutation.mutate({ tariffId: anyIndTariff.id, validTo: tariffForm.close_date })}
+                            disabled={closeTariffMutation.isPending}
+                            className="text-xs text-red-400 hover:text-red-600 transition-colors underline underline-offset-2">
+                            {closeTariffMutation.isPending ? '...' : '→ повернути базову ціну'}
+                          </button>
+                        </div>
+                      )}
+                      {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-gray-400">
+                      <div>
+                        <span>{e.activity_name}</span>
+                        {anyIndTariff && (
+                          <span className="ml-2 text-xs text-iris-400">
+                            (тариф з {new Date(anyIndTariff.valid_from).toLocaleDateString('uk-UA')} {TARIFF_TYPE_LABEL[anyIndTariff.tariff_type]} · {Number(anyIndTariff.price).toFixed(0)} грн)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {canEditTariffs && (
+                          <>
+                            <button onClick={() => openTariffForm(e.id, e.activity_id)}
+                              className="text-xs hover:text-iris-600 transition-colors">
+                              {anyIndTariff ? 'тариф' : '+ тариф'}
+                            </button>
+                            {anyIndTariff && (
+                              <button
+                                onClick={() => recalcTariffMutation.mutate(anyIndTariff.id)}
+                                disabled={recalcTariffMutation.isPending}
+                                className="text-xs hover:text-amber-600 transition-colors disabled:opacity-50"
+                                title="Перерахувати нарахування за індивідуальним тарифом">
+                                {recalcTariffMutation.isPending ? '...' : 'перерах.'}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <span className="text-xs">
+                          {e.end_date
+                            ? `відписка ${new Date(e.end_date).toLocaleDateString('uk-UA')}`
+                            : 'архів'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </details>
       )}

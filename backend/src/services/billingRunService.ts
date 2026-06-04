@@ -602,7 +602,7 @@ export async function recalcForIndividualTariff(
     .select(['id as enrollment_id', 'account_id', 'start_date'])
     .where('child_id', '=', childId)
     .where('activity_id', '=', activityId)
-    .where('status', 'in', ['active', 'frozen'])
+    .where('status', 'in', ['active', 'frozen', 'archived'])
     .executeTakeFirst()
 
   if (!enrollment) return
