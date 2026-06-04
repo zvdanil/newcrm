@@ -319,7 +319,7 @@ export async function journalsRoutes(app: FastifyInstance) {
     Body: {
       enrollment_id: string
       date: string
-      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special'
+      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
       custom_amount?: number | null
       note?: string | null
     }
@@ -435,7 +435,7 @@ export async function journalsRoutes(app: FastifyInstance) {
       const effectiveTariffType = ind?.tariff_type ?? activity?.tariff_type
       const indPrice = ind ? Math.round(parseFloat(ind.price as string) * 100) / 100 : null
 
-      if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special')) {
+      if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special' || status === 'separate_billing')) {
         await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, indPrice, createdBy)
       } else if (effectiveTariffType === 'monthly' && status === 'absent_excused') {
         const existingRefund = await db.selectFrom('transactions').select('id')
@@ -488,7 +488,7 @@ export async function journalsRoutes(app: FastifyInstance) {
   app.put<{
     Params: { id: string }
     Body: {
-      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special'
+      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
       custom_amount?: number | null
       note?: string | null
     }
@@ -540,8 +540,8 @@ export async function journalsRoutes(app: FastifyInstance) {
       const putEffectiveType = putInd?.tariff_type ?? activityRow?.tariff_type
       const putIndPrice = putInd ? Math.round(parseFloat(putInd.price as string) * 100) / 100 : null
 
-      const wasChargeable = oldStatus === 'present' || oldStatus === 'special'
-      const isChargeable  = status === 'present' || status === 'special'
+      const wasChargeable = oldStatus === 'present' || oldStatus === 'special' || oldStatus === 'separate_billing'
+      const isChargeable  = status === 'present' || status === 'special' || status === 'separate_billing'
       const oldAmount = existing.custom_amount != null ? Number(existing.custom_amount) : null
       const newAmount = custom_amount != null ? Number(custom_amount) : null
       const amountChanged = oldAmount !== newAmount
@@ -620,7 +620,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         const delEffectiveType = delInd?.tariff_type ?? actRow?.tariff_type
 
         if (delEffectiveType === 'per_lesson') {
-          if (log.status === 'present' || log.status === 'special') {
+          if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') {
             await reversePerLessonAccrual(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
           }
         } else if (delEffectiveType === 'smart') {

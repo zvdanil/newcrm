@@ -167,7 +167,7 @@ export interface AttendanceLogsTable {
   child_id:      string
   activity_id:   string
   date:          ColumnType<Date, string, string>
-  status:        'present' | 'absent_excused' | 'absent_unexcused' | 'special'
+  status:        'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
   custom_amount: ColumnType<string | null, number | string | null, number | string | null>
   note:          string | null
   created_by:    string | null
