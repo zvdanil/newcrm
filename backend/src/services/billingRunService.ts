@@ -698,30 +698,53 @@ export async function recalcForIndividualTariff(
       }
 
     } else if (ind.tariff_type === 'per_lesson') {
+      // Include separate_billing marks (числові відмітки) — they may have custom_amount set.
+      // For null custom_amount marks: use individual tariff price (standard per_lesson).
+      // For custom_amount marks: use their amount, but skip if an ACCRUAL already exists
+      // (meaning it was created by the journal trigger when the mark was first saved).
       const marks = await db
         .selectFrom('attendance_logs')
-        .select(['id as log_id', 'date'])
+        .select(['id as log_id', 'date', 'custom_amount'])
         .where('enrollment_id', '=', enrollment.enrollment_id)
-        .where('status', 'in', ['present', 'special'])
+        .where('status', 'in', ['present', 'special', 'separate_billing'])
         .where('date', '>=', billingDate)
         .where('date', '<=', new Date(monthLastDay))
-        .where('custom_amount', 'is', null)
         .execute()
 
       for (const mark of marks) {
-        if (price <= 0) continue
+        const markCustom = mark.custom_amount != null
+          ? Math.round(parseFloat(String(mark.custom_amount)) * 100) / 100
+          : null
+        const accrualAmount = markCustom ?? price
+        if (accrualAmount <= 0) continue
+
         const lessonDateStr = new Date(mark.date as Date).toISOString().slice(0, 10)
+
+        // Marks with custom_amount may already have an ACCRUAL from the journal trigger — don't duplicate.
+        if (markCustom !== null) {
+          const existing = await db
+            .selectFrom('transactions')
+            .select('id')
+            .where('enrollment_id', '=', enrollment.enrollment_id)
+            .where('type', '=', 'ACCRUAL')
+            .where('transaction_date', '=', new Date(lessonDateStr))
+            .where('billing_month', 'is', null)
+            .where('is_deleted', '=', false)
+            .executeTakeFirst()
+          if (existing) continue
+        }
+
         await createTransaction({
           type: 'ACCRUAL',
           child_id: childId,
           account_id: enrollment.account_id as string,
           activity_id: activityId,
           enrollment_id: enrollment.enrollment_id,
-          amount: price,
+          amount: accrualAmount,
           transaction_date: lessonDateStr,
           billing_month: null,
           note: `Нарахування за заняття ${lessonDateStr}`,
-          metadata_json: { tariff_snapshot: { price }, source: 'individual_tariff', attendance_log_id: mark.log_id },
+          metadata_json: { tariff_snapshot: { price: accrualAmount }, source: 'individual_tariff', attendance_log_id: mark.log_id },
           created_by: triggeredBy,
         })
       }
