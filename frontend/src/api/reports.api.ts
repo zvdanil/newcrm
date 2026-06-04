@@ -43,6 +43,53 @@ export interface PnLReport {
   rows: PnLRow[]
 }
 
+export interface ARAnalyticsMonthRow {
+  month: string               // 'YYYY-MM-01'
+  accrued_in_month: number
+  paid_in_month: number
+  balance_start_month: number
+  balance_end_month: number
+}
+
+export interface ARAnalyticsRow {
+  child_id: string
+  child_name: string
+  is_active: boolean
+  family_id: string | null
+  family_name: string | null
+  primary_parent_phone: string | null
+  account_id: string
+  account_name: string
+  balance_start: number
+  accrued_in_period: number
+  paid_in_period: number
+  balance_end: number
+  current_balance: number
+  months: ARAnalyticsMonthRow[]
+}
+
+export interface ARAnalyticsTotals {
+  balance_start: number
+  accrued_in_period: number
+  paid_in_period: number
+  balance_end: number
+  current_balance: number
+}
+
+export interface ARAnalyticsReport {
+  rows: ARAnalyticsRow[]
+  totals: ARAnalyticsTotals
+  period_months: string[]
+}
+
+export interface ARAnalyticsFilters {
+  from_month: string           // YYYY-MM
+  to_month: string             // YYYY-MM
+  account_ids: string[]
+  balance_mode: 'all' | 'debtors' | 'advances'
+  is_active: '' | 'true' | 'false'
+}
+
 export const reportsApi = {
   getAccountsReceivable: async (filters: ARFilters): Promise<ARReport> => {
     const params = new URLSearchParams()
@@ -53,6 +100,17 @@ export const reportsApi = {
     if (filters.min_debt)             params.set('min_debt', filters.min_debt)
     params.set('sort', filters.sort)
     const { data } = await apiClient.get<ARReport>(`/reports/accounts-receivable?${params}`)
+    return data
+  },
+
+  getARAnalytics: async (filters: ARAnalyticsFilters): Promise<ARAnalyticsReport> => {
+    const params = new URLSearchParams()
+    params.set('from_month', filters.from_month)
+    params.set('to_month',   filters.to_month)
+    if (filters.account_ids.length) params.set('account_ids', filters.account_ids.join(','))
+    params.set('balance_mode', filters.balance_mode)
+    if (filters.is_active) params.set('is_active', filters.is_active)
+    const { data } = await apiClient.get<ARAnalyticsReport>(`/reports/ar-analytics?${params}`)
     return data
   },
 

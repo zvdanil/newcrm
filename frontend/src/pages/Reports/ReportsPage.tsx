@@ -5,6 +5,7 @@ import { reportsApi } from '../../api/reports.api'
 import type { ARFilters, DebtorRow } from '../../api/reports.api'
 import { accountsApi } from '../../api/accounts.api'
 import { PnLReport } from './PnLReport'
+import { ARAnalyticsReport } from './ARAnalyticsReport'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ const EMPTY_FILTERS: ARFilters = {
 // ─── component ──────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<'ar' | 'pnl'>('ar')
+  const [activeTab, setActiveTab] = useState<'ar' | 'pnl' | 'analytics'>('ar')
   const [filters, setFilters]         = useState<ARFilters>(EMPTY_FILTERS)
   const [committed, setCommitted]     = useState<ARFilters | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -106,8 +107,9 @@ export function ReportsPage() {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {([
-            { id: 'ar',  label: 'Дебіторська заборгованість' },
-            { id: 'pnl', label: 'PnL' },
+            { id: 'ar',        label: 'Дебіторська заборгованість' },
+            { id: 'analytics', label: 'Аналітика AR' },
+            { id: 'pnl',       label: 'PnL' },
           ] as const).map(tab => (
             <button
               key={tab.id}
@@ -124,7 +126,8 @@ export function ReportsPage() {
         </nav>
       </div>
 
-      {activeTab === 'pnl' && <PnLReport />}
+      {activeTab === 'pnl'       && <PnLReport />}
+      {activeTab === 'analytics' && <ARAnalyticsReport />}
 
       {activeTab === 'ar' && <>
 
