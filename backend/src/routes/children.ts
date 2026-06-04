@@ -247,7 +247,10 @@ export async function childrenRoutes(app: FastifyInstance) {
           'cb.updated_at',
         ])
         .where('e.child_id', '=', id)
-        .where('e.status', '!=', 'archived')
+        .where((eb) => eb.or([
+          eb('e.status', '!=', 'archived'),
+          eb(eb.fn.coalesce(eb.ref('cb.balance'), eb.lit(0)), '!=', eb.lit(0)),
+        ]))
         .distinctOn(['e.account_id'])
         .orderBy('e.account_id')
         .orderBy('a.name')
