@@ -1491,7 +1491,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
   for (const e of (monthStats?.enrollments ?? [])) {
     activityFlagsMap[e.activity_id] = e.activity_is_active
   }
-  const attendanceCountMap: Record<string, { visit_count: number; excused_count: number }> = {}
+  const attendanceCountMap: Record<string, { visit_count: number; excused_count: number; separate_billing_count: number }> = {}
   for (const a of (monthStats?.attendance ?? [])) {
     attendanceCountMap[a.activity_id] = a
   }
