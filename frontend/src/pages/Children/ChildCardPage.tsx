@@ -1728,10 +1728,26 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
       <div className="border-t border-gray-100 pt-4">
         {/* Month navigation + audit toggle */}
         <div className="flex items-center justify-between mb-4">
-          <button onClick={() => setYm(prevMonth(ym))} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
-            ‹
-          </button>
-          <span className="text-sm font-medium text-gray-700 capitalize">{monthLabel(ym)}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setYm(prevMonth(ym))}
+              className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-500 hover:text-gray-800 transition-colors shadow-sm"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="10,3 5,8 10,13" />
+              </svg>
+            </button>
+            <span className="text-sm font-medium text-gray-700 capitalize w-36 text-center select-none">{monthLabel(ym)}</span>
+            <button
+              onClick={() => setYm(nextMonth(ym))}
+              disabled={ym >= currentYM()}
+              className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-gray-500 hover:text-gray-800 transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6,3 11,8 6,13" />
+              </svg>
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             {showAudit && (() => {
               const txAccounts = [...new Map((ledger?.data ?? []).map((tx) => [tx.account_id, tx.account_name])).entries()]
@@ -1757,10 +1773,6 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
               title="Журнал змін — показати всі транзакції включно зі скасованими"
             >
               аудит
-            </button>
-            <button onClick={() => setYm(nextMonth(ym))} disabled={ym >= currentYM()}
-              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-30">
-              ›
             </button>
           </div>
         </div>
