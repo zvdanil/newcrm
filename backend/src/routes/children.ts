@@ -1474,12 +1474,13 @@ export async function childrenRoutes(app: FastifyInstance) {
         }
       })
 
-      const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
+      const attendanceMap: Record<string, { visit_count: number; excused_count: number; separate_billing_count: number }> = {}
       for (const log of attendanceLogs) {
         const key = log.activity_id ?? 'none'
-        attendanceMap[key] ??= { visit_count: 0, excused_count: 0 }
+        attendanceMap[key] ??= { visit_count: 0, excused_count: 0, separate_billing_count: 0 }
         if (log.status === 'present' || log.status === 'special') attendanceMap[key].visit_count++
         else if (log.status === 'absent_excused') attendanceMap[key].excused_count++
+        else if (log.status === 'separate_billing') attendanceMap[key].separate_billing_count++
       }
 
       return {

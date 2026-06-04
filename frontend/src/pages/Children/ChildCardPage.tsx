@@ -1756,10 +1756,11 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span className="text-gray-500 truncate">{name}</span>
                                   <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
-                                  {(att?.visit_count || att?.excused_count) && (
+                                  {(att?.visit_count || att?.excused_count || att?.separate_billing_count) && (
                                     <span className="text-gray-400 shrink-0">
                                       {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
                                       {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                      {att.separate_billing_count > 0 ? ` ОР:${att.separate_billing_count}` : ''}
                                     </span>
                                   )}
                                 </div>
@@ -1912,10 +1913,11 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                               {isArchived && (
                                 <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
                               )}
-                              {(att?.visit_count || att?.excused_count) && (
+                              {(att?.visit_count || att?.excused_count || att?.separate_billing_count) && (
                                 <span className="text-gray-400 shrink-0">
                                   {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
                                   {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                  {att.separate_billing_count > 0 ? ` ОР:${att.separate_billing_count}` : ''}
                                 </span>
                               )}
                             </div>
@@ -1961,10 +1963,11 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                             <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
                               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <span className="truncate">{e.activity_name}</span>
-                                {(att?.visit_count || att?.excused_count) && (
+                                {(att?.visit_count || att?.excused_count || att?.separate_billing_count) && (
                                   <span className="shrink-0">
                                     {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
                                     {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
+                                    {att.separate_billing_count > 0 ? ` ОР:${att.separate_billing_count}` : ''}
                                   </span>
                                 )}
                                 {tariffLabel && e.effective_tariff_price != null && (

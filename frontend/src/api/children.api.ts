@@ -160,6 +160,7 @@ export interface MonthStatsAttendance {
   activity_id: string
   visit_count: number
   excused_count: number
+  separate_billing_count: number
 }
 
 export interface ChildMonthStats {
