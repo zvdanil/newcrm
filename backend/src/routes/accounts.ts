@@ -82,6 +82,103 @@ export async function accountsRoutes(app: FastifyInstance) {
     return { ...account, open_imbalances: Number(imb.count) }
   })
 
+  // ── GET /api/accounts/:id/ledger/summary?from=&to= ────────────────────────
+  app.get<{
+    Params: { id: string }
+    Querystring: { from?: string; to?: string }
+  }>(
+    '/:id/ledger/summary',
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { id } = req.params
+      const f = req.query.from ?? null
+      const t = req.query.to   ?? null
+
+      const result = await sql<{ total_in: string; total_out: string }>`
+        SELECT
+          (
+            COALESCE((
+              SELECT SUM(amount) FROM transactions
+              WHERE account_id = ${id} AND type = 'PAYMENT' AND is_deleted = false
+                AND NOT EXISTS (SELECT 1 FROM inter_account_imbalances i WHERE i.to_account_id = ${id} AND i.transaction_id = transactions.id)
+                AND (${f}::date IS NULL OR transaction_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR transaction_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(iai.amount) FROM inter_account_imbalances iai
+              WHERE iai.from_account_id = ${id} AND iai.transaction_id IS NOT NULL
+                AND EXISTS (SELECT 1 FROM transactions tx WHERE tx.id = iai.transaction_id AND tx.is_deleted = false)
+                AND (${f}::date IS NULL OR iai.created_at::date >= ${f}::date)
+                AND (${t}::date IS NULL OR iai.created_at::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(at.amount) FROM account_transfers at
+              WHERE at.to_account_id = ${id}
+                AND (${f}::date IS NULL OR at.transfer_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR at.transfer_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(amount) FROM expenses
+              WHERE account_id = ${id} AND status = 'paid' AND is_deleted = false AND is_advance_return = true
+                AND (${f}::date IS NULL OR accrual_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR accrual_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(amount) FROM account_income
+              WHERE account_id = ${id} AND is_deleted = false
+                AND (${f}::date IS NULL OR income_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR income_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(amount) FROM account_corrections
+              WHERE account_id = ${id} AND is_deleted = false AND amount > 0
+                AND (${f}::date IS NULL OR correction_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR correction_date::date <= ${t}::date)
+            ), 0)
+          ) AS total_in,
+          (
+            COALESCE((
+              SELECT SUM(
+                amount
+                - COALESCE(utilized_advance_amount, 0)
+                - COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u WHERE u.expense_id = expenses.id), 0)
+              ) FROM expenses
+              WHERE account_id = ${id} AND status = 'paid' AND is_deleted = false AND is_advance_return = false
+                AND (
+                  amount
+                  - COALESCE(utilized_advance_amount, 0)
+                  - COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u WHERE u.expense_id = expenses.id), 0)
+                ) > 0
+                AND (${f}::date IS NULL OR accrual_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR accrual_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(gross_amount) FROM salary_transactions
+              WHERE account_id = ${id} AND type = 'PAYMENT' AND is_deleted = false
+                AND (${f}::date IS NULL OR transaction_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR transaction_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(at.amount) FROM account_transfers at
+              WHERE at.from_account_id = ${id}
+                AND NOT EXISTS (SELECT 1 FROM expenses e WHERE e.withdrawal_transfer_id = at.id AND e.is_deleted = false)
+                AND NOT EXISTS (SELECT 1 FROM salary_transactions st WHERE st.withdrawal_transfer_id = at.id AND st.is_deleted = false)
+                AND (${f}::date IS NULL OR at.transfer_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR at.transfer_date::date <= ${t}::date)
+            ), 0)
+            + COALESCE((
+              SELECT SUM(ABS(amount)) FROM account_corrections
+              WHERE account_id = ${id} AND is_deleted = false AND amount < 0
+                AND (${f}::date IS NULL OR correction_date::date >= ${f}::date)
+                AND (${t}::date IS NULL OR correction_date::date <= ${t}::date)
+            ), 0)
+          ) AS total_out
+      `.execute(db)
+
+      return reply.send(result.rows[0])
+    }
+  )
+
   // ── GET /api/accounts/:id/ledger?from=&to=&limit=&offset= ─────────────────
   app.get<{
     Params: { id: string }

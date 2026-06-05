@@ -61,6 +61,16 @@ export const accountsApi = {
     return data
   },
 
+  ledgerSummary: async (id: string, filters: { from?: string; to?: string } = {}): Promise<{ total_in: string; total_out: string }> => {
+    const params = new URLSearchParams()
+    if (filters.from) params.set('from', filters.from)
+    if (filters.to)   params.set('to',   filters.to)
+    const { data } = await apiClient.get<{ total_in: string; total_out: string }>(
+      `/accounts/${id}/ledger/summary?${params}`
+    )
+    return data
+  },
+
   ledger: async (id: string, filters: LedgerFilters = {}): Promise<{ data: LedgerRow[]; limit: number; offset: number }> => {
     const params = new URLSearchParams()
     if (filters.from)   params.set('from',   filters.from)

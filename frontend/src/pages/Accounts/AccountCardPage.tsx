@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { localDateStr, firstOfMonth } from '../../utils/dateStr'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { accountsApi } from '../../api/accounts.api'
 import type { LedgerKind, LedgerRow, PayerSearchResult } from '../../api/accounts.api'
 import { billingApi } from '../../api/billing.api'
@@ -164,9 +164,27 @@ export function AccountCardPage() {
     enabled: !!id,
   })
 
-  const { data: ledger, isLoading: ledgerLoading } = useQuery({
+  const PAGE_SIZE = 100
+
+  const {
+    data: ledgerPages,
+    isLoading: ledgerLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['account-ledger', id, applied],
-    queryFn: () => accountsApi.ledger(id!, { from: applied.from, to: applied.to, limit: 500 }),
+    queryFn: ({ pageParam }) =>
+      accountsApi.ledger(id!, { from: applied.from, to: applied.to, limit: PAGE_SIZE, offset: pageParam as number }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) =>
+      lastPage.data.length < PAGE_SIZE ? undefined : lastPage.offset + PAGE_SIZE,
+    enabled: !!id,
+  })
+
+  const { data: summary } = useQuery({
+    queryKey: ['account-ledger-summary', id, applied],
+    queryFn: () => accountsApi.ledgerSummary(id!, { from: applied.from, to: applied.to }),
     enabled: !!id,
   })
 
@@ -181,6 +199,7 @@ export function AccountCardPage() {
     mutationFn: (txId: string) => billingApi.cancelTransaction(txId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['account-ledger', id] })
+      qc.invalidateQueries({ queryKey: ['account-ledger-summary', id] })
       qc.invalidateQueries({ queryKey: ['account', id] })
       qc.invalidateQueries({ queryKey: ['ledger'] })
       qc.invalidateQueries({ queryKey: ['balance'] })
@@ -206,6 +225,7 @@ export function AccountCardPage() {
 
   function invalidateEntry() {
     qc.invalidateQueries({ queryKey: ['account-ledger', id] })
+    qc.invalidateQueries({ queryKey: ['account-ledger-summary', id] })
     qc.invalidateQueries({ queryKey: ['account-ledger-all', id] })
     qc.invalidateQueries({ queryKey: ['account', id] })
     qc.invalidateQueries({ queryKey: ['balance'] })
@@ -279,10 +299,13 @@ export function AccountCardPage() {
   if (!account)   return <div className="py-16 text-center text-sm text-red-500">Рахунок не знайдено</div>
 
   const balance = parseFloat(account.balance ?? '0')
-  const rows = ledger?.data ?? []
+  const rows = useMemo(
+    () => ledgerPages?.pages.flatMap((p) => p.data) ?? [],
+    [ledgerPages]
+  )
 
-  const periodIn  = rows.filter((r) => KIND_SIGN[r.kind] === '+').reduce((s, r) => s + parseFloat(r.amount), 0)
-  const periodOut = rows.filter((r) => KIND_SIGN[r.kind] === '-').reduce((s, r) => s + parseFloat(r.amount), 0)
+  const periodIn  = parseFloat(summary?.total_in  ?? '0')
+  const periodOut = parseFloat(summary?.total_out ?? '0')
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -846,6 +869,17 @@ export function AccountCardPage() {
               })}
             </tbody>
           </table>
+        )}
+        {hasNextPage && (
+          <div className="px-4 py-3 border-t border-gray-100 text-center">
+            <button
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="text-xs px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors disabled:opacity-50"
+            >
+              {isFetchingNextPage ? 'Завантаження...' : 'Завантажити ще'}
+            </button>
+          </div>
         )}
       </div>
       )}
