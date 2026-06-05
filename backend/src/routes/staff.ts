@@ -3,6 +3,38 @@ import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
 import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
 
+function calcVacationDayRate(
+  monthlyBaseSalary: number,
+  periodStart: string,
+  periodEnd: string,
+  calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS',
+): number {
+  const start = new Date(periodStart + 'T00:00:00')
+  const end   = new Date(periodEnd   + 'T00:00:00')
+
+  // Count full months
+  const months =
+    (end.getFullYear() - start.getFullYear()) * 12 +
+    (end.getMonth() - start.getMonth()) + 1
+
+  let totalDays = 0
+  if (calcType === 'CALENDAR_DAYS') {
+    // Total calendar days in period
+    totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+  } else {
+    // Count Mon–Fri days in period
+    const cur = new Date(start)
+    while (cur <= end) {
+      const dow = cur.getDay()
+      if (dow !== 0 && dow !== 6) totalDays++
+      cur.setDate(cur.getDate() + 1)
+    }
+  }
+
+  const avgDays = totalDays / months
+  return Math.round(monthlyBaseSalary / avgDays * 100) / 100
+}
+
 export async function staffRoutes(app: FastifyInstance) {
 
   // GET /api/staff
@@ -99,6 +131,7 @@ export async function staffRoutes(app: FastifyInstance) {
         .selectFrom('staff_rates as r')
         .leftJoin('activities as a', 'a.id', 'r.activity_id')
         .leftJoin('staff_smart_configs as sc', 'sc.rate_id', 'r.id')
+        .leftJoin('staff_vacation_configs as vc', 'vc.rate_id', 'r.id')
         .where('r.staff_id', '=', req.params.id)
         .select([
           'r.id', 'r.staff_id', 'r.activity_id', 'r.rate_category', 'r.rate_type',
@@ -106,6 +139,8 @@ export async function staffRoutes(app: FastifyInstance) {
           'a.name as activity_name',
           'sc.base_lessons', 'sc.absence_threshold', 'sc.threshold_rate',
           'sc.attendance_threshold', 'sc.starter_rate', 'sc.extra_lesson_price',
+          'vc.monthly_base_salary', 'vc.vacation_days_limit', 'vc.period_start_date',
+          'vc.period_end_date', 'vc.calculation_base_type', 'vc.day_rate_cached',
         ])
         .orderBy('r.valid_from', 'desc')
         .execute()
@@ -120,7 +155,7 @@ export async function staffRoutes(app: FastifyInstance) {
     Body: {
       activity_id?: string
       rate_category?: 'auto' | 'manual'
-      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'smart_per_child' | 'bonus' | 'monthly_by_day'
+      rate_type: 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'smart_per_child' | 'bonus' | 'monthly_by_day' | 'vacation'
       value_mode?: 'fixed' | 'percent_of_revenue'
       rate_value: number
       deduction_pct?: number
@@ -137,14 +172,29 @@ export async function staffRoutes(app: FastifyInstance) {
         extra_lesson_price?: number
         trial_lesson_price?: number
       }
+      vacation_config?: {
+        monthly_base_salary:   number
+        vacation_days_limit?:  number
+        period_start_date:     string
+        period_end_date:       string
+        calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+      }
     }
   }>(
     '/:id/rates',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { activity_id, rate_category = 'auto', rate_type, value_mode = 'fixed', rate_value, deduction_pct = 0, valid_from, valid_to, note, smart_config } = req.body
+      const { rate_type, value_mode = 'fixed', rate_value, deduction_pct = 0, valid_from, valid_to, note, smart_config, vacation_config } = req.body
+      let { activity_id, rate_category = 'auto' } = req.body
+
       if (!rate_type) return reply.status(400).send({ error: 'BadRequest', message: 'rate_type є обовʼязковим' })
       if (rate_value === undefined) return reply.status(400).send({ error: 'BadRequest', message: 'rate_value є обовʼязковим' })
+
+      // vacation ставка — завжди manual, fixed, без активності
+      if (rate_type === 'vacation') {
+        rate_category  = 'manual'
+        activity_id    = undefined
+      }
 
       const today    = new Date().toISOString().slice(0, 10)
       const fromDate = valid_from ?? today
@@ -218,6 +268,27 @@ export async function staffRoutes(app: FastifyInstance) {
         }).execute()
       }
 
+      if (rate_type === 'vacation') {
+        if (!vacation_config) {
+          return reply.status(400).send({ error: 'BadRequest', message: 'vacation_config є обовʼязковим для ставки vacation' })
+        }
+        const dayRate = calcVacationDayRate(
+          vacation_config.monthly_base_salary,
+          vacation_config.period_start_date,
+          vacation_config.period_end_date,
+          vacation_config.calculation_base_type,
+        )
+        await db.insertInto('staff_vacation_configs').values({
+          rate_id:               rate.id,
+          monthly_base_salary:   vacation_config.monthly_base_salary,
+          vacation_days_limit:   vacation_config.vacation_days_limit ?? 24,
+          period_start_date:     vacation_config.period_start_date,
+          period_end_date:       vacation_config.period_end_date,
+          calculation_base_type: vacation_config.calculation_base_type,
+          day_rate_cached:       dayRate,
+        }).execute()
+      }
+
       // Retro recalculation: if valid_from is in the past, run for all affected old rates
       const todayObj    = new Date(today)
       todayObj.setHours(0, 0, 0, 0)
@@ -259,12 +330,19 @@ export async function staffRoutes(app: FastifyInstance) {
         extra_lesson_price?: number
         trial_lesson_price?: number
       }
+      vacation_config?: {
+        monthly_base_salary?:   number
+        vacation_days_limit?:   number
+        period_start_date?:     string
+        period_end_date?:       string
+        calculation_base_type?: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+      }
     }
   }>(
     '/:id/rates/:rateId',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { deduction_pct, valid_to, note, smart_config } = req.body
+      const { deduction_pct, valid_to, note, smart_config, vacation_config } = req.body
 
       const updates: Record<string, unknown> = {}
       if (deduction_pct !== undefined) updates.deduction_pct = deduction_pct
@@ -279,6 +357,37 @@ export async function staffRoutes(app: FastifyInstance) {
         .executeTakeFirst()
 
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
+
+      if (vacation_config) {
+        // Fetch current config to fill in missing fields
+        const cur = await db
+          .selectFrom('staff_vacation_configs')
+          .selectAll()
+          .where('rate_id', '=', req.params.rateId)
+          .executeTakeFirst()
+
+        if (cur) {
+          const newSalary = vacation_config.monthly_base_salary  ?? Number(cur.monthly_base_salary)
+          const newStart  = vacation_config.period_start_date    ?? String(cur.period_start_date).slice(0, 10)
+          const newEnd    = vacation_config.period_end_date       ?? String(cur.period_end_date).slice(0, 10)
+          const newType   = vacation_config.calculation_base_type ?? cur.calculation_base_type
+
+          const newDayRate = calcVacationDayRate(newSalary, newStart, newEnd, newType)
+
+          await db.updateTable('staff_vacation_configs')
+            .set({
+              monthly_base_salary:   vacation_config.monthly_base_salary  ?? cur.monthly_base_salary,
+              vacation_days_limit:   vacation_config.vacation_days_limit  ?? cur.vacation_days_limit,
+              period_start_date:     newStart,
+              period_end_date:       newEnd,
+              calculation_base_type: newType,
+              day_rate_cached:       newDayRate,
+              updated_at:            new Date().toISOString() as unknown as Date,
+            })
+            .where('rate_id', '=', req.params.rateId)
+            .execute()
+        }
+      }
 
       if (smart_config) {
         await db.insertInto('staff_smart_configs')

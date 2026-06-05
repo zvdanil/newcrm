@@ -47,7 +47,8 @@
       "Read(//tmp/**)",
       "Bash(DATABASE_URL=postgresql://iris:iris_pass@localhost:5432/iris_db node migrate.js)",
       "Bash(xargs ls -la)",
-      "Bash(grep -E \"\\\\.\\(tsx?|jsx?|py\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?|py\\)$\")",
+      "Bash(npm run *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\User\\.claude\\plans"

@@ -7,6 +7,7 @@ import {
   TxPopup,
   AccrualGroupPopup,
   DailyMarkDialog,
+  VacationMarkDialog,
   fmt,
 } from '../../components/SalaryTransactionPopups'
 import { ManualAccrualForm } from '../Staff/StaffCardPage'
@@ -43,6 +44,7 @@ const RATE_TYPE_SHORT: Record<string, string> = {
   smart:          'Смарт',
   bonus:          'Бонус',
   monthly_by_day: 'По днях',
+  vacation:       'Відпустка',
 }
 
 function rateRowLabel(rate: SalaryGridRate): string {
@@ -340,11 +342,12 @@ function AccrualModalOverlay({
 // ── Dialog state ───────────────────────────────────────────────────────────
 
 type DialogState =
-  | { type: 'tx';           tx: SalaryTransaction; staffId: string }
-  | { type: 'accrualGroup'; txs: SalaryTransaction[]; staffId: string }
-  | { type: 'paymentDay';   staffId: string; date: string }
-  | { type: 'newAccrual';   staffId: string; date: string; rateId?: string }
-  | { type: 'dailyMark';    staffId: string; date: string; rate: SalaryGridRate; existingTx: SalaryTransaction | null }
+  | { type: 'tx';            tx: SalaryTransaction; staffId: string }
+  | { type: 'accrualGroup';  txs: SalaryTransaction[]; staffId: string }
+  | { type: 'paymentDay';    staffId: string; date: string }
+  | { type: 'newAccrual';    staffId: string; date: string; rateId?: string }
+  | { type: 'dailyMark';     staffId: string; date: string; rate: SalaryGridRate; existingTx: SalaryTransaction | null }
+  | { type: 'vacationMark';  staffId: string; date: string; rate: SalaryGridRate; existingTx: SalaryTransaction | null }
   | null
 
 // ── Main component ─────────────────────────────────────────────────────────
@@ -426,6 +429,16 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
       )}
       {dialog?.type === 'dailyMark' && (
         <DailyMarkDialog
+          staffId={dialog.staffId}
+          date={dialog.date}
+          rate={dialog.rate}
+          existingTx={dialog.existingTx}
+          onClose={() => invalidateAfterMutation(dialog.staffId)}
+          invalidateKeys={[gridKey, ['salary-journal']]}
+        />
+      )}
+      {dialog?.type === 'vacationMark' && (
+        <VacationMarkDialog
           staffId={dialog.staffId}
           date={dialog.date}
           rate={dialog.rate}
@@ -586,16 +599,19 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                       {dates.map(d => {
                         const txs = rateTxsByDate.get(d) ?? []
                         const isMonthlyByDay = group.rates[0]?.rate_type === 'monthly_by_day'
+                        const isVacation     = group.rates[0]?.rate_type === 'vacation'
                         return (
                           <td key={d} className={`px-0.5 py-1 text-center border-r border-gray-100 ${isWeekend(d) ? 'bg-rose-50/30' : ''}`}>
                             <AccrualCell
                               txs={txs}
                               onClickExisting={ts => {
+                                const activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to > d))
+                                  ?? group.rates.find(r => !r.valid_to)
+                                  ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
                                 if (isMonthlyByDay) {
-                                  const activeRate = group.rates.find(r => r.valid_from <= d && (!r.valid_to || r.valid_to > d))
-                                    ?? group.rates.find(r => !r.valid_to)
-                                    ?? [...group.rates].sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
                                   setDialog({ type: 'dailyMark', staffId: row.id, date: d, rate: activeRate, existingTx: ts[0] })
+                                } else if (isVacation) {
+                                  setDialog({ type: 'vacationMark', staffId: row.id, date: d, rate: activeRate, existingTx: ts[0] })
                                 } else {
                                   ts.length === 1
                                     ? setDialog({ type: 'tx', tx: ts[0], staffId: row.id })
@@ -609,6 +625,8 @@ export function SalaryGridTab({ month, search }: { month: string; search: string
                                 }
                                 if (isMonthlyByDay) {
                                   setDialog({ type: 'dailyMark', staffId: row.id, date: d, rate: activeRate, existingTx: null })
+                                } else if (isVacation) {
+                                  setDialog({ type: 'vacationMark', staffId: row.id, date: d, rate: activeRate, existingTx: null })
                                 } else {
                                   setDialog({ type: 'newAccrual', staffId: row.id, date: d, rateId: activeRate.id })
                                 }

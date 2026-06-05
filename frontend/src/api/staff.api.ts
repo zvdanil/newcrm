@@ -2,7 +2,7 @@ import { apiClient } from './client'
 
 export type StaffType    = 'employee' | 'partner'
 export type RateCategory = 'auto' | 'manual'
-export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'smart_per_child' | 'monthly_by_day'
+export type RateType     = 'per_lesson' | 'per_child' | 'group_lesson' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'smart_per_child' | 'monthly_by_day' | 'vacation'
 export type ValueMode    = 'fixed' | 'percent_of_revenue'
 export type SalaryTxType = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
@@ -40,6 +40,13 @@ export interface StaffRate {
   starter_rate:         string | null
   extra_lesson_price:   string | null
   trial_lesson_price:   string | null
+  // vacation config (joined)
+  monthly_base_salary:   string | null
+  vacation_days_limit:   number | null
+  period_start_date:     string | null
+  period_end_date:       string | null
+  calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS' | null
+  day_rate_cached:       string | null
 }
 
 export interface SalaryTransaction {
@@ -97,6 +104,9 @@ export interface SalaryGridRate {
   activity_id:   string | null
   activity_name: string | null
   note:          string | null
+  // vacation config (optional — populated for vacation rates)
+  day_rate_cached:     string | null
+  vacation_days_limit: number | null
 }
 
 export interface SalaryGridStaffRow extends StaffMember {
@@ -166,6 +176,13 @@ export const staffApi = {
       extra_lesson_price?: number
       trial_lesson_price?: number
     }
+    vacation_config?: {
+      monthly_base_salary:   number
+      vacation_days_limit?:  number
+      period_start_date:     string
+      period_end_date:       string
+      calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+    }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.post<StaffRate>(`/staff/${staffId}/rates`, payload)
     return data
@@ -184,8 +201,21 @@ export const staffApi = {
       extra_lesson_price?: number
       trial_lesson_price?: number
     }
+    vacation_config?: {
+      monthly_base_salary?:   number
+      vacation_days_limit?:   number
+      period_start_date?:     string
+      period_end_date?:       string
+      calculation_base_type?: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+    }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.put<StaffRate>(`/staff/${staffId}/rates/${rateId}`, payload)
+    return data
+  },
+
+  getVacationDays: async (staffId: string, year?: number): Promise<{ limit: number; used: number; remaining: number; day_rate: number }> => {
+    const q = year ? `?year=${year}` : ''
+    const { data } = await apiClient.get(`/staff/${staffId}/vacation-days${q}`)
     return data
   },
 

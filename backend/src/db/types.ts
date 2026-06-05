@@ -318,7 +318,7 @@ export interface BillingRunLogTable {
 
 export type StaffType     = 'employee' | 'partner'
 export type RateCategory  = 'auto' | 'manual'
-export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'group_lesson' | 'smart_per_child' | 'monthly_by_day'
+export type RateType      = 'per_lesson' | 'per_child' | 'fixed_monthly' | 'hourly' | 'smart' | 'bonus' | 'group_lesson' | 'smart_per_child' | 'monthly_by_day' | 'vacation'
 export type SalaryTxType  = 'ACCRUAL' | 'PAYMENT' | 'CORRECTION'
 
 export interface StaffTable {
@@ -358,6 +358,17 @@ export interface StaffSmartConfigsTable {
   extra_lesson_price:   ColumnType<string, number | string, number | string>
   trial_lesson_price:   ColumnType<string, number | string, number | string>
   updated_at:           Generated<Date>
+}
+
+export interface StaffVacationConfigsTable {
+  rate_id:               string
+  monthly_base_salary:   ColumnType<string, number | string, number | string>
+  vacation_days_limit:   Generated<number>
+  period_start_date:     ColumnType<Date, string, string>
+  period_end_date:       ColumnType<Date, string, string>
+  calculation_base_type: Generated<'CALENDAR_DAYS' | 'WORKING_DAYS'>
+  day_rate_cached:       ColumnType<string, number | string, number | string>
+  updated_at:            Generated<Date>
 }
 
 export interface SalaryTransactionsTable {
@@ -585,6 +596,7 @@ export interface Database {
   staff:                      StaffTable
   staff_rates:                StaffRatesTable
   staff_smart_configs:        StaffSmartConfigsTable
+  staff_vacation_configs:     StaffVacationConfigsTable
   salary_transactions:        SalaryTransactionsTable
   merged_journals:            MergedJournalsTable
   merged_journal_activities:  MergedJournalActivitiesTable

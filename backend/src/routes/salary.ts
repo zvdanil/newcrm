@@ -1,6 +1,25 @@
 import type { FastifyInstance } from 'fastify'
+import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
+
+async function countVacationDaysUsed(staffId: string, year: number, excludeTxId?: string): Promise<number> {
+  let q = db
+    .selectFrom('salary_transactions')
+    .select(db.fn.count<string>('id').as('cnt'))
+    .where('staff_id', '=', staffId)
+    .where('type', '=', 'ACCRUAL')
+    .where('is_deleted', '=', false)
+    .where(sql<boolean>`EXTRACT(YEAR FROM transaction_date) = ${year}`)
+    .where(sql<boolean>`metadata_json->>'source' = 'vacation_day'`)
+
+  if (excludeTxId) {
+    q = q.where('id', '!=', excludeTxId)
+  }
+
+  const row = await q.executeTakeFirst()
+  return Number(row?.cnt ?? 0)
+}
 
 function workingDaysInMonth(dateStr: string): number {
   const [y, m] = dateStr.slice(0, 7).split('-').map(Number)
@@ -115,7 +134,40 @@ export async function salaryRoutes(app: FastifyInstance) {
 
         finalDeduction = Number(rate.deduction_pct)
 
-        if (rate.rate_type === 'monthly_by_day') {
+        if (rate.rate_type === 'vacation') {
+          const vcfg = await db
+            .selectFrom('staff_vacation_configs')
+            .select(['day_rate_cached', 'vacation_days_limit', 'monthly_base_salary', 'calculation_base_type'])
+            .where('rate_id', '=', rate_id!)
+            .executeTakeFirst()
+
+          if (!vcfg) return reply.status(400).send({ error: 'BadRequest', message: 'Конфігурацію відпускної ставки не знайдено' })
+
+          const year      = new Date(txDate).getFullYear()
+          const spent     = await countVacationDaysUsed(req.params.id, year)
+          const limit     = vcfg.vacation_days_limit
+
+          if (spent + 1 > limit) {
+            return reply.status(409).send({
+              error:   'VacationLimitExceeded',
+              message: `Досягнуто максимальну кількість відпускних днів у цьому календарному році (Ліміт: ${limit} днів)`,
+              spent,
+              limit,
+            })
+          }
+
+          const dayRateCached = Number(vcfg.day_rate_cached)
+          finalGross = dayRateCached
+          metadata = {
+            source:               'vacation_day',
+            mark:                 'В',
+            day_rate:             dayRateCached,
+            monthly_base_salary:  Number(vcfg.monthly_base_salary),
+            calculation_base_type: vcfg.calculation_base_type,
+            vacation_days_limit:  limit,
+            spent_in_year:        spent,
+          }
+        } else if (rate.rate_type === 'monthly_by_day') {
           const monthlyRate  = Number(rate.rate_value)
           const workingDays  = workingDaysInMonth(txDate)
           const dailyRate    = Math.round(monthlyRate / workingDays * 100) / 100
@@ -382,6 +434,7 @@ export async function salaryRoutes(app: FastifyInstance) {
       const rates = await db
         .selectFrom('staff_rates as r')
         .leftJoin('activities as a', 'a.id', 'r.activity_id')
+        .leftJoin('staff_vacation_configs as vc', 'vc.rate_id', 'r.id')
         .where(eb => eb.or([
           eb('r.valid_to', 'is', null),
           eb('r.valid_to', '>', billingStart),
@@ -391,6 +444,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           'r.value_mode', 'r.rate_value', 'r.deduction_pct',
           'r.valid_from', 'r.valid_to', 'r.note',
           'r.activity_id', 'a.name as activity_name',
+          'vc.day_rate_cached', 'vc.vacation_days_limit',
         ])
         .orderBy('r.valid_from', 'asc')
         .execute()
@@ -644,6 +698,35 @@ export async function salaryRoutes(app: FastifyInstance) {
         .execute()
 
       return reply.status(201).send({ ok: true, transfer, commission_expense: commissionExpense })
+    }
+  )
+
+  // GET /api/staff/:id/vacation-days?year=YYYY — остаток отпускных дней
+  app.get<{ Params: { id: string }; Querystring: { year?: string } }>(
+    '/staff/:id/vacation-days',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const year = req.query.year ? parseInt(req.query.year) : new Date().getFullYear()
+
+      // Find active vacation rate for this staff member
+      const today = new Date().toISOString().slice(0, 10)
+      const vacRate = await db
+        .selectFrom('staff_rates as r')
+        .innerJoin('staff_vacation_configs as vc', 'vc.rate_id', 'r.id')
+        .where('r.staff_id', '=', req.params.id)
+        .where('r.rate_type', '=', 'vacation')
+        .where((eb) => eb.or([eb('r.valid_to', 'is', null), eb('r.valid_to', '>=', new Date(today))]))
+        .select(['r.id', 'vc.vacation_days_limit', 'vc.day_rate_cached'])
+        .orderBy('r.valid_from', 'desc')
+        .executeTakeFirst()
+
+      if (!vacRate) return { limit: 0, used: 0, remaining: 0 }
+
+      const used      = await countVacationDaysUsed(req.params.id, year)
+      const limit     = vacRate.vacation_days_limit
+      const remaining = Math.max(0, limit - used)
+
+      return { limit, used, remaining, day_rate: Number(vacRate.day_rate_cached) }
     }
   )
 }

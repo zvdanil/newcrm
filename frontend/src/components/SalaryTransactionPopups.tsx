@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { staffApi, type SalaryTransaction, type RateType, type SalaryGridRate } from '../api/staff.api'
 
 export function fmt(v: string | number) { return Number(v).toFixed(2) }
@@ -14,6 +14,7 @@ export const RATE_TYPE_LABELS: Record<RateType, string> = {
   bonus:           'Бонус',
   smart_per_child: 'Смарт за дитину',
   monthly_by_day:  'Місяць по днях',
+  vacation:        'Відпустка',
 }
 
 export function workingDaysInMonth(dateStr: string): number {
@@ -94,6 +95,16 @@ export function metaDetail(tx: SalaryTransaction): string | null {
   if (src === 'retro_correction') {
     const delta = typeof m.delta === 'number' ? m.delta : null
     return delta != null ? `Ретро Δ ${delta > 0 ? '+' : ''}${fmt(delta)} грн` : 'Ретро-коригування'
+  }
+
+  if (src === 'vacation_day') {
+    const dr    = typeof m.day_rate           === 'number' ? m.day_rate           : null
+    const spent = typeof m.spent_in_year      === 'number' ? m.spent_in_year      : null
+    const limit = typeof m.vacation_days_limit === 'number' ? m.vacation_days_limit : null
+    const parts: string[] = []
+    if (dr != null) parts.push(`${fmt(dr)} грн/день`)
+    if (spent != null && limit != null) parts.push(`${spent + 1} / ${limit} дн.`)
+    return parts.length ? parts.join(' · ') : 'Відпускний день (В)'
   }
 
   if (src === 'manual_daily') {
@@ -578,6 +589,172 @@ export function DailyMarkDialog({
           <button
             onClick={handleSubmit}
             disabled={isPending || (present && (amount === '' || isNaN(parseFloat(amount))))}
+            className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-xl hover:bg-iris-700 disabled:opacity-50 transition-colors"
+          >
+            {isPending ? '...' : 'Зберегти'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 rounded-xl hover:bg-gray-100">
+            Скасувати
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── VacationMarkDialog (vacation rate) ─────────────────────────────────────
+
+export function VacationMarkDialog({
+  staffId,
+  date,
+  rate,
+  existingTx,
+  onClose,
+  invalidateKeys,
+}: {
+  staffId:        string
+  date:           string
+  rate:           SalaryGridRate & { day_rate_cached?: string | null; vacation_days_limit?: number | null }
+  existingTx:     SalaryTransaction | null
+  onClose:        () => void
+  invalidateKeys?: string[][]
+}) {
+  const qc = useQueryClient()
+  const [note, setNote]     = useState(existingTx?.note ?? '')
+  const [marked, setMarked] = useState<boolean>(existingTx !== null)
+  const [error, setError]   = useState<string | null>(null)
+
+  const year        = new Date(date + 'T00:00:00').getFullYear()
+  const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA')
+  const dayRate     = Number(rate.day_rate_cached ?? 0)
+
+  const { data: vacDays } = useQuery({
+    queryKey: ['vacation-days', staffId, year],
+    queryFn:  () => staffApi.getVacationDays(staffId, year),
+    staleTime: 30_000,
+  })
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['salary', staffId] })
+    qc.invalidateQueries({ queryKey: ['vacation-days', staffId, year] })
+    invalidateKeys?.forEach(k => qc.invalidateQueries({ queryKey: k }))
+  }
+
+  const createMutation = useMutation({
+    mutationFn: () => staffApi.addManualAccrual(staffId, {
+      rate_id:          rate.id,
+      transaction_date: date,
+      note:             note || undefined,
+    }),
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка збереження')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => staffApi.deleteAccrual(staffId, existingTx!.id),
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError: (e: { response?: { status?: number } }) => {
+      if (e.response?.status === 404) { invalidateAll(); onClose() }
+      else setError('Помилка видалення')
+    },
+  })
+
+  function handleSubmit() {
+    setError(null)
+    if (marked) {
+      if (!existingTx) createMutation.mutate()
+      else onClose()
+    } else {
+      if (existingTx) deleteMutation.mutate()
+      else onClose()
+    }
+  }
+
+  const isPending  = createMutation.isPending || deleteMutation.isPending
+  const usedAfter  = vacDays ? (existingTx ? vacDays.used : vacDays.used + 1) : null
+  const limit      = rate.vacation_days_limit ?? vacDays?.limit ?? 0
+  const willExceed = !existingTx && vacDays && (vacDays.used + 1) > limit
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Відпустка · {displayDate}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Ставка за день: <span className="font-semibold text-iris-700">{fmt(dayRate)} грн</span>
+              {vacDays && (
+                <span className="ml-2 text-gray-400">
+                  ({vacDays.used} / {vacDays.limit} дн. за {year} рік)
+                </span>
+              )}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        {/* Vacation / Not vacation toggle */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMarked(true)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
+              marked
+                ? 'border-amber-400 bg-amber-50 text-amber-700'
+                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+          >
+            В — Відпустка
+          </button>
+          <button
+            type="button"
+            onClick={() => setMarked(false)}
+            className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
+              !marked
+                ? 'border-gray-400 bg-gray-50 text-gray-600'
+                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+            }`}
+          >
+            Без відмітки
+          </button>
+        </div>
+
+        {marked && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs bg-amber-50 rounded-lg px-3 py-2">
+              <span className="text-amber-700">Нарахування за цей день:</span>
+              <span className="font-mono font-semibold text-amber-800">{fmt(dayRate)} грн</span>
+            </div>
+            {willExceed && (
+              <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                Досягнуто ліміт {limit} відпускних днів на {year} рік. Відмітка буде відхилена.
+              </p>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Примітка</label>
+              <input
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="Необов'язково"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+              />
+            </div>
+            {vacDays && usedAfter !== null && (
+              <p className="text-xs text-gray-400">
+                Залишок після відмітки: <span className="font-medium">{Math.max(0, limit - usedAfter)}</span> / {limit} дн.
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSubmit}
+            disabled={isPending || (marked && !existingTx && !!willExceed)}
             className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-xl hover:bg-iris-700 disabled:opacity-50 transition-colors"
           >
             {isPending ? '...' : 'Зберегти'}

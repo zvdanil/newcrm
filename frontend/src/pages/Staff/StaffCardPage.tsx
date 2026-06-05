@@ -170,14 +170,21 @@ function AddRateForm({ staffId, activities, onDone }: {
     extra_lesson_price:   '0',
     trial_lesson_price:   '0',
   })
+  const [vacationConfig, setVacationConfig] = useState({
+    monthly_base_salary:   '',
+    vacation_days_limit:   '24',
+    period_start_date:     '',
+    period_end_date:       '',
+    calculation_base_type: 'CALENDAR_DAYS' as 'CALENDAR_DAYS' | 'WORKING_DAYS',
+  })
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: () => staffApi.createRate(staffId, {
       activity_id:   form.activity_id || undefined,
-      rate_category: form.rate_type === 'monthly_by_day' ? 'manual' : form.rate_category,
+      rate_category: (form.rate_type === 'monthly_by_day' || form.rate_type === 'vacation') ? 'manual' : form.rate_category,
       rate_type:     form.rate_type,
-      value_mode:    form.rate_type === 'monthly_by_day' ? 'fixed' : form.value_mode,
+      value_mode:    (form.rate_type === 'monthly_by_day' || form.rate_type === 'vacation') ? 'fixed' : form.value_mode,
       rate_value:    form.rate_type === 'smart_per_child' ? 0 : parseFloat(form.rate_value),
       deduction_pct: parseFloat(form.deduction_pct) || 0,
       valid_from:    form.valid_from,
@@ -195,6 +202,13 @@ function AddRateForm({ staffId, activities, onDone }: {
         extra_lesson_price:   parseFloat(smartPCConfig.extra_lesson_price) || 0,
         trial_lesson_price:   parseFloat(smartPCConfig.trial_lesson_price) || 0,
       } : undefined,
+      vacation_config: form.rate_type === 'vacation' ? {
+        monthly_base_salary:   parseFloat(vacationConfig.monthly_base_salary),
+        vacation_days_limit:   parseInt(vacationConfig.vacation_days_limit) || 24,
+        period_start_date:     vacationConfig.period_start_date,
+        period_end_date:       vacationConfig.period_end_date,
+        calculation_base_type: vacationConfig.calculation_base_type,
+      } : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['staff-rates', staffId] }); onDone() },
     onError: () => setError('Помилка збереження'),
@@ -202,7 +216,7 @@ function AddRateForm({ staffId, activities, onDone }: {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setError(null)
-    if (form.rate_type !== 'smart_per_child' && (!form.rate_value || parseFloat(form.rate_value) < 0)) return setError('Введіть суму ставки')
+    if (form.rate_type !== 'smart_per_child' && form.rate_type !== 'vacation' && (!form.rate_value || parseFloat(form.rate_value) < 0)) return setError('Введіть суму ставки')
     if (form.rate_type === 'smart') {
       if (!smartConfig.absence_threshold || !smartConfig.threshold_rate) return setError('Заповніть параметри смарт-ставки')
     }
@@ -210,12 +224,18 @@ function AddRateForm({ staffId, activities, onDone }: {
       if (!smartPCConfig.starter_rate || !smartPCConfig.threshold_rate) return setError('Заповніть стартову та базову ставку')
       if (!smartPCConfig.attendance_threshold) return setError('Вкажіть мінімальну кількість відвідувань (поріг)')
     }
+    if (form.rate_type === 'vacation') {
+      if (!vacationConfig.monthly_base_salary || parseFloat(vacationConfig.monthly_base_salary) <= 0) return setError('Введіть базовий оклад')
+      if (!vacationConfig.period_start_date || !vacationConfig.period_end_date) return setError('Вкажіть розрахунковий період')
+      if (vacationConfig.period_start_date >= vacationConfig.period_end_date) return setError('Кінець періоду має бути пізніше початку')
+    }
     mutation.mutate()
   }
 
   const needsActivity    = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
   const isSmartPC        = form.rate_type === 'smart_per_child'
   const isMonthlyByDay   = form.rate_type === 'monthly_by_day'
+  const isVacation       = form.rate_type === 'vacation'
 
   return (
     <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
@@ -246,7 +266,7 @@ function AddRateForm({ staffId, activities, onDone }: {
             </select>
           </div>
         )}
-        {!isSmartPC && !isMonthlyByDay && (
+        {!isSmartPC && !isMonthlyByDay && !isVacation && (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Режим значення</label>
             <select value={form.value_mode} onChange={e => setForm(f => ({ ...f, value_mode: e.target.value as ValueMode }))}
@@ -256,7 +276,7 @@ function AddRateForm({ staffId, activities, onDone }: {
             </select>
           </div>
         )}
-        {!isSmartPC && (
+        {!isSmartPC && !isVacation && (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               {isMonthlyByDay
@@ -388,6 +408,69 @@ function AddRateForm({ staffId, activities, onDone }: {
         </div>
       )}
 
+      {isVacation && (
+        <div className="bg-white rounded-lg border border-blue-200 p-3 space-y-2">
+          <p className="text-xs font-medium text-gray-700">Параметри ставки «Відпустка»</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Базовий оклад (грн/міс)</label>
+              <input type="number" min="0" step="0.01" placeholder="20000.00"
+                value={vacationConfig.monthly_base_salary}
+                onChange={e => setVacationConfig(s => ({ ...s, monthly_base_salary: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Ліміт днів на рік</label>
+              <input type="number" min="1" step="1" placeholder="24"
+                value={vacationConfig.vacation_days_limit}
+                onChange={e => setVacationConfig(s => ({ ...s, vacation_days_limit: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Початок розрахункового періоду</label>
+              <input type="date"
+                value={vacationConfig.period_start_date}
+                onChange={e => setVacationConfig(s => ({ ...s, period_start_date: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Має бути 1-е число місяця</p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Кінець розрахункового періоду</label>
+              <input type="date"
+                value={vacationConfig.period_end_date}
+                onChange={e => setVacationConfig(s => ({ ...s, period_end_date: e.target.value }))}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <p className="text-xs text-gray-400 mt-0.5">Має бути останній день місяця</p>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">База розрахунку</label>
+              <div className="flex gap-3">
+                {(['CALENDAR_DAYS', 'WORKING_DAYS'] as const).map(v => (
+                  <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <input type="radio" name="calc_base_type"
+                      value={v}
+                      checked={vacationConfig.calculation_base_type === v}
+                      onChange={() => setVacationConfig(s => ({ ...s, calculation_base_type: v }))}
+                    />
+                    {v === 'CALENDAR_DAYS' ? 'Календарні дні' : 'Робочі дні (Пн–Пт)'}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          {vacationConfig.monthly_base_salary && vacationConfig.period_start_date && vacationConfig.period_end_date && (() => {
+            const start = new Date(vacationConfig.period_start_date + 'T00:00:00')
+            const end   = new Date(vacationConfig.period_end_date + 'T00:00:00')
+            const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+            return months > 0 ? (
+              <p className="text-xs text-gray-400">
+                Розрахунковий період: {months} міс. · Ставка за день розраховується автоматично при збереженні.
+              </p>
+            ) : null
+          })()}
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={mutation.isPending}
@@ -431,6 +514,14 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
   function RateRow({ rate }: { rate: StaffRate }) {
     const isActive = !rate.valid_to || new Date(rate.valid_to) >= new Date()
     const [editing, setEditing] = useState(false)
+    const currentYear = new Date().getFullYear()
+
+    const { data: vacDays } = useQuery({
+      queryKey: ['vacation-days', staffId, currentYear],
+      queryFn:  () => staffApi.getVacationDays(staffId, currentYear),
+      enabled:  rate.rate_type === 'vacation' && isActive,
+      staleTime: 60_000,
+    })
     const [editForm, setEditForm] = useState({
       deduction_pct:      fmt(rate.deduction_pct),
       valid_to:           rate.valid_to ? String(rate.valid_to).slice(0, 10) : '',
@@ -442,6 +533,12 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
       starter_rate:       rate.starter_rate ? fmt(rate.starter_rate) : '',
       extra_lesson_price: rate.extra_lesson_price ? fmt(rate.extra_lesson_price) : '0',
       trial_lesson_price: rate.trial_lesson_price ? fmt(rate.trial_lesson_price) : '0',
+      // vacation
+      vac_monthly_base_salary:   rate.monthly_base_salary ? fmt(rate.monthly_base_salary) : '',
+      vac_vacation_days_limit:   String(rate.vacation_days_limit ?? '24'),
+      vac_period_start_date:     rate.period_start_date ? String(rate.period_start_date).slice(0, 10) : '',
+      vac_period_end_date:       rate.period_end_date ? String(rate.period_end_date).slice(0, 10) : '',
+      vac_calculation_base_type: (rate.calculation_base_type ?? 'CALENDAR_DAYS') as 'CALENDAR_DAYS' | 'WORKING_DAYS',
     })
     const [editError, setEditError] = useState<string | null>(null)
 
@@ -468,6 +565,15 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
             starter_rate:         parseFloat(editForm.starter_rate) || 0,
             extra_lesson_price:   parseFloat(editForm.extra_lesson_price) || 0,
             trial_lesson_price:   parseFloat(editForm.trial_lesson_price) || 0,
+          }
+        }
+        if (rate.rate_type === 'vacation') {
+          payload.vacation_config = {
+            monthly_base_salary:   parseFloat(editForm.vac_monthly_base_salary) || undefined,
+            vacation_days_limit:   parseInt(editForm.vac_vacation_days_limit) || undefined,
+            period_start_date:     editForm.vac_period_start_date || undefined,
+            period_end_date:       editForm.vac_period_end_date || undefined,
+            calculation_base_type: editForm.vac_calculation_base_type,
           }
         }
         return staffApi.updateRate(staffId, rate.id, payload)
@@ -574,6 +680,49 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
               </div>
             </div>
           )}
+          {rate.rate_type === 'vacation' && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Базовий оклад (грн/міс)</label>
+                <input type="number" min="0" step="0.01" value={editForm.vac_monthly_base_salary}
+                  onChange={e => setEditForm(f => ({ ...f, vac_monthly_base_salary: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Ліміт днів на рік</label>
+                <input type="number" min="1" step="1" value={editForm.vac_vacation_days_limit}
+                  onChange={e => setEditForm(f => ({ ...f, vac_vacation_days_limit: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Початок розрахункового періоду</label>
+                <input type="date" value={editForm.vac_period_start_date}
+                  onChange={e => setEditForm(f => ({ ...f, vac_period_start_date: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Кінець розрахункового періоду</label>
+                <input type="date" value={editForm.vac_period_end_date}
+                  onChange={e => setEditForm(f => ({ ...f, vac_period_end_date: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-600 mb-1">База розрахунку</label>
+                <div className="flex gap-3">
+                  {(['CALENDAR_DAYS', 'WORKING_DAYS'] as const).map(v => (
+                    <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input type="radio" name={`edit_calc_type_${rate.id}`}
+                        value={v}
+                        checked={editForm.vac_calculation_base_type === v}
+                        onChange={() => setEditForm(f => ({ ...f, vac_calculation_base_type: v }))}
+                      />
+                      {v === 'CALENDAR_DAYS' ? 'Календарні' : 'Робочі (Пн–Пт)'}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           {editError && <p className="text-xs text-red-600">{editError}</p>}
           <div className="flex gap-2">
             <button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}
@@ -625,6 +774,26 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
           {rate.rate_type === 'smart_per_child' && rate.base_lessons !== null && (
             <div className="mt-1 text-xs text-gray-400">
               Проб: {fmt(rate.trial_lesson_price ?? 0)} грн (&lt;{rate.attendance_threshold} відм.) · Старт: {fmt(rate.starter_rate ?? 0)} грн · Поріг: {rate.attendance_threshold} відв · База: {fmt(rate.threshold_rate ?? 0)} грн · Max: {rate.base_lessons} зан · Надпл: {fmt(rate.extra_lesson_price ?? 0)} грн/зан
+            </div>
+          )}
+          {rate.rate_type === 'vacation' && rate.day_rate_cached !== null && (
+            <div className="mt-1 text-xs text-gray-400 flex items-center gap-3 flex-wrap">
+              <span>
+                Оклад: {fmt(rate.monthly_base_salary ?? 0)} грн ·{' '}
+                {rate.calculation_base_type === 'WORKING_DAYS' ? 'Робочі дні' : 'Календарні дні'} ·{' '}
+                Ставка/день: <span className="font-semibold text-iris-700">{fmt(rate.day_rate_cached)} грн</span>
+              </span>
+              {vacDays !== undefined && (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  vacDays.remaining === 0
+                    ? 'bg-red-100 text-red-700'
+                    : vacDays.remaining <= 5
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-green-100 text-green-700'
+                }`}>
+                  Залишок: {vacDays.remaining} / {vacDays.limit} дн. ({currentYear})
+                </span>
+              )}
             </div>
           )}
           {rate.note && <p className="text-xs text-gray-400 mt-0.5">{rate.note}</p>}
