@@ -1,7 +1,24 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
+import { sql } from 'kysely'
 import { requireRole } from '../plugins/authenticate.js'
 import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
+
+function countDaysInPeriod(periodStart: string, periodEnd: string, calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS'): number {
+  const start = new Date(periodStart + 'T00:00:00')
+  const end   = new Date(periodEnd   + 'T00:00:00')
+  if (calcType === 'CALENDAR_DAYS') {
+    return Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+  }
+  let count = 0
+  const cur = new Date(start)
+  while (cur <= end) {
+    const dow = cur.getDay()
+    if (dow !== 0 && dow !== 6) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count
+}
 
 function calcVacationDayRate(
   monthlyBaseSalary: number,
@@ -9,30 +26,41 @@ function calcVacationDayRate(
   periodEnd: string,
   calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS',
 ): number {
-  const start = new Date(periodStart + 'T00:00:00')
-  const end   = new Date(periodEnd   + 'T00:00:00')
-
-  // Count full months
-  const months =
-    (end.getFullYear() - start.getFullYear()) * 12 +
-    (end.getMonth() - start.getMonth()) + 1
-
-  let totalDays = 0
-  if (calcType === 'CALENDAR_DAYS') {
-    // Total calendar days in period
-    totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
-  } else {
-    // Count Mon–Fri days in period
-    const cur = new Date(start)
-    while (cur <= end) {
-      const dow = cur.getDay()
-      if (dow !== 0 && dow !== 6) totalDays++
-      cur.setDate(cur.getDate() + 1)
-    }
-  }
-
-  const avgDays = totalDays / months
+  const start  = new Date(periodStart + 'T00:00:00')
+  const end    = new Date(periodEnd   + 'T00:00:00')
+  const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+  const totalDays = countDaysInPeriod(periodStart, periodEnd, calcType)
+  const avgDays   = totalDays / months
   return Math.round(monthlyBaseSalary / avgDays * 100) / 100
+}
+
+async function calcActualVacationDayRate(
+  staffId: string,
+  includedRateIds: string[],
+  periodStart: string,
+  periodEnd: string,
+  calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS',
+): Promise<number | null> {
+  if (includedRateIds.length === 0) return null
+
+  const row = await db
+    .selectFrom('salary_transactions')
+    .select(db.fn.sum<string>('gross_amount').as('total_gross'))
+    .where('staff_id',  '=', staffId)
+    .where('type',      'in', ['ACCRUAL', 'CORRECTION'])
+    .where('is_deleted','=', false)
+    .where('transaction_date', '>=', new Date(periodStart + 'T00:00:00'))
+    .where('transaction_date', '<=', new Date(periodEnd   + 'T23:59:59'))
+    .where(sql<boolean>`rate_id = ANY(${sql.raw(`ARRAY[${includedRateIds.map(id => `'${id}'`).join(',')}]::uuid[]`)})`)
+    .executeTakeFirst()
+
+  const totalGross = Number(row?.total_gross ?? 0)
+  if (totalGross === 0) return null
+
+  const totalDays = countDaysInPeriod(periodStart, periodEnd, calcType)
+  if (totalDays === 0) return null
+
+  return Math.round(totalGross / totalDays * 100) / 100
 }
 
 export async function staffRoutes(app: FastifyInstance) {
@@ -141,6 +169,7 @@ export async function staffRoutes(app: FastifyInstance) {
           'sc.attendance_threshold', 'sc.starter_rate', 'sc.extra_lesson_price',
           'vc.monthly_base_salary', 'vc.vacation_days_limit', 'vc.period_start_date',
           'vc.period_end_date', 'vc.calculation_base_type', 'vc.day_rate_cached',
+          'vc.salary_calc_mode', 'vc.included_rate_ids',
         ])
         .orderBy('r.valid_from', 'desc')
         .execute()
@@ -178,6 +207,8 @@ export async function staffRoutes(app: FastifyInstance) {
         period_start_date:     string
         period_end_date:       string
         calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+        salary_calc_mode?:     'fixed' | 'actual'
+        included_rate_ids?:    string[]
       }
     }
   }>(
@@ -272,19 +303,45 @@ export async function staffRoutes(app: FastifyInstance) {
         if (!vacation_config) {
           return reply.status(400).send({ error: 'BadRequest', message: 'vacation_config є обовʼязковим для ставки vacation' })
         }
-        const dayRate = calcVacationDayRate(
-          vacation_config.monthly_base_salary,
-          vacation_config.period_start_date,
-          vacation_config.period_end_date,
-          vacation_config.calculation_base_type,
-        )
+
+        const calcMode       = vacation_config.salary_calc_mode ?? 'fixed'
+        const includedRateIds = vacation_config.included_rate_ids ?? []
+
+        let dayRate: number
+        if (calcMode === 'actual') {
+          const actual = await calcActualVacationDayRate(
+            req.params.id,
+            includedRateIds,
+            vacation_config.period_start_date,
+            vacation_config.period_end_date,
+            vacation_config.calculation_base_type,
+          )
+          if (actual === null) {
+            await db.deleteFrom('staff_rates').where('id', '=', rate.id).execute()
+            return reply.status(400).send({
+              error:   'NoActualData',
+              message: 'Немає нарахувань ЗП за вказаний період. Встановіть фіксовану ставку.',
+            })
+          }
+          dayRate = actual
+        } else {
+          dayRate = calcVacationDayRate(
+            vacation_config.monthly_base_salary,
+            vacation_config.period_start_date,
+            vacation_config.period_end_date,
+            vacation_config.calculation_base_type,
+          )
+        }
+
         await db.insertInto('staff_vacation_configs').values({
           rate_id:               rate.id,
-          monthly_base_salary:   vacation_config.monthly_base_salary,
+          monthly_base_salary:   vacation_config.monthly_base_salary ?? 0,
           vacation_days_limit:   vacation_config.vacation_days_limit ?? 24,
           period_start_date:     vacation_config.period_start_date,
           period_end_date:       vacation_config.period_end_date,
           calculation_base_type: vacation_config.calculation_base_type,
+          salary_calc_mode:      calcMode,
+          included_rate_ids:     includedRateIds.length ? JSON.stringify(includedRateIds) : null,
           day_rate_cached:       dayRate,
         }).execute()
       }
@@ -336,6 +393,8 @@ export async function staffRoutes(app: FastifyInstance) {
         period_start_date?:     string
         period_end_date?:       string
         calculation_base_type?: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+        salary_calc_mode?:      'fixed' | 'actual'
+        included_rate_ids?:     string[]
       }
     }
   }>(
@@ -359,7 +418,6 @@ export async function staffRoutes(app: FastifyInstance) {
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
 
       if (vacation_config) {
-        // Fetch current config to fill in missing fields
         const cur = await db
           .selectFrom('staff_vacation_configs')
           .selectAll()
@@ -367,12 +425,28 @@ export async function staffRoutes(app: FastifyInstance) {
           .executeTakeFirst()
 
         if (cur) {
-          const newSalary = vacation_config.monthly_base_salary  ?? Number(cur.monthly_base_salary)
-          const newStart  = vacation_config.period_start_date    ?? String(cur.period_start_date).slice(0, 10)
-          const newEnd    = vacation_config.period_end_date       ?? String(cur.period_end_date).slice(0, 10)
-          const newType   = vacation_config.calculation_base_type ?? cur.calculation_base_type
+          const newSalary       = vacation_config.monthly_base_salary   ?? Number(cur.monthly_base_salary)
+          const newStart        = vacation_config.period_start_date     ?? String(cur.period_start_date).slice(0, 10)
+          const newEnd          = vacation_config.period_end_date        ?? String(cur.period_end_date).slice(0, 10)
+          const newType         = vacation_config.calculation_base_type  ?? cur.calculation_base_type
+          const newCalcMode     = vacation_config.salary_calc_mode       ?? cur.salary_calc_mode
+          const newIncludedIds  = vacation_config.included_rate_ids      ?? (cur.included_rate_ids as string[] | null) ?? []
 
-          const newDayRate = calcVacationDayRate(newSalary, newStart, newEnd, newType)
+          let newDayRate: number
+          if (newCalcMode === 'actual') {
+            const actual = await calcActualVacationDayRate(
+              req.params.id, newIncludedIds, newStart, newEnd, newType,
+            )
+            if (actual === null) {
+              return reply.status(400).send({
+                error:   'NoActualData',
+                message: 'Немає нарахувань ЗП за вказаний період. Встановіть фіксовану ставку.',
+              })
+            }
+            newDayRate = actual
+          } else {
+            newDayRate = calcVacationDayRate(newSalary, newStart, newEnd, newType)
+          }
 
           await db.updateTable('staff_vacation_configs')
             .set({
@@ -381,6 +455,8 @@ export async function staffRoutes(app: FastifyInstance) {
               period_start_date:     newStart,
               period_end_date:       newEnd,
               calculation_base_type: newType,
+              salary_calc_mode:      newCalcMode,
+              included_rate_ids:     newIncludedIds.length ? JSON.stringify(newIncludedIds) : null,
               day_rate_cached:       newDayRate,
               updated_at:            new Date().toISOString() as unknown as Date,
             })

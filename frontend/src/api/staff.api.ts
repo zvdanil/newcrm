@@ -47,6 +47,8 @@ export interface StaffRate {
   period_end_date:       string | null
   calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS' | null
   day_rate_cached:       string | null
+  salary_calc_mode:      'fixed' | 'actual' | null
+  included_rate_ids:     string[] | null
 }
 
 export interface SalaryTransaction {
@@ -107,6 +109,8 @@ export interface SalaryGridRate {
   // vacation config (optional — populated for vacation rates)
   day_rate_cached:     string | null
   vacation_days_limit: number | null
+  salary_calc_mode:    'fixed' | 'actual' | null
+  included_rate_ids:   string[] | null
 }
 
 export interface SalaryGridStaffRow extends StaffMember {
@@ -182,6 +186,8 @@ export const staffApi = {
       period_start_date:     string
       period_end_date:       string
       calculation_base_type: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+      salary_calc_mode?:     'fixed' | 'actual'
+      included_rate_ids?:    string[]
     }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.post<StaffRate>(`/staff/${staffId}/rates`, payload)
@@ -207,6 +213,8 @@ export const staffApi = {
       period_start_date?:     string
       period_end_date?:       string
       calculation_base_type?: 'CALENDAR_DAYS' | 'WORKING_DAYS'
+      salary_calc_mode?:      'fixed' | 'actual'
+      included_rate_ids?:     string[]
     }
   }): Promise<StaffRate> => {
     const { data } = await apiClient.put<StaffRate>(`/staff/${staffId}/rates/${rateId}`, payload)

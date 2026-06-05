@@ -368,6 +368,8 @@ export interface StaffVacationConfigsTable {
   period_end_date:       ColumnType<Date, string, string>
   calculation_base_type: Generated<'CALENDAR_DAYS' | 'WORKING_DAYS'>
   day_rate_cached:       ColumnType<string, number | string, number | string>
+  salary_calc_mode:      Generated<'fixed' | 'actual'>
+  included_rate_ids:     ColumnType<unknown | null, string | null, string | null>
   updated_at:            Generated<Date>
 }
 
