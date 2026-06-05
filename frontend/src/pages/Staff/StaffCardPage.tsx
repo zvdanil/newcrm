@@ -555,6 +555,125 @@ function AddRateForm({ staffId, activities, allRates, onDone }: {
   )
 }
 
+// ── Vacation History ───────────────────────────────────────────────────────
+
+interface VacationPeriod {
+  date_from:  string
+  date_to:    string
+  days:       number
+  total:      number
+}
+
+function groupConsecutivePeriods(
+  txs: { date: string; gross_amount: number }[],
+): VacationPeriod[] {
+  if (!txs.length) return []
+  const sorted = [...txs].sort((a, b) => a.date.localeCompare(b.date))
+  const result: VacationPeriod[] = []
+  let start = sorted[0].date
+  let end   = sorted[0].date
+  let total = sorted[0].gross_amount
+  let days  = 1
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(end       + 'T00:00:00')
+    const curr = new Date(sorted[i].date + 'T00:00:00')
+    if (Math.round((curr.getTime() - prev.getTime()) / 86400000) === 1) {
+      end    = sorted[i].date
+      total += sorted[i].gross_amount
+      days++
+    } else {
+      result.push({ date_from: start, date_to: end, days, total: Math.round(total * 100) / 100 })
+      start = sorted[i].date
+      end   = sorted[i].date
+      total = sorted[i].gross_amount
+      days  = 1
+    }
+  }
+  result.push({ date_from: start, date_to: end, days, total: Math.round(total * 100) / 100 })
+  return result.reverse() // newest first
+}
+
+function VacationHistorySection({ staffId, rateId }: { staffId: string; rateId: string }) {
+  const year = new Date().getFullYear()
+  const [expanded,  setExpanded]  = useState(false)
+  const [dateFrom,  setDateFrom]  = useState(`${year}-01-01`)
+  const [dateTo,    setDateTo]    = useState(`${year}-12-31`)
+
+  const { data = [], isFetching } = useQuery({
+    queryKey: ['vacation-history', staffId, rateId, dateFrom, dateTo],
+    queryFn:  () => staffApi.getVacationHistory(staffId, { rate_id: rateId, date_from: dateFrom, date_to: dateTo }),
+    enabled:  expanded,
+    staleTime: 30_000,
+  })
+
+  const periods   = groupConsecutivePeriods(data)
+  const totalDays = data.length
+  const totalSum  = Math.round(data.reduce((s, r) => s + r.gross_amount, 0) * 100) / 100
+
+  function fmtDate(d: string) {
+    return new Date(d + 'T00:00:00').toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-1 text-xs text-iris-600 hover:text-iris-800 transition-colors"
+      >
+        <span>{expanded ? '▾' : '▸'}</span>
+        <span>Історія відпусток</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 border border-gray-100 rounded-lg bg-gray-50 p-3 space-y-3">
+          {/* Date range filter */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500">Період:</span>
+            <input type="date" value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-iris-400"
+            />
+            <span className="text-xs text-gray-400">—</span>
+            <input type="date" value={dateTo} min={dateFrom}
+              onChange={e => setDateTo(e.target.value)}
+              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-iris-400"
+            />
+            {isFetching && <span className="text-xs text-gray-400">...</span>}
+          </div>
+
+          {/* Results */}
+          {!isFetching && periods.length === 0 && (
+            <p className="text-xs text-gray-400 italic">Відпускних нарахувань за цей період немає</p>
+          )}
+
+          {periods.length > 0 && (
+            <>
+              <div className="space-y-1">
+                {periods.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-gray-700">
+                      {fmtDate(p.date_from)}
+                      {p.date_from !== p.date_to && <> — {fmtDate(p.date_to)}</>}
+                      <span className="text-gray-400 ml-1">({p.days} {p.days === 1 ? 'день' : p.days < 5 ? 'дні' : 'днів'})</span>
+                    </span>
+                    <span className="font-mono text-iris-700 font-medium">{fmt(p.total)} грн</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-1.5 border-t border-gray-200 text-xs font-medium">
+                <span className="text-gray-600">Разом: {totalDays} дн.</span>
+                <span className="font-mono text-iris-800">{fmt(totalSum)} грн</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Block 2: Rates ─────────────────────────────────────────────────────────
 
 function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean }) {
@@ -926,6 +1045,9 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
             </div>
           )}
           {rate.note && <p className="text-xs text-gray-400 mt-0.5">{rate.note}</p>}
+          {rate.rate_type === 'vacation' && (
+            <VacationHistorySection staffId={staffId} rateId={rate.id} />
+          )}
         </div>
         {isAdmin && (
           <div className="flex gap-2 flex-shrink-0">

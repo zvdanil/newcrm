@@ -227,6 +227,18 @@ export const staffApi = {
     return data
   },
 
+  getVacationHistory: async (
+    staffId: string,
+    params: { rate_id?: string; date_from?: string; date_to?: string },
+  ): Promise<{ date: string; gross_amount: number; note: string | null }[]> => {
+    const q = new URLSearchParams()
+    if (params.rate_id)   q.set('rate_id',   params.rate_id)
+    if (params.date_from) q.set('date_from', params.date_from)
+    if (params.date_to)   q.set('date_to',   params.date_to)
+    const { data } = await apiClient.get(`/staff/${staffId}/vacation-history?${q}`)
+    return data
+  },
+
   vacationMarkRange: async (staffId: string, payload: {
     rate_id: string
     date_from: string

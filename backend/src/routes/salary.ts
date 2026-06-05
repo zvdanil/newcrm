@@ -833,4 +833,34 @@ export async function salaryRoutes(app: FastifyInstance) {
       return reply.status(201).send({ created: dates.length })
     }
   )
+
+  // GET /api/staff/:id/vacation-history?rate_id=...&date_from=...&date_to=...
+  app.get<{
+    Params: { id: string }
+    Querystring: { rate_id?: string; date_from?: string; date_to?: string }
+  }>(
+    '/staff/:id/vacation-history',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      let q = db
+        .selectFrom('salary_transactions')
+        .select(['transaction_date', 'gross_amount', 'note', 'rate_id'])
+        .where('staff_id',   '=', req.params.id)
+        .where('type',       '=', 'ACCRUAL')
+        .where('is_deleted', '=', false)
+        .where(sql<boolean>`metadata_json->>'source' = 'vacation_day'`)
+
+      if (req.query.rate_id)   q = q.where('rate_id',          '=', req.query.rate_id)
+      if (req.query.date_from) q = q.where('transaction_date', '>=', new Date(req.query.date_from + 'T00:00:00'))
+      if (req.query.date_to)   q = q.where('transaction_date', '<=', new Date(req.query.date_to   + 'T23:59:59'))
+
+      const rows = await q.orderBy('transaction_date', 'asc').execute()
+
+      return rows.map(r => ({
+        date:         String(r.transaction_date).slice(0, 10),
+        gross_amount: Number(r.gross_amount),
+        note:         r.note,
+      }))
+    }
+  )
 }
