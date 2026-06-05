@@ -12,6 +12,8 @@ import {
   TxPopup,
   AccrualGroupPopup,
   PaymentGroupPopup,
+  DailyMarkDialog,
+  VacationMarkDialog,
   dailyRate,
   workingDaysInMonth,
 } from '../../components/SalaryTransactionPopups'
@@ -981,10 +983,12 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
   })
   const [error, setError] = useState<string | null>(null)
 
-  const manualRates = rates.filter(r => 
-    r.rate_category === 'manual' && 
-    r.valid_from <= form.transaction_date && 
-    (!r.valid_to || r.valid_to > form.transaction_date)
+  const manualRates = rates.filter(r =>
+    r.rate_category === 'manual' &&
+    r.rate_type !== 'vacation' &&
+    r.rate_type !== 'monthly_by_day' &&
+    r.valid_from.slice(0, 10) <= form.transaction_date &&
+    (!r.valid_to || r.valid_to.slice(0, 10) > form.transaction_date)
   )
 
   useEffect(() => {
@@ -1178,6 +1182,9 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const [showPay, setShowPay]             = useState(false)
   const [showManual, setShowManual]       = useState(false)
   const [recalcPending, setRecalcPending] = useState(false)
+  const [dailyDialog, setDailyDialog] = useState<{
+    rate: StaffRate; date: string; existingTx: SalaryTransaction | null
+  } | null>(null)
 
   const qc = useQueryClient()
 
@@ -1205,10 +1212,31 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const summary = data?.summary ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 }
   const days    = daysInMonth(month)
 
-  // Build grid: rows = unique (activity × rate_type), cols = days
+  // Active daily/vacation rates for current month — key: rowKey, value: rate
+  const dailyRateMap = useMemo(() => {
+    const map = new Map<string, StaffRate>()
+    const monthStart = month + '-01'
+    const monthEnd   = month + '-' + String(days).padStart(2, '0')
+    for (const rate of rates) {
+      if (rate.rate_type !== 'monthly_by_day' && rate.rate_type !== 'vacation') continue
+      const rateStart = rate.valid_from.slice(0, 10)
+      const rateEnd   = rate.valid_to ? rate.valid_to.slice(0, 10) : '9999-12-31'
+      if (rateStart > monthEnd || rateEnd < monthStart) continue
+      const rowKey = `${rate.activity_id ?? ''}::${rate.rate_type}`
+      // Keep most recent active rate per rowKey
+      const cur = map.get(rowKey)
+      if (!cur || cur.valid_from < rate.valid_from) map.set(rowKey, rate)
+    }
+    return map
+  }, [rates, month, days])
+
+  // Build grid: rows from transactions + active daily/vacation rates (even if no txs yet)
   const activities = useMemo(() => {
     const seen = new Map<string, string>()
     seen.set('', 'Загальне')
+    for (const [rowKey, rate] of dailyRateMap) {
+      seen.set(rowKey, RATE_TYPE_LABELS[rate.rate_type])
+    }
     for (const tx of txs) {
       if (tx.type === 'PAYMENT') continue
       const rowKey = `${tx.activity_id ?? ''}::${tx.rate_type ?? ''}`
@@ -1218,7 +1246,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
       }
     }
     return Array.from(seen.entries()).map(([key, name]) => ({ key, name }))
-  }, [txs])
+  }, [txs, dailyRateMap])
 
   // Map: activityId::rateType → day → transactions[]
   const grid = useMemo(() => {
@@ -1280,6 +1308,24 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
       {showPay && <PayForm staffId={staffId} onDone={() => setShowPay(false)} />}
       {showManual && <ManualAccrualForm staffId={staffId} rates={rates} onDone={() => setShowManual(false)} />}
+      {dailyDialog && dailyDialog.rate.rate_type === 'monthly_by_day' && (
+        <DailyMarkDialog
+          staffId={staffId}
+          date={dailyDialog.date}
+          rate={dailyDialog.rate}
+          existingTx={dailyDialog.existingTx}
+          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }) }}
+        />
+      )}
+      {dailyDialog && dailyDialog.rate.rate_type === 'vacation' && (
+        <VacationMarkDialog
+          staffId={staffId}
+          date={dailyDialog.date}
+          rate={dailyDialog.rate}
+          existingTx={dailyDialog.existingTx}
+          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }) }}
+        />
+      )}
       
       {selectedTx && (
         <TxPopup
@@ -1343,15 +1389,25 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                           return s + gross - ded
                         }, 0)
                         if (cellNet) rowTotal += cellNet
+                        const dateStr    = `${month}-${String(d).padStart(2, '0')}`
+                        const dailyRate_ = dailyRateMap.get(rowKey)
                         return (
                           <td key={d} className="px-0.5 py-1 text-center">
                             {cellTxs.length > 0 ? (
                               <button
-                                onClick={() => cellTxs.length === 1 ? setSelectedTx(cellTxs[0]) : setSelectedAccrualGroup(cellTxs)}
+                                onClick={() => {
+                                  if (dailyRate_) {
+                                    setDailyDialog({ rate: dailyRate_, date: dateStr, existingTx: cellTxs[0] })
+                                  } else {
+                                    cellTxs.length === 1 ? setSelectedTx(cellTxs[0]) : setSelectedAccrualGroup(cellTxs)
+                                  }
+                                }}
                                 className={`w-full rounded px-0.5 py-0.5 font-mono transition-colors ${
-                                  cellTxs.some(t => t.type === 'CORRECTION')
+                                  dailyRate_?.rate_type === 'vacation'
                                     ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                    : 'bg-iris-50 text-iris-700 hover:bg-iris-100'
+                                    : cellTxs.some(t => t.type === 'CORRECTION')
+                                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                      : 'bg-iris-50 text-iris-700 hover:bg-iris-100'
                                 }`}
                                 title={cellTxs.map(t => {
                                   const g = Number(t.gross_amount)
@@ -1359,8 +1415,15 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   return `${TX_TYPE_LABELS[t.type]}: ${fmt(g - d)} (gross ${fmt(g)})`
                                 }).join('\n')}
                               >
-                                {cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}
+                                {dailyRate_?.rate_type === 'vacation'
+                                  ? 'В'
+                                  : cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}
                               </button>
+                            ) : dailyRate_ && isAdmin ? (
+                              <button
+                                onClick={() => setDailyDialog({ rate: dailyRate_, date: dateStr, existingTx: null })}
+                                className="w-full rounded px-0.5 py-0.5 text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors"
+                              >·</button>
                             ) : (
                               <span className="text-gray-200">·</span>
                             )}
