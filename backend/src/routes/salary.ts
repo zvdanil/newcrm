@@ -850,7 +850,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .where('is_deleted', '=', false)
         .where(sql<boolean>`metadata_json->>'source' = 'vacation_day'`)
 
-      if (req.query.rate_id)   q = q.where('rate_id', '=', req.query.rate_id)
+      // rate_id не фільтруємо — відпускні могли бути на різних версіях ставки (SCD), показуємо всі
       if (req.query.date_from) q = q.where(sql<boolean>`transaction_date >= CAST(${req.query.date_from} AS DATE)`)
       if (req.query.date_to)   q = q.where(sql<boolean>`transaction_date <= CAST(${req.query.date_to}   AS DATE)`)
 

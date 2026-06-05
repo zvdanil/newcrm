@@ -594,15 +594,15 @@ function groupConsecutivePeriods(
   return result.reverse() // newest first
 }
 
-function VacationHistorySection({ staffId, rateId }: { staffId: string; rateId: string }) {
+function VacationHistorySection({ staffId }: { staffId: string }) {
   const year = new Date().getFullYear()
   const [expanded,  setExpanded]  = useState(false)
   const [dateFrom,  setDateFrom]  = useState(`${year}-01-01`)
   const [dateTo,    setDateTo]    = useState(`${year}-12-31`)
 
   const { data = [], isFetching } = useQuery({
-    queryKey: ['vacation-history', staffId, rateId, dateFrom, dateTo],
-    queryFn:  () => staffApi.getVacationHistory(staffId, { rate_id: rateId, date_from: dateFrom, date_to: dateTo }),
+    queryKey: ['vacation-history', staffId, dateFrom, dateTo],
+    queryFn:  () => staffApi.getVacationHistory(staffId, { date_from: dateFrom, date_to: dateTo }),
     enabled:  expanded,
     staleTime: 30_000,
   })
@@ -1046,7 +1046,7 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
           )}
           {rate.note && <p className="text-xs text-gray-400 mt-0.5">{rate.note}</p>}
           {rate.rate_type === 'vacation' && (
-            <VacationHistorySection staffId={staffId} rateId={rate.id} />
+            <VacationHistorySection staffId={staffId} />
           )}
         </div>
         {isAdmin && (
