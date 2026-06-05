@@ -70,10 +70,12 @@
       "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJyb2xlIjoib3duZXIiLCJpYXQiOjE3ODA2NDgxODcsImV4cCI6MTc4MDY1MTc4N30.w-wOMeCUPNcAXFOtdorp5hNIF9ZAOey1hyMsARbyAQI' http://localhost:3000/api/staff/f2e0198d-fdb8-423f-9f46-69315ae82f4d/rates)",
       "Bash(python3 -c ' *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(sed -n '110:130p' /workspaces/newcrm/backend/src/routes/reports.ts)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\User\\.claude\\plans"
+      "C:\\Users\\User\\.claude\\plans",
+      "/workspaces/newcrm/backend/src/routes"
     ]
   }
 }

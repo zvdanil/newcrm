@@ -295,10 +295,6 @@ export function AccountCardPage() {
     onSuccess: () => invalidateEntry(),
   })
 
-  if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
-  if (!account)   return <div className="py-16 text-center text-sm text-red-500">Рахунок не знайдено</div>
-
-  const balance = parseFloat(account.balance ?? '0')
   const rows = useMemo(
     () => ledgerPages?.pages.flatMap((p) => p.data) ?? [],
     [ledgerPages]
@@ -306,6 +302,11 @@ export function AccountCardPage() {
 
   const periodIn  = parseFloat(summary?.total_in  ?? '0')
   const periodOut = parseFloat(summary?.total_out ?? '0')
+
+  if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
+  if (!account)   return <div className="py-16 text-center text-sm text-red-500">Рахунок не знайдено</div>
+
+  const balance = parseFloat(account.balance ?? '0')
 
   return (
     <div className="max-w-4xl space-y-6">
