@@ -188,9 +188,9 @@ export async function staffRoutes(app: FastifyInstance) {
       let { activity_id, rate_category = 'auto' } = req.body
 
       if (!rate_type) return reply.status(400).send({ error: 'BadRequest', message: 'rate_type є обовʼязковим' })
-      if (rate_value === undefined) return reply.status(400).send({ error: 'BadRequest', message: 'rate_value є обовʼязковим' })
+      if (rate_value === undefined && rate_type !== 'vacation') return reply.status(400).send({ error: 'BadRequest', message: 'rate_value є обовʼязковим' })
 
-      // vacation ставка — завжди manual, fixed, без активності
+      // vacation ставка — завжди manual, fixed, без активності; rate_value не використовується
       if (rate_type === 'vacation') {
         rate_category  = 'manual'
         activity_id    = undefined
@@ -249,7 +249,7 @@ export async function staffRoutes(app: FastifyInstance) {
         rate_category,
         rate_type,
         value_mode,
-        rate_value:    String(rate_value),
+        rate_value:    String(rate_value ?? 0),
         deduction_pct: String(deduction_pct),
         valid_from:    fromDate,
         note:          note ?? null,

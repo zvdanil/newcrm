@@ -185,7 +185,7 @@ function AddRateForm({ staffId, activities, onDone }: {
       rate_category: (form.rate_type === 'monthly_by_day' || form.rate_type === 'vacation') ? 'manual' : form.rate_category,
       rate_type:     form.rate_type,
       value_mode:    (form.rate_type === 'monthly_by_day' || form.rate_type === 'vacation') ? 'fixed' : form.value_mode,
-      rate_value:    form.rate_type === 'smart_per_child' ? 0 : parseFloat(form.rate_value),
+      rate_value:    (form.rate_type === 'smart_per_child' || form.rate_type === 'vacation') ? 0 : parseFloat(form.rate_value),
       deduction_pct: parseFloat(form.deduction_pct) || 0,
       valid_from:    form.valid_from,
       note:          form.note || undefined,
