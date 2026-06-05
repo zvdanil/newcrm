@@ -1008,7 +1008,7 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
       note:             form.note || undefined,
       commission:       commissionAmt > 0 ? commissionAmt : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); onDone() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }); onDone() },
     onError: () => setError('Помилка збереження'),
   })
 
@@ -1171,7 +1171,7 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
       transaction_date: form.transaction_date,
       note:             form.note || undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); onDone() },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }); onDone() },
     onError: () => setError('Помилка збереження'),
   })
 
@@ -1325,6 +1325,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
     try {
       await staffApi.recalc(staffId, month)
       await qc.invalidateQueries({ queryKey: ['salary', staffId, month] })
+      qc.invalidateQueries({ queryKey: ['salary-total', staffId] })
     } finally {
       setRecalcPending(false)
     }
@@ -1333,6 +1334,12 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const { data: rates = [] } = useQuery({
     queryKey: ['staff-rates', staffId],
     queryFn: () => staffApi.getRates(staffId),
+  })
+
+  const { data: totalSummary } = useQuery({
+    queryKey: ['salary-total', staffId],
+    queryFn:  () => staffApi.getSalaryTotal(staffId),
+    staleTime: 60_000,
   })
 
   const txs     = data?.transactions ?? []
@@ -1441,7 +1448,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           date={dailyDialog.date}
           rate={dailyDialog.rate}
           existingTx={dailyDialog.existingTx}
-          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }) }}
+          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }) }}
         />
       )}
       {dailyDialog && dailyDialog.rate.rate_type === 'vacation' && (
@@ -1450,7 +1457,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           date={dailyDialog.date}
           rate={dailyDialog.rate}
           existingTx={dailyDialog.existingTx}
-          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }) }}
+          onClose={() => { setDailyDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }) }}
         />
       )}
       
@@ -1592,8 +1599,11 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
             </table>
           </div>
 
-          {/* Summary */}
+          {/* Monthly summary */}
           <div className="grid grid-cols-5 gap-3 pt-2 border-t border-gray-100">
+            <div className="col-span-5 mb-0.5">
+              <span className="text-xs text-gray-400 font-medium">Поточний місяць</span>
+            </div>
             {[
               { label: 'Нараховано (gross)', value: summary.gross, color: 'text-gray-900' },
               { label: 'Утримання', value: -summary.deduction, color: 'text-red-600' },
@@ -1609,6 +1619,37 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
               </div>
             ))}
           </div>
+
+          {/* All-time total summary */}
+          {totalSummary && (
+            <div className="grid grid-cols-5 gap-3 pt-2 border-t border-gray-200 bg-gray-50 -mx-5 px-5 pb-2 rounded-b-xl">
+              <div className="col-span-5 mb-0.5">
+                <span className="text-xs text-gray-500 font-medium">За весь час</span>
+              </div>
+              {[
+                { label: 'Нараховано (gross)', value: totalSummary.gross, color: 'text-gray-700' },
+                { label: 'Утримання', value: -totalSummary.deduction, color: 'text-red-500' },
+                { label: 'До виплати (net)', value: totalSummary.net, color: 'text-iris-700 font-semibold' },
+                { label: 'Виплачено', value: totalSummary.paid, color: 'text-green-700' },
+                {
+                  label: 'Поточний борг',
+                  value: totalSummary.balance,
+                  color: totalSummary.balance > 0
+                    ? 'text-amber-700 font-bold'
+                    : totalSummary.balance < 0
+                      ? 'text-red-600 font-bold'
+                      : 'text-gray-400',
+                },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="text-center">
+                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                  <p className={`text-sm font-mono ${color}`}>
+                    {value < 0 ? '−' : ''}{fmt(Math.abs(value))}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 

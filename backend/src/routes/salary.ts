@@ -701,6 +701,36 @@ export async function salaryRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/staff/:id/salary/total — cumulative all-time salary summary
+  app.get<{ Params: { id: string } }>(
+    '/staff/:id/salary/total',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const txs = await db
+        .selectFrom('salary_transactions')
+        .select(['type', 'gross_amount', 'deduction_pct'])
+        .where('staff_id',   '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .execute()
+
+      let totalGross = 0, totalDeduction = 0, totalPaid = 0
+      for (const tx of txs) {
+        const gross = Number(tx.gross_amount)
+        const ded   = Math.round(gross * Number(tx.deduction_pct) / 100 * 100) / 100
+        if (tx.type === 'PAYMENT') {
+          totalPaid += gross
+        } else {
+          totalGross     += gross
+          totalDeduction += ded
+        }
+      }
+      const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
+      const balance  = Math.round((totalNet - totalPaid) * 100) / 100
+
+      return { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance }
+    }
+  )
+
   // GET /api/staff/:id/vacation-days?year=YYYY — остаток отпускных дней
   app.get<{ Params: { id: string }; Querystring: { year?: string } }>(
     '/staff/:id/vacation-days',

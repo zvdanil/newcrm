@@ -248,6 +248,11 @@ export const staffApi = {
     return data
   },
 
+  getSalaryTotal: async (staffId: string): Promise<SalarySummary> => {
+    const { data } = await apiClient.get<SalarySummary>(`/staff/${staffId}/salary/total`)
+    return data
+  },
+
   addManualAccrual: async (staffId: string, payload: {
     rate_id?: string
     activity_id?: string
