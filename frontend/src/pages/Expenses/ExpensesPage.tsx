@@ -972,10 +972,14 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
   const [dividendAmountStr, setDividendAmountStr] = useState(
     expense.dividend_amount != null ? String(Number(expense.dividend_amount)) : String(amount)
   )
+  const [payoutType, setPayoutType] = useState<'cash' | 'cashless'>('cash')
+  const [taxPct, setTaxPct] = useState('0')
   const [error, setError] = useState<string | null>(null)
 
   const dividendAmount = parseFloat(dividendAmountStr) || 0
   const isPartial = Math.abs(dividendAmount - amount) > 0.001
+  const taxAmount = payoutType === 'cashless' ? Math.round(dividendAmount * (parseFloat(taxPct) || 0) * 100) / 10000 : 0
+  const netAmount = dividendAmount - taxAmount
 
   const mutation = useMutation({
     mutationFn: () => expensesApi.toggleDividend(
@@ -987,7 +991,9 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
       qc.invalidateQueries({ queryKey: ['expenses'] })
       onSuccess()
       onClose()
-      navigate(`/dividends?add_expense=${expense.id}`)
+      const params = new URLSearchParams({ add_expense: expense.id, payout_type: payoutType })
+      if (payoutType === 'cashless') params.set('payout_tax_pct', taxPct)
+      navigate(`/dividends?${params.toString()}`)
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setError(e.response?.data?.message ?? 'Помилка виконання')
@@ -1051,6 +1057,35 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
               Часткова сума: <span className="font-mono font-semibold">{dividendAmount.toFixed(2)} ₴</span> з{' '}
               <span className="font-mono">{amount.toFixed(2)} ₴</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Тип виплати</label>
+            <select
+              value={payoutType}
+              onChange={e => setPayoutType(e.target.value as 'cash' | 'cashless')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
+            >
+              <option value="cash">Готівка (100% в залік)</option>
+              <option value="cashless">Безготівка (з очисткою)</option>
+            </select>
+          </div>
+
+          {payoutType === 'cashless' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Відсоток очистки (Податок), %</label>
+              <input
+                type="number"
+                min="0" max="100" step="0.1"
+                value={taxPct}
+                onChange={e => setTaxPct(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
+              />
+              <div className="mt-1 flex justify-between text-xs text-gray-400">
+                <span>Податок: <span className="font-mono">{taxAmount.toFixed(2)} ₴</span></span>
+                <span>Net: <span className="font-mono font-semibold text-gray-700">{netAmount.toFixed(2)} ₴</span></span>
+              </div>
             </div>
           )}
 

@@ -5,12 +5,16 @@ import { accountsApi } from '../../api/accounts.api'
 import { expensesApi, salaryPaymentsApi } from '../../api/expenses.api'
 import { useEffect } from 'react'
 
-export function CreatePayoutModal({ 
+export function CreatePayoutModal({
   onClose,
-  prefillExpenseId 
-}: { 
+  prefillExpenseId,
+  prefillPayoutType,
+  prefillTaxPct,
+}: {
   onClose: () => void
   prefillExpenseId?: string | null
+  prefillPayoutType?: 'cash' | 'cashless'
+  prefillTaxPct?: string
 }) {
   const queryClient = useQueryClient()
 
@@ -73,8 +77,8 @@ export function CreatePayoutModal({
   // ── State ───────────────────────────────────────────────────────────────
   const [participantId, setParticipantId] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
-  const [type, setType] = useState<'cash' | 'cashless'>('cash')
-  const [taxPct, setTaxPct] = useState(String(settings?.default_tax_pct || 0))
+  const [type, setType] = useState<'cash' | 'cashless'>(prefillPayoutType ?? 'cash')
+  const [taxPct, setTaxPct] = useState(prefillTaxPct ?? String(settings?.default_tax_pct || 0))
   const [note, setNote] = useState('')
 
   // sources array can be { type: 'new', id: local_uuid, account_id, amount } 

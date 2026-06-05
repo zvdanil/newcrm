@@ -8,7 +8,9 @@ import { useSearchParams } from 'react-router-dom'
 
 export function DividendsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const addExpenseId = searchParams.get('add_expense')
+  const addExpenseId  = searchParams.get('add_expense')
+  const payoutType    = searchParams.get('payout_type') as 'cash' | 'cashless' | null
+  const payoutTaxPct  = searchParams.get('payout_tax_pct')
 
   const [activeTab, setActiveTab] = useState<'payouts' | 'settings'>(addExpenseId ? 'payouts' : 'payouts')
   const [periodFrom, setPeriodFrom] = useState('')
@@ -93,8 +95,12 @@ export function DividendsPage() {
         {activeTab === 'payouts' && (
           <PayoutsTab
             prefillExpenseId={addExpenseId}
+            prefillPayoutType={payoutType ?? undefined}
+            prefillTaxPct={payoutTaxPct ?? undefined}
             onClearPrefill={() => {
               searchParams.delete('add_expense')
+              searchParams.delete('payout_type')
+              searchParams.delete('payout_tax_pct')
               setSearchParams(searchParams)
             }}
             periodFrom={periodFrom}

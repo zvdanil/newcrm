@@ -5,11 +5,15 @@ import { CreatePayoutModal } from './CreatePayoutModal'
 
 export function PayoutsTab({
   prefillExpenseId,
+  prefillPayoutType,
+  prefillTaxPct,
   onClearPrefill,
   periodFrom,
   periodTo,
 }: {
   prefillExpenseId?: string | null
+  prefillPayoutType?: 'cash' | 'cashless'
+  prefillTaxPct?: string
   onClearPrefill?: () => void
   periodFrom?: string
   periodTo?: string
@@ -141,12 +145,14 @@ export function PayoutsTab({
       </div>
 
       {isModalOpen && (
-        <CreatePayoutModal 
+        <CreatePayoutModal
           prefillExpenseId={prefillExpenseId}
+          prefillPayoutType={prefillPayoutType}
+          prefillTaxPct={prefillTaxPct}
           onClose={() => {
             setIsModalOpen(false)
             if (onClearPrefill) onClearPrefill()
-          }} 
+          }}
         />
       )}
     </div>
