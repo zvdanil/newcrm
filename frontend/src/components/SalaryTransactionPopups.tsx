@@ -445,10 +445,16 @@ export function DailyMarkDialog({
   const initAmt   = existingTx ? fmt(existingTx.gross_amount) : fmt(computed)
   const initNote  = existingTx?.note ?? ''
 
-  const [present, setPresent] = useState<boolean>(existingTx !== null)
+  // для нової відмітки — одразу «Присутній»
+  const [present, setPresent] = useState<boolean>(existingTx !== null ? true : true)
   const [amount, setAmount]   = useState(initAmt)
   const [note, setNote]       = useState(initNote)
   const [error, setError]     = useState<string | null>(null)
+
+  const submitRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!existingTx) submitRef.current?.focus()
+  }, [])
 
   const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA')
   const wd          = workingDaysInMonth(date)
@@ -561,7 +567,6 @@ export function DailyMarkDialog({
                 step="0.01"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                autoFocus
                 onFocus={e => e.target.select()}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
               />
@@ -587,6 +592,7 @@ export function DailyMarkDialog({
 
         <div className="flex gap-2 pt-1">
           <button
+            ref={submitRef}
             onClick={handleSubmit}
             disabled={isPending || (present && (amount === '' || isNaN(parseFloat(amount))))}
             className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-xl hover:bg-iris-700 disabled:opacity-50 transition-colors"
