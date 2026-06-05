@@ -729,4 +729,78 @@ export async function salaryRoutes(app: FastifyInstance) {
       return { limit, used, remaining, day_rate: Number(vacRate.day_rate_cached) }
     }
   )
+
+  // POST /api/staff/:id/vacation-marks-range — batch vacation marks for a date range
+  app.post<{
+    Params: { id: string }
+    Body: { rate_id: string; date_from: string; date_to: string; note?: string }
+  }>(
+    '/staff/:id/vacation-marks-range',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { rate_id, date_from, date_to, note } = req.body
+
+      const vcfg = await db
+        .selectFrom('staff_vacation_configs')
+        .select(['day_rate_cached', 'vacation_days_limit', 'monthly_base_salary', 'calculation_base_type'])
+        .where('rate_id', '=', rate_id)
+        .executeTakeFirst()
+
+      if (!vcfg) return reply.status(400).send({ error: 'BadRequest', message: 'Конфігурацію відпускної ставки не знайдено' })
+
+      // Enumerate every calendar day in the range
+      const dates: string[] = []
+      const cur = new Date(date_from + 'T00:00:00')
+      const end = new Date(date_to   + 'T00:00:00')
+      while (cur <= end) {
+        dates.push(cur.toISOString().slice(0, 10))
+        cur.setDate(cur.getDate() + 1)
+      }
+
+      if (dates.length === 0) return reply.status(400).send({ error: 'BadRequest', message: 'Порожній діапазон дат' })
+
+      // Check limit for the whole range (use year of date_from)
+      const year  = new Date(date_from + 'T00:00:00').getFullYear()
+      const spent = await countVacationDaysUsed(req.params.id, year)
+      const limit = vcfg.vacation_days_limit
+
+      if (spent + dates.length > limit) {
+        return reply.status(409).send({
+          error:   'VacationLimitExceeded',
+          message: `Досягнуто максимальну кількість відпускних днів у ${year} році (Ліміт: ${limit} дн., використано: ${spent}, запит: ${dates.length} дн.)`,
+          spent, limit, requested: dates.length,
+        })
+      }
+
+      const dayRateCached = Number(vcfg.day_rate_cached)
+      const rateRow = await db.selectFrom('staff_rates').select('deduction_pct').where('id', '=', rate_id).executeTakeFirst()
+      const deductionPct = rateRow ? Number(rateRow.deduction_pct) : 0
+
+      const rows = dates.map((d, i) => ({
+        staff_id:         req.params.id,
+        rate_id,
+        activity_id:      null as null,
+        type:             'ACCRUAL' as const,
+        gross_amount:     dayRateCached,
+        deduction_pct:    deductionPct,
+        transaction_date: d,
+        billing_month:    d.slice(0, 7) + '-01',
+        note:             note ?? null,
+        metadata_json:    {
+          source:               'vacation_day',
+          mark:                 'В',
+          day_rate:             dayRateCached,
+          monthly_base_salary:  Number(vcfg.monthly_base_salary),
+          calculation_base_type: vcfg.calculation_base_type,
+          vacation_days_limit:  limit,
+          spent_in_year:        spent + i,
+        },
+        created_by: req.user.sub,
+      }))
+
+      await db.insertInto('salary_transactions').values(rows).execute()
+
+      return reply.status(201).send({ created: dates.length })
+    }
+  )
 }

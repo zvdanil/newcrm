@@ -227,6 +227,16 @@ export const staffApi = {
     return data
   },
 
+  vacationMarkRange: async (staffId: string, payload: {
+    rate_id: string
+    date_from: string
+    date_to:   string
+    note?:     string
+  }): Promise<{ created: number }> => {
+    const { data } = await apiClient.post(`/staff/${staffId}/vacation-marks-range`, payload)
+    return data
+  },
+
   closeRate: async (staffId: string, rateId: string): Promise<void> => {
     await apiClient.delete(`/staff/${staffId}/rates/${rateId}`)
   },

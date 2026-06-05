@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { staffApi, type SalaryTransaction, type RateType, type SalaryGridRate } from '../api/staff.api'
 
@@ -604,6 +604,13 @@ export function DailyMarkDialog({
 
 // ── VacationMarkDialog (vacation rate) ─────────────────────────────────────
 
+function countDaysInRange(from: string, to: string): number {
+  const a = new Date(from + 'T00:00:00')
+  const b = new Date(to   + 'T00:00:00')
+  if (b < a) return 0
+  return Math.round((b.getTime() - a.getTime()) / 86400000) + 1
+}
+
 export function VacationMarkDialog({
   staffId,
   date,
@@ -620,13 +627,27 @@ export function VacationMarkDialog({
   invalidateKeys?: string[][]
 }) {
   const qc = useQueryClient()
-  const [note, setNote]     = useState(existingTx?.note ?? '')
-  const [marked, setMarked] = useState<boolean>(existingTx !== null)
-  const [error, setError]   = useState<string | null>(null)
+  const isNew = existingTx === null
 
-  const year        = new Date(date + 'T00:00:00').getFullYear()
+  // always start with "В" selected — user opens dialog to mark vacation
+  const [marked, setMarked] = useState<boolean>(true)
+  const [dateFrom, setDateFrom] = useState(date)
+  const [dateTo,   setDateTo]   = useState(date)
+  const [note, setNote]         = useState(existingTx?.note ?? '')
+  const [error, setError]       = useState<string | null>(null)
+
+  const submitRef = useRef<HTMLButtonElement>(null)
+
+  // Autofocus submit button so pressing Enter immediately saves
+  useEffect(() => {
+    if (isNew) submitRef.current?.focus()
+  }, [isNew])
+
+  const year        = new Date(dateFrom + 'T00:00:00').getFullYear()
   const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('uk-UA')
   const dayRate     = Number(rate.day_rate_cached ?? 0)
+  const daysCount   = isNew ? countDaysInRange(dateFrom, dateTo) : 1
+  const isRange     = isNew && dateTo !== dateFrom
 
   const { data: vacDays } = useQuery({
     queryKey: ['vacation-days', staffId, year],
@@ -634,17 +655,22 @@ export function VacationMarkDialog({
     staleTime: 30_000,
   })
 
+  const limit      = rate.vacation_days_limit ?? vacDays?.limit ?? 0
+  const willExceed = isNew && marked && vacDays && (vacDays.used + daysCount) > limit
+
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['salary', staffId] })
     qc.invalidateQueries({ queryKey: ['vacation-days', staffId, year] })
     invalidateKeys?.forEach(k => qc.invalidateQueries({ queryKey: k }))
   }
 
-  const createMutation = useMutation({
-    mutationFn: () => staffApi.addManualAccrual(staffId, {
-      rate_id:          rate.id,
-      transaction_date: date,
-      note:             note || undefined,
+  // Range or single-day create
+  const rangeMutation = useMutation({
+    mutationFn: () => staffApi.vacationMarkRange(staffId, {
+      rate_id:   rate.id,
+      date_from: dateFrom,
+      date_to:   dateTo,
+      note:      note || undefined,
     }),
     onSuccess: () => { invalidateAll(); onClose() },
     onError: (e: { response?: { data?: { message?: string } } }) => {
@@ -664,7 +690,7 @@ export function VacationMarkDialog({
   function handleSubmit() {
     setError(null)
     if (marked) {
-      if (!existingTx) createMutation.mutate()
+      if (isNew) rangeMutation.mutate()
       else onClose()
     } else {
       if (existingTx) deleteMutation.mutate()
@@ -672,22 +698,25 @@ export function VacationMarkDialog({
     }
   }
 
-  const isPending  = createMutation.isPending || deleteMutation.isPending
-  const usedAfter  = vacDays ? (existingTx ? vacDays.used : vacDays.used + 1) : null
-  const limit      = rate.vacation_days_limit ?? vacDays?.limit ?? 0
-  const willExceed = !existingTx && vacDays && (vacDays.used + 1) > limit
+  const isPending = rangeMutation.isPending || deleteMutation.isPending
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+    >
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Відпустка · {displayDate}</h2>
+            <h2 className="text-base font-semibold text-gray-900">
+              Відпустка · {displayDate}
+            </h2>
             <p className="text-xs text-gray-400 mt-0.5">
               Ставка за день: <span className="font-semibold text-iris-700">{fmt(dayRate)} грн</span>
               {vacDays && (
-                <span className="ml-2 text-gray-400">
-                  ({vacDays.used} / {vacDays.limit} дн. за {year} рік)
+                <span className="ml-2">
+                  ({vacDays.used} / {vacDays.limit} дн. {year} р.)
                 </span>
               )}
             </p>
@@ -695,55 +724,76 @@ export function VacationMarkDialog({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
 
-        {/* Vacation / Not vacation toggle */}
+        {/* Toggle В / Без відмітки */}
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMarked(true)}
+          <button type="button" onClick={() => setMarked(true)}
             className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
-              marked
-                ? 'border-amber-400 bg-amber-50 text-amber-700'
-                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+              marked ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-400 hover:border-gray-300'
             }`}
-          >
-            В — Відпустка
-          </button>
-          <button
-            type="button"
-            onClick={() => setMarked(false)}
+          >В — Відпустка</button>
+          <button type="button" onClick={() => setMarked(false)}
             className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
-              !marked
-                ? 'border-gray-400 bg-gray-50 text-gray-600'
-                : 'border-gray-200 text-gray-400 hover:border-gray-300'
+              !marked ? 'border-gray-400 bg-gray-50 text-gray-600' : 'border-gray-200 text-gray-400 hover:border-gray-300'
             }`}
-          >
-            Без відмітки
-          </button>
+          >Без відмітки</button>
         </div>
 
         {marked && (
           <div className="space-y-3">
+
+            {/* Date range — only for new marks */}
+            {isNew && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Від</label>
+                  <input type="date" value={dateFrom}
+                    onChange={e => {
+                      setDateFrom(e.target.value)
+                      if (e.target.value > dateTo) setDateTo(e.target.value)
+                    }}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">До</label>
+                  <input type="date" value={dateTo} min={dateFrom}
+                    onChange={e => setDateTo(e.target.value)}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Accrual info */}
             <div className="flex items-center justify-between text-xs bg-amber-50 rounded-lg px-3 py-2">
-              <span className="text-amber-700">Нарахування за цей день:</span>
-              <span className="font-mono font-semibold text-amber-800">{fmt(dayRate)} грн</span>
+              <span className="text-amber-700">
+                {isRange ? `Нарахування за ${daysCount} дн.:` : 'Нарахування за цей день:'}
+              </span>
+              <span className="font-mono font-semibold text-amber-800">
+                {fmt(dayRate * daysCount)} грн
+                {isRange && <span className="font-normal text-amber-600 ml-1">({fmt(dayRate)} × {daysCount})</span>}
+              </span>
             </div>
+
             {willExceed && (
               <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                Досягнуто ліміт {limit} відпускних днів на {year} рік. Відмітка буде відхилена.
+                Ліміт {limit} дн. буде перевищено: використано {vacDays?.used}, запит {daysCount} дн.
               </p>
             )}
+
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Примітка</label>
-              <input
-                value={note}
-                onChange={e => setNote(e.target.value)}
+              <input value={note} onChange={e => setNote(e.target.value)}
                 placeholder="Необов'язково"
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
               />
             </div>
-            {vacDays && usedAfter !== null && (
+
+            {vacDays && (
               <p className="text-xs text-gray-400">
-                Залишок після відмітки: <span className="font-medium">{Math.max(0, limit - usedAfter)}</span> / {limit} дн.
+                Залишок після відмітки:{' '}
+                <span className="font-medium">{Math.max(0, limit - (vacDays.used + (isNew ? daysCount : 0)))}</span>
+                {' '}/ {limit} дн.
               </p>
             )}
           </div>
@@ -753,11 +803,12 @@ export function VacationMarkDialog({
 
         <div className="flex gap-2 pt-1">
           <button
+            ref={submitRef}
             onClick={handleSubmit}
-            disabled={isPending || (marked && !existingTx && !!willExceed)}
+            disabled={isPending || (marked && isNew && !!willExceed)}
             className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-xl hover:bg-iris-700 disabled:opacity-50 transition-colors"
           >
-            {isPending ? '...' : 'Зберегти'}
+            {isPending ? '...' : isRange ? `Зберегти (${daysCount} дн.)` : 'Зберегти'}
           </button>
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 rounded-xl hover:bg-gray-100">
             Скасувати
