@@ -34,6 +34,7 @@ export interface Expense {
   withdrawal_transfer_id: string | null
   withdrawal_amount: string | null
   dividend_payout_id: string | null
+  dividend_amount: string | null
   note: string | null
   created_by_email: string | null
   created_at: string
@@ -177,8 +178,8 @@ export const expensesApi = {
     return data
   },
 
-  toggleDividend: async (id: string, is_dividend: boolean) => {
-    const { data } = await apiClient.put<Expense>(`/expenses/${id}/dividend`, { is_dividend })
+  toggleDividend: async (id: string, is_dividend: boolean, dividend_amount?: number | null) => {
+    const { data } = await apiClient.put<Expense>(`/expenses/${id}/dividend`, { is_dividend, dividend_amount })
     return data
   },
 

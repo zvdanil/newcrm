@@ -110,7 +110,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
           'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
-          'e.withdrawal_transfer_id', 'e.withdrawal_amount', 'e.dividend_payout_id',
+          'e.withdrawal_transfer_id', 'e.withdrawal_amount', 'e.dividend_payout_id', 'e.dividend_amount',
           'e.account_id', 'a.name as account_name',
           'e.category_id',
           'c.name as category_name',
@@ -661,13 +661,39 @@ export async function expensesRoutes(app: FastifyInstance) {
     }
   )
 
-  // PUT /api/expenses/:id/dividend — toggle is_dividend (Owner only)
-  app.put<{ Params: { id: string }; Body: { is_dividend: boolean } }>(
+  // PUT /api/expenses/:id/dividend — set/clear is_dividend with optional partial amount (Owner only)
+  app.put<{ Params: { id: string }; Body: { is_dividend: boolean; dividend_amount?: number | null } }>(
     '/:id/dividend',
     { preHandler: requireRole('owner') },
     async (req, reply) => {
+      const { is_dividend, dividend_amount } = req.body
+
+      const expense = await db.selectFrom('expenses')
+        .select(['id', 'amount'])
+        .where('id', '=', req.params.id)
+        .where('is_deleted', '=', false)
+        .executeTakeFirst()
+      if (!expense) return reply.status(404).send({ error: 'NotFound' })
+
+      if (is_dividend && dividend_amount != null) {
+        const maxAmount = parseFloat(expense.amount as string)
+        if (!Number.isFinite(dividend_amount) || dividend_amount <= 0) {
+          return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду має бути більше 0' })
+        }
+        if (dividend_amount > maxAmount + 0.001) {
+          return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду не може перевищувати суму витрати' })
+        }
+      }
+
+      const updates: Record<string, unknown> = { is_dividend }
+      if (!is_dividend) {
+        updates.dividend_amount = null
+      } else {
+        updates.dividend_amount = dividend_amount != null ? dividend_amount : null
+      }
+
       const updated = await db.updateTable('expenses')
-        .set({ is_dividend: req.body.is_dividend })
+        .set(updates)
         .where('id', '=', req.params.id)
         .where('is_deleted', '=', false)
         .returningAll()

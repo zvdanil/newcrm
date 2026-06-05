@@ -89,10 +89,24 @@ export function PayoutsTab({
                   </span>
                   {p.note && <div className="text-xs text-gray-500 mt-1 max-w-[150px] truncate" title={p.note}>{p.note}</div>}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right">
+                <td className="px-6 py-4 text-sm text-gray-500 text-right">
                   {formatMoney(p.gross_amount)} ₴
-                  <div className="text-xs text-gray-400 mt-1">
-                    {p.sources.map((s: any) => s.account_name ?? 'Без рахунку').join(', ')}
+                  <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                    {p.sources.map((s: any, i: number) => {
+                      const isPartial = s.dividend_amount != null && Number(s.dividend_amount) !== Number(s.amount)
+                      return (
+                        <div key={i} className="flex items-center justify-end gap-1 flex-wrap">
+                          {!s.is_salary && isPartial && (
+                            <span className="bg-amber-100 text-amber-700 text-[10px] px-1 py-0.5 rounded font-medium whitespace-nowrap" title={`Повна сума витрати: ${Number(s.amount).toFixed(2)} ₴`}>
+                              частково ({Number(s.dividend_amount).toFixed(2)} ₴ з {Number(s.amount).toFixed(2)} ₴)
+                            </span>
+                          )}
+                          <span>{s.account_name ?? 'Без рахунку'}</span>
+                          {s.note && <span className="text-gray-300">·</span>}
+                          {s.note && <span className="text-gray-400 truncate max-w-[160px]" title={s.note}>{s.note}</span>}
+                        </div>
+                      )
+                    })}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">

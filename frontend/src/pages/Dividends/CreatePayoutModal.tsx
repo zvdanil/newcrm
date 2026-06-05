@@ -47,7 +47,8 @@ export function CreatePayoutModal({
       .map(e => ({
         id: e.id,
         source_type: 'existing' as const,
-        amount: e.amount,
+        amount: e.dividend_amount ?? e.amount,
+        full_amount: e.amount,
         account_name: e.account_name,
         date: e.accrual_date,
         note: e.note,
@@ -71,6 +72,7 @@ export function CreatePayoutModal({
 
   // ── State ───────────────────────────────────────────────────────────────
   const [participantId, setParticipantId] = useState('')
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [type, setType] = useState<'cash' | 'cashless'>('cash')
   const [taxPct, setTaxPct] = useState(String(settings?.default_tax_pct || 0))
   const [note, setNote] = useState('')
@@ -97,6 +99,7 @@ export function CreatePayoutModal({
             type: src.source_type,
             expense_id: prefillExpenseId,
             amount: Number(src.amount),
+            full_amount: Number((src as any).full_amount ?? src.amount),
             account_name: src.account_name,
             note: src.note
           }])
@@ -126,6 +129,7 @@ export function CreatePayoutModal({
         type: src.source_type,
         expense_id: selectedExpenseId,
         amount: Number(src.amount),
+        full_amount: Number((src as any).full_amount ?? src.amount),
         account_name: src.account_name,
         note: src.note
       }])
@@ -157,6 +161,7 @@ export function CreatePayoutModal({
     if (!participantId || sources.length === 0) return
     createMut.mutate({
       participant_id: participantId,
+      date,
       type,
       tax_pct: type === 'cashless' ? Number(taxPct) : 0,
       note,
@@ -193,21 +198,32 @@ export function CreatePayoutModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Тип виплати</label>
-              <select
-                value={type}
-                onChange={e => {
-                  setType(e.target.value as 'cash' | 'cashless')
-                  if (e.target.value === 'cashless' && !taxPct) {
-                    setTaxPct(String(settings?.default_tax_pct || 0))
-                  }
-                }}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Дата виплати</label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-iris-500"
-              >
-                <option value="cash">Готівка (100% в залік)</option>
-                <option value="cashless">Безготівка (з очисткою)</option>
-              </select>
+              />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Тип виплати</label>
+            <select
+              value={type}
+              onChange={e => {
+                setType(e.target.value as 'cash' | 'cashless')
+                if (e.target.value === 'cashless' && !taxPct) {
+                  setTaxPct(String(settings?.default_tax_pct || 0))
+                }
+              }}
+              className="w-full sm:w-1/2 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-iris-500"
+            >
+              <option value="cash">Готівка (100% в залік)</option>
+              <option value="cashless">Безготівка (з очисткою)</option>
+            </select>
           </div>
 
           {type === 'cashless' && (
@@ -246,8 +262,11 @@ export function CreatePayoutModal({
                             {accounts.find(a => a.id === s.account_id)?.name}
                           </span>
                         ) : (
-                          <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-2 flex-wrap">
                             <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded uppercase font-bold">Привʼязка {s.type === 'existing_salary' ? 'зарплати' : 'витрати'}</span>
+                            {s.full_amount && s.full_amount !== s.amount && (
+                              <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-medium" title={`Повна сума витрати: ${s.full_amount} ₴`}>часткова від {Number(s.full_amount).toFixed(2)} ₴</span>
+                            )}
                             <span className="truncate max-w-[200px]" title={s.note}>{s.note || 'Без опису'}</span>
                             <span className="text-gray-400">({s.account_name})</span>
                           </span>

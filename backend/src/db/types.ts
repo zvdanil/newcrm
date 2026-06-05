@@ -260,6 +260,7 @@ export interface ExpensesTable {
   withdrawal_transfer_id: string | null
   withdrawal_amount:      ColumnType<string | null, number | string | null, number | string | null>
   dividend_payout_id:     string | null
+  dividend_amount:        ColumnType<string | null, number | string | null, number | string | null>
   is_deleted:             Generated<boolean>
   deleted_at:             ColumnType<Date | null, string | null, string | null>
   deleted_by:             string | null

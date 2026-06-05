@@ -958,6 +958,128 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
   )
 }
 
+// ── Dividend Mark Dialog ───────────────────────────────────────────────────
+
+function DividendMarkDialog({ expense, onClose, onSuccess }: {
+  expense: Expense
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const amount = Number(expense.amount)
+
+  const [dividendAmountStr, setDividendAmountStr] = useState(
+    expense.dividend_amount != null ? String(Number(expense.dividend_amount)) : String(amount)
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  const dividendAmount = parseFloat(dividendAmountStr) || 0
+  const isPartial = Math.abs(dividendAmount - amount) > 0.001
+
+  const mutation = useMutation({
+    mutationFn: () => expensesApi.toggleDividend(
+      expense.id,
+      true,
+      isPartial ? dividendAmount : null
+    ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      onSuccess()
+      onClose()
+      navigate(`/dividends?add_expense=${expense.id}`)
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка виконання')
+    },
+  })
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (dividendAmount <= 0) return setError('Сума має бути більше 0')
+    if (dividendAmount > amount + 0.001) return setError('Сума дивіденду не може перевищувати суму витрати')
+    mutation.mutate()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Позначити як дивіденд</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-gray-500">Рахунок</span>
+            <span className="font-medium">{expense.account_name}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500">Сума витрати</span>
+            <span className="font-mono font-medium">{fmt(expense.amount)}</span>
+          </div>
+          {expense.note && (
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 shrink-0">Опис</span>
+              <span className="text-gray-700 text-right">{fmtNote(expense.note)}</span>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Сума дивіденду, ₴ *
+            </label>
+            <input
+              type="number"
+              min="0.01"
+              max={amount}
+              step="0.01"
+              value={dividendAmountStr}
+              onChange={e => setDividendAmountStr(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
+              autoFocus
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Можна вказати частину суми. За замовчуванням — повна сума витрати.
+            </p>
+          </div>
+
+          {isPartial && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+              Часткова сума: <span className="font-mono font-semibold">{dividendAmount.toFixed(2)} ₴</span> з{' '}
+              <span className="font-mono">{amount.toFixed(2)} ₴</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Скасувати
+            </button>
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="flex-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+            >
+              {mutation.isPending ? 'Збереження...' : 'Позначити'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Expense Row ────────────────────────────────────────────────────────────
 
 function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh }: {
@@ -969,9 +1091,10 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   onRefresh: () => void
 }) {
   const qc = useQueryClient()
-  const [editing, setEditing]       = useState(false)
-  const [withdrawing, setWithdrawing] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [editing, setEditing]             = useState(false)
+  const [withdrawing, setWithdrawing]     = useState(false)
+  const [markingDividend, setMarkingDividend] = useState(false)
+  const [showHistory, setShowHistory]     = useState(false)
 
   const payMutation = useMutation({
     mutationFn: () => expensesApi.pay(expense.id),
@@ -981,16 +1104,9 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
     mutationFn: () => expensesApi.delete(expense.id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onRefresh() },
   })
-  const navigate = useNavigate()
-  const dividendMutation = useMutation({
-    mutationFn: (val: boolean) => expensesApi.toggleDividend(expense.id, val),
-    onSuccess: (data, val) => {
-      qc.invalidateQueries({ queryKey: ['expenses'] })
-      onRefresh()
-      if (val) {
-        navigate(`/dividends?add_expense=${expense.id}`)
-      }
-    },
+  const removeDividendMutation = useMutation({
+    mutationFn: () => expensesApi.toggleDividend(expense.id, false),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onRefresh() },
   })
 
   if (editing) {
@@ -1015,7 +1131,11 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
       <td className="px-4 py-2.5 text-sm text-gray-700">
         <div className="flex items-center gap-1.5">
           {expense.is_dividend && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">дивіденд</span>
+            <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
+              дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
+                ? ` (${Number(expense.dividend_amount).toFixed(2)} ₴)`
+                : ''}
+            </span>
           )}
           {expense.is_advance && (
             <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">
@@ -1084,18 +1204,24 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             </button>
           )}
           {isOwner && (
-            <button
-              onClick={() => dividendMutation.mutate(!expense.is_dividend)}
-              disabled={dividendMutation.isPending}
-              className={`text-xs px-2 py-1 rounded transition-colors ${
-                expense.is_dividend
-                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                  : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
-              }`}
-              title={expense.is_dividend ? 'Зняти позначку дивіденду' : 'Позначити як дивіденд'}
-            >
-              ₴↑
-            </button>
+            expense.is_dividend ? (
+              <button
+                onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
+                disabled={removeDividendMutation.isPending}
+                className="text-xs px-2 py-1 rounded transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
+                title="Зняти позначку дивіденду"
+              >
+                ₴↑
+              </button>
+            ) : (
+              <button
+                onClick={() => setMarkingDividend(true)}
+                className="text-xs px-2 py-1 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50"
+                title="Позначити як дивіденд"
+              >
+                ₴↑
+              </button>
+            )
           )}
           {isOwner && (
             expense.withdrawal_transfer_id ? (
@@ -1133,6 +1259,13 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             expense={expense}
             accounts={accounts}
             onClose={() => setWithdrawing(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+        {markingDividend && (
+          <DividendMarkDialog
+            expense={expense}
+            onClose={() => setMarkingDividend(false)}
             onSuccess={onRefresh}
           />
         )}
@@ -1358,9 +1491,9 @@ function SalaryPaymentRow({ payment, isOwner, accounts, onRefresh }: {
   isOwner: boolean
   accounts: { id: string; name: string }[]
   onRefresh: () => void
-  navigate: (to: string) => void
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [withdrawing, setWithdrawing] = useState(false)
 
   const dividendMutation = useMutation({
@@ -1529,7 +1662,6 @@ type Tab = 'expenses' | 'salary' | 'transfers' | 'categories'
 
 export function ExpensesPage() {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const isOwner = useCanAccess('owner')
   const isAdmin = useCanAccess('owner', 'admin')
 
@@ -1920,7 +2052,6 @@ export function ExpensesPage() {
                     isOwner={isOwner}
                     accounts={accounts}
                     onRefresh={() => qc.invalidateQueries({ queryKey: ['salary-payments'] })}
-                    navigate={navigate}
                   />
                 ))}
               </tbody>

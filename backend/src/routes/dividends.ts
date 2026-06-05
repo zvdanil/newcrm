@@ -195,7 +195,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
     // Attach sources (expenses)
     const expenses = await db.selectFrom('expenses as e')
       .leftJoin('accounts as a', 'a.id', 'e.account_id')
-      .select(['e.id', 'e.amount', 'e.dividend_payout_id', 'a.name as account_name'])
+      .select(['e.id', 'e.amount', 'e.dividend_amount', 'e.note', 'e.dividend_payout_id', 'a.name as account_name'])
       .where('e.dividend_payout_id', 'is not', null)
       .where('e.is_deleted', '=', false)
       .execute()
@@ -246,16 +246,16 @@ export async function dividendsRoutes(app: FastifyInstance) {
           grossAmount += src.amount
         } else if (src.type === 'existing') {
           const expense = await db.selectFrom('expenses')
-            .select(['id', 'amount', 'is_dividend', 'dividend_payout_id'])
+            .select(['id', 'amount', 'dividend_amount', 'is_dividend', 'dividend_payout_id'])
             .where('id', '=', src.expense_id)
             .where('is_deleted', '=', false)
             .executeTakeFirst()
-          
+
           if (!expense) return reply.status(404).send({ error: 'NotFound', message: `Расход ${src.expense_id} не знайдено` })
           if (!expense.is_dividend) return reply.status(400).send({ error: 'BadRequest', message: `Расход ${src.expense_id} не є дивідендом` })
           if (expense.dividend_payout_id) return reply.status(409).send({ error: 'Conflict', message: `Расход ${src.expense_id} вже привʼязаний до виплати` })
-          
-          grossAmount += Number(expense.amount)
+
+          grossAmount += Number(expense.dividend_amount ?? expense.amount)
           existingExpenses.push(expense.id)
         } else if (src.type === 'existing_salary') {
           const salary = await db.selectFrom('salary_transactions')

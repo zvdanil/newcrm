@@ -34,6 +34,9 @@ export interface DividendPayoutSource {
   id: string
   amount: string | number
   account_name: string | null
+  dividend_amount: string | number | null
+  note: string | null
+  is_salary?: boolean
 }
 
 export interface DividendPayout {
