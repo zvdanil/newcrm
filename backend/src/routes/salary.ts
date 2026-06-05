@@ -850,14 +850,14 @@ export async function salaryRoutes(app: FastifyInstance) {
         .where('is_deleted', '=', false)
         .where(sql<boolean>`metadata_json->>'source' = 'vacation_day'`)
 
-      if (req.query.rate_id)   q = q.where('rate_id',          '=', req.query.rate_id)
-      if (req.query.date_from) q = q.where('transaction_date', '>=', new Date(req.query.date_from + 'T00:00:00'))
-      if (req.query.date_to)   q = q.where('transaction_date', '<=', new Date(req.query.date_to   + 'T23:59:59'))
+      if (req.query.rate_id)   q = q.where('rate_id', '=', req.query.rate_id)
+      if (req.query.date_from) q = q.where(sql<boolean>`transaction_date >= CAST(${req.query.date_from} AS DATE)`)
+      if (req.query.date_to)   q = q.where(sql<boolean>`transaction_date <= CAST(${req.query.date_to}   AS DATE)`)
 
       const rows = await q.orderBy('transaction_date', 'asc').execute()
 
       return rows.map(r => ({
-        date:         String(r.transaction_date).slice(0, 10),
+        date:         new Date(r.transaction_date as Date).toISOString().slice(0, 10),
         gross_amount: Number(r.gross_amount),
         note:         r.note,
       }))
