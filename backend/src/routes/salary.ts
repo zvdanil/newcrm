@@ -119,9 +119,10 @@ export async function salaryRoutes(app: FastifyInstance) {
       const txDate  = transaction_date ?? today
       const billing = txDate.slice(0, 7) + '-01'
 
-      let finalGross     = gross_amount ?? 0
-      let finalDeduction = deduction_pct
+      let finalGross      = gross_amount ?? 0
+      let finalDeduction  = deduction_pct
       let metadata: Record<string, unknown> = { source: 'manual' }
+      let finalActivityId: string | null = activity_id ?? null
 
       if (rate_id) {
         const rate = await db
@@ -131,6 +132,8 @@ export async function salaryRoutes(app: FastifyInstance) {
           .executeTakeFirst()
 
         if (!rate) return reply.status(404).send({ error: 'NotFound', message: 'Ставку не знайдено' })
+
+        finalActivityId = activity_id ?? rate.activity_id ?? null
 
         finalDeduction = Number(rate.deduction_pct)
 
@@ -200,7 +203,7 @@ export async function salaryRoutes(app: FastifyInstance) {
       const tx = await db.insertInto('salary_transactions').values({
         staff_id:         req.params.id,
         rate_id:          rate_id ?? null,
-        activity_id:      activity_id ?? null,
+        activity_id:      finalActivityId,
         type,
         gross_amount:     finalGross,
         deduction_pct:    finalDeduction,
@@ -803,13 +806,14 @@ export async function salaryRoutes(app: FastifyInstance) {
       }
 
       const dayRateCached = Number(vcfg.day_rate_cached)
-      const rateRow = await db.selectFrom('staff_rates').select('deduction_pct').where('id', '=', rate_id).executeTakeFirst()
-      const deductionPct = rateRow ? Number(rateRow.deduction_pct) : 0
+      const rateRow = await db.selectFrom('staff_rates').select(['deduction_pct', 'activity_id']).where('id', '=', rate_id).executeTakeFirst()
+      const deductionPct     = rateRow ? Number(rateRow.deduction_pct) : 0
+      const rateActivityId   = rateRow?.activity_id ?? null
 
       const rows = dates.map((d, i) => ({
         staff_id:         req.params.id,
         rate_id,
-        activity_id:      null as null,
+        activity_id:      rateActivityId,
         type:             'ACCRUAL' as const,
         gross_amount:     dayRateCached,
         deduction_pct:    deductionPct,
