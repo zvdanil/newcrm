@@ -1634,6 +1634,15 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                 {activities.map(({ key: rowKey, name: actName }) => {
                   const dayMap = grid.get(rowKey) ?? new Map<number, SalaryTransaction[]>()
                   let rowTotal = 0
+
+                  // Find the effective rate for this row: first by exact rowKey, then by
+                  // rate_id from any transaction in this row (covers old txs with activity_id=null)
+                  const rowRateId = [...dayMap.values()].flat().find(
+                    tx => tx.rate_type === 'monthly_by_day' || tx.rate_type === 'vacation'
+                  )?.rate_id
+                  const rowDailyRate = dailyRateMap.get(rowKey)
+                    ?? (rowRateId ? rates.find(r => r.id === rowRateId) : undefined)
+
                   return (
                     <tr key={rowKey} className="hover:bg-gray-50">
                       <td className="px-2 py-1.5 text-gray-700 font-medium whitespace-nowrap">{actName}</td>
@@ -1646,7 +1655,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         }, 0)
                         if (cellNet) rowTotal += cellNet
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
-                        const dailyRate_ = dailyRateMap.get(rowKey)
+                        const dailyRate_ = rowDailyRate
                         return (
                           <td key={d} className="px-0.5 py-1 text-center">
                             {cellTxs.length > 0 ? (
@@ -1784,7 +1793,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 export function StaffCardPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const isAdmin = useCanAccess('owner', 'admin')
+  const isAdmin       = useCanAccess('owner', 'admin')
+  const canEditSalary = useCanAccess('owner', 'admin', 'accountant')
 
   const { data: staff, isLoading } = useQuery({
     queryKey: ['staff', id],
@@ -1803,7 +1813,7 @@ export function StaffCardPage() {
 
       <StaffInfoBlock staff={staff} />
       <RatesBlock staffId={staff.id} isAdmin={isAdmin} />
-      <FinancialHistoryBlock staffId={staff.id} isAdmin={isAdmin} />
+      <FinancialHistoryBlock staffId={staff.id} isAdmin={canEditSalary} />
     </div>
   )
 }
