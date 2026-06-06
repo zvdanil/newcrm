@@ -1715,7 +1715,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   <>
                                     <span className="block leading-tight">{cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}</span>
                                     {isCellHourly && cellHours > 0 && (
-                                      <span className="block text-[9px] opacity-60 leading-none">{cellHours.toFixed(1)} год.</span>
+                                      <span className="block text-[9px] opacity-60 leading-none">{cellHours.toFixed(1)}</span>
                                     )}
                                   </>
                                 )}

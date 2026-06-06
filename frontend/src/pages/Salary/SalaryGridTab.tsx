@@ -112,7 +112,7 @@ function AccrualCell({
     >
       <span className="block leading-tight">{net % 1 === 0 ? net : net.toFixed(0)}</span>
       {isHourly && totalHours > 0 && (
-        <span className="block text-[9px] opacity-60 leading-none">{totalHours.toFixed(1)} год.</span>
+        <span className="block text-[9px] opacity-60 leading-none">{totalHours.toFixed(1)}</span>
       )}
     </button>
   )
