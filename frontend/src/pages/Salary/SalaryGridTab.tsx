@@ -94,6 +94,11 @@ function AccrualCell({
     const d = Math.round(g * Number(t.deduction_pct) / 100 * 100) / 100
     return s + g - d
   }, 0)
+  const isHourly = txs.some(t => t.rate_type === 'hourly')
+  const totalHours = isHourly ? txs.reduce((s, t) => {
+    const meta = t.metadata_json as Record<string, unknown> | null
+    return s + (typeof meta?.quantity === 'number' ? meta.quantity : 0)
+  }, 0) : 0
 
   return (
     <button
@@ -105,7 +110,10 @@ function AccrualCell({
       }`}
       title={txs.map(accrualTooltipLine).join('\n')}
     >
-      {net % 1 === 0 ? net : net.toFixed(0)}
+      <span className="block leading-tight">{net % 1 === 0 ? net : net.toFixed(0)}</span>
+      {isHourly && totalHours > 0 && (
+        <span className="block text-[9px] opacity-60 leading-none">{totalHours.toFixed(1)} год.</span>
+      )}
     </button>
   )
 }

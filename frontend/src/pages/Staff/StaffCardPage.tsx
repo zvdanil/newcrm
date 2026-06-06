@@ -1680,6 +1680,11 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                           return s + gross - ded
                         }, 0)
                         if (cellNet) rowTotal += cellNet
+                        const isCellHourly = cellTxs.some(t => t.rate_type === 'hourly')
+                        const cellHours = isCellHourly ? cellTxs.reduce((s, t) => {
+                          const meta = t.metadata_json as Record<string, unknown> | null
+                          return s + (typeof meta?.quantity === 'number' ? meta.quantity : 0)
+                        }, 0) : 0
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
                         const dailyRate_ = rowDailyRate
                         return (
@@ -1706,9 +1711,14 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   return `${TX_TYPE_LABELS[t.type]}: ${fmt(g - d)} (gross ${fmt(g)})`
                                 }).join('\n')}
                               >
-                                {dailyRate_?.rate_type === 'vacation'
-                                  ? 'В'
-                                  : cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}
+                                {dailyRate_?.rate_type === 'vacation' ? 'В' : (
+                                  <>
+                                    <span className="block leading-tight">{cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}</span>
+                                    {isCellHourly && cellHours > 0 && (
+                                      <span className="block text-[9px] opacity-60 leading-none">{cellHours.toFixed(1)} год.</span>
+                                    )}
+                                  </>
+                                )}
                               </button>
                             ) : isAdmin ? (
                               <button
