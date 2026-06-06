@@ -17,6 +17,7 @@ import {
   dailyRate,
   workingDaysInMonth,
 } from '../../components/SalaryTransactionPopups'
+import { PaymentDayDialog } from '../Salary/SalaryGridTab'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -1434,6 +1435,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   const [dailyDialog, setDailyDialog] = useState<{
     rate: StaffRate; date: string; existingTx: SalaryTransaction | null
   } | null>(null)
+  const [payDayDialog, setPayDayDialog]       = useState<string | null>(null)
+  const [accrualDayDialog, setAccrualDayDialog] = useState<{ date: string; rateId?: string } | null>(null)
 
   const qc = useQueryClient()
 
@@ -1610,6 +1613,29 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
         />
       )}
 
+      {payDayDialog && (
+        <PaymentDayDialog
+          staffId={staffId}
+          date={payDayDialog}
+          txs={payments.filter(p => String(p.transaction_date).slice(0, 10) === payDayDialog)}
+          onClose={() => { setPayDayDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }) }}
+        />
+      )}
+
+      {accrualDayDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <ManualAccrualForm
+              staffId={staffId}
+              rates={rates}
+              initialDate={accrualDayDialog.date}
+              initialRateId={accrualDayDialog.rateId}
+              onDone={() => { setAccrualDayDialog(null); qc.invalidateQueries({ queryKey: ['salary', staffId, month] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }) }}
+            />
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="py-8 text-center text-sm text-gray-400">Завантаження...</div>
       ) : (
@@ -1684,9 +1710,15 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   ? 'В'
                                   : cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}
                               </button>
-                            ) : dailyRate_ && isAdmin ? (
+                            ) : isAdmin ? (
                               <button
-                                onClick={() => setDailyDialog({ rate: dailyRate_, date: dateStr, existingTx: null })}
+                                onClick={() => {
+                                  if (dailyRate_) {
+                                    setDailyDialog({ rate: dailyRate_, date: dateStr, existingTx: null })
+                                  } else {
+                                    setAccrualDayDialog({ date: dateStr, rateId: rowRateId ?? undefined })
+                                  }
+                                }}
                                 className="w-full rounded px-0.5 py-0.5 text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors"
                               >·</button>
                             ) : (
@@ -1702,27 +1734,35 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                   )
                 })}
 
-                {/* Payments row */}
-                {payments.length > 0 && (
+                {/* Payments row — always visible when isAdmin */}
+                {(isAdmin || payments.length > 0) && (
                   <tr className="bg-green-50/40">
                     <td className="px-2 py-1.5 text-green-700 font-medium">Виплати</td>
                     {Array.from({ length: days }, (_, i) => i + 1).map(d => {
-                      const dayPays = payments.filter(p => new Date(p.transaction_date).getUTCDate() === d)
-                      const total = dayPays.reduce((s, p) => s + Number(p.gross_amount), 0)
+                      const dateStr = `${month}-${String(d).padStart(2, '0')}`
+                      const dayPays = payments.filter(p => String(p.transaction_date).slice(0, 10) === dateStr)
+                      const total   = dayPays.reduce((s, p) => s + Number(p.gross_amount), 0)
                       return (
                         <td key={d} className="px-0.5 py-1 text-center">
                           {total > 0 ? (
                             <button
-                              onClick={() => dayPays.length === 1 ? setSelectedTx(dayPays[0]) : setSelectedTxGroup(dayPays)}
+                              onClick={() => setPayDayDialog(dateStr)}
                               className="w-full rounded px-0.5 py-0.5 font-mono bg-green-100 text-green-800 hover:bg-green-200">
                               {total % 1 === 0 ? total : total.toFixed(0)}
                             </button>
-                          ) : <span className="text-gray-200">·</span>}
+                          ) : isAdmin ? (
+                            <button
+                              onClick={() => setPayDayDialog(dateStr)}
+                              className="w-full rounded px-0.5 py-0.5 text-gray-200 hover:text-green-400 hover:bg-green-50 transition-colors"
+                            >·</button>
+                          ) : (
+                            <span className="text-gray-200">·</span>
+                          )}
                         </td>
                       )
                     })}
                     <td className="px-2 py-1.5 text-right font-mono text-green-700">
-                      {fmt(payments.reduce((s, p) => s + Number(p.gross_amount), 0))}
+                      {payments.length > 0 ? fmt(payments.reduce((s, p) => s + Number(p.gross_amount), 0)) : '—'}
                     </td>
                   </tr>
                 )}

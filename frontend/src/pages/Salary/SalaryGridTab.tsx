@@ -144,7 +144,7 @@ function PaymentCell({
 
 // ── PaymentDayDialog ───────────────────────────────────────────────────────
 
-function PaymentDayDialog({
+export function PaymentDayDialog({
   staffId,
   date,
   txs,
