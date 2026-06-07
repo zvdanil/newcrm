@@ -490,7 +490,9 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
       setEnrollForm({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
       setEnrollError(null)
     },
-    onError: () => setEnrollError('Помилка при записі'),
+    onError: (err: unknown) => setEnrollError(
+      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Помилка при записі'
+    ),
   })
 
   const freezeMutation = useMutation({

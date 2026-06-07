@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
-import { getEffectivePrice, recalcActivityAccruals, countWorkingDays } from '../services/billingRunService.js'
-import { createTransaction, recalcBalance } from '../services/balanceService.js'
+import { recalcActivityAccruals } from '../services/billingRunService.js'
+import { recalcBalance } from '../services/balanceService.js'
 
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments
@@ -58,14 +58,23 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'child_id, activity_id, account_id, start_date є обовʼязковими' })
       }
 
+      const existingEnrollment = await db
+        .selectFrom('enrollments')
+        .select('id')
+        .where('child_id', '=', child_id)
+        .where('activity_id', '=', activity_id)
+        .where('status', 'in', ['active', 'frozen'])
+        .executeTakeFirst()
+
+      if (existingEnrollment) {
+        return reply.status(409).send({ error: 'Conflict', message: 'Дитина вже записана на цю активність' })
+      }
+
       const enrollment = await db.insertInto('enrollments')
         .values({ child_id, activity_id, account_id, start_date, end_date: end_date || null, note: note || null })
         .returningAll()
         .executeTakeFirstOrThrow()
 
-      // Accrual generation for monthly tariff:
-      // 1. Retroactive billing for all full months from start_date month through current month
-      // 2. Pro-rata for mid-month start in CURRENT month only
       const activity = await db
         .selectFrom('activities')
         .select('tariff_type')
@@ -79,7 +88,7 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         const startMonthStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
         const currentMonthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
 
-        // Retroactive + current-month billing (recalcActivityAccruals skips months where start_date > 1st)
+        // recalcActivityAccruals handles both full-month and pro-rata for mid-month starts
         if (startMonthStr <= currentMonthStr) {
           await recalcActivityAccruals(
             activity_id,
@@ -88,40 +97,6 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
             createdBy,
             child_id,
           )
-        }
-
-        // Pro-rata for mid-month start in CURRENT MONTH only
-        // (recalcActivityAccruals skips the current month when start_date > 1st — no double-billing)
-        const dayOfMonth = d.getUTCDate()
-        if (dayOfMonth > 1 && startMonthStr === currentMonthStr) {
-          const year = d.getUTCFullYear()
-          const month = d.getUTCMonth()
-          const firstDay = new Date(Date.UTC(year, month, 1))
-          const lastDay  = new Date(Date.UTC(year, month + 1, 0))
-          const workingDaysInMonth   = countWorkingDays(firstDay, lastDay)
-          const workingDaysRemaining = countWorkingDays(d, lastDay)
-          const price = await getEffectivePrice(child_id, activity_id, new Date(startMonthStr))
-          if (price && price > 0 && workingDaysInMonth > 0) {
-            const proRata = Math.round((price / workingDaysInMonth) * workingDaysRemaining)
-            await createTransaction({
-              type: 'ACCRUAL',
-              child_id,
-              account_id,
-              activity_id,
-              enrollment_id: enrollment.id,
-              amount: proRata,
-              transaction_date: start_date,
-              billing_month: startMonthStr,
-              note: `Нарахування за ${startMonthStr.slice(0, 7)} (про-рата ${workingDaysRemaining}/${workingDaysInMonth} роб. дн.)`,
-              metadata_json: {
-                pro_rata: true,
-                working_days_remaining: workingDaysRemaining,
-                working_days_in_month: workingDaysInMonth,
-                full_price: price,
-              },
-              created_by: createdBy,
-            })
-          }
         }
       }
 
