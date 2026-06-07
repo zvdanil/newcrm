@@ -273,6 +273,8 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       if (!activity) return reply.status(404).send({ error: 'NotFound' })
 
+      const isDutyAdmin = req.user.role === 'duty_admin'
+
       // Индекс логов: enrollment_id → date → log
       const logsIndex: Record<string, Record<string, typeof logs[0]>> = {}
       for (const log of logs) {
@@ -298,16 +300,22 @@ export async function journalsRoutes(app: FastifyInstance) {
       return {
         activity: { ...activity, refund_config: refundConfig ?? null },
         dates: generateDates(from, to),
-        rows: enrollments.map((e) => ({
-          enrollment_id: e.enrollment_id,
-          child_id: e.child_id,
-          child_name: e.child_name,
-          group_name: e.group_name,
-          status: e.status,
-          frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
-          frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
-          logs: logsIndex[e.enrollment_id] ?? {},
-        })),
+        rows: enrollments.map((e) => {
+          const rowLogs = logsIndex[e.enrollment_id] ?? {}
+          const maskedLogs = isDutyAdmin
+            ? Object.fromEntries(Object.entries(rowLogs).map(([d, l]) => [d, { ...l, custom_amount: null }]))
+            : rowLogs
+          return {
+            enrollment_id: e.enrollment_id,
+            child_id: e.child_id,
+            child_name: e.child_name,
+            group_name: e.group_name,
+            status: e.status,
+            frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+            frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+            logs: maskedLogs,
+          }
+        }),
         group_logs: groupLogsIndex,
         assigned_staff: { group_teachers: groupTeachers, additional_teachers: additionalTeachers },
       }
@@ -508,9 +516,14 @@ export async function journalsRoutes(app: FastifyInstance) {
       const oldStatus = existing.status
       const dateStr = toDateStr(existing.date as unknown as Date)
 
+      // duty_admin не может изменить custom_amount у special-отметки
+      const safeCustomAmount = (req.user.role === 'duty_admin' && existing.status === 'special' && status === 'special')
+        ? existing.custom_amount
+        : (custom_amount ?? null)
+
       const updated = await db.transaction().execute(async (trx) => {
         const main = await trx.updateTable('attendance_logs')
-          .set({ status, custom_amount: custom_amount ?? null, note: note ?? null })
+          .set({ status, custom_amount: safeCustomAmount, note: note ?? null })
           .where('id', '=', req.params.id)
           .returningAll()
           .executeTakeFirstOrThrow()

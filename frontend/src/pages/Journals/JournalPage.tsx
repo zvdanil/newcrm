@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
 import { childrenApi } from '../../api/children.api'
+import { useAuthStore } from '../../store/auth.store'
 import type { AttendanceStatus, JournalRow, AttendanceLog } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
@@ -83,6 +84,7 @@ interface CellProps {
   log: AttendanceLog | null
   frozen: boolean
   isHighlightedDate: boolean
+  isDutyAdmin: boolean
   onMarkQuick: (enrollmentId: string, dateStr: string) => void
   onOpenDialog: (row: JournalRow, dateStr: string, context: 'edit' | 'note') => void
   onHoverDate: (dateStr: string | null) => void
@@ -91,7 +93,7 @@ interface CellProps {
 }
 
 // Memoized to prevent re-renders of the whole grid
-const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlightedDate, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
+const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlightedDate, isDutyAdmin, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
   const baseClasses = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
     compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
   } ${isHighlightedDate ? 'border-iris-300' : 'border-transparent'}`
@@ -125,22 +127,29 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     )
   }
 
+  const isSpecialMasked = isDutyAdmin && log.status === 'special'
+  const cellStyle = isSpecialMasked
+    ? 'bg-green-100 text-green-700 border-green-600 hover:bg-green-200'
+    : STATUS_STYLE[log.status]
+
   return (
     <div
       onClick={() => onOpenDialog(row, dateStr, 'edit')}
       onContextMenu={handleContextMenu}
       onMouseEnter={() => onHoverDate(dateStr)}
       onMouseLeave={() => onHoverDate(null)}
-      className={`${baseClasses} font-bold ${STATUS_STYLE[log.status]}`}
+      className={`${baseClasses} font-bold ${cellStyle}`}
     >
-      {log.status === 'special' ? (
+      {isSpecialMasked ? (
+        <span className="text-[10px]">П</span>
+      ) : log.status === 'special' ? (
         <span className="text-[9px] leading-tight font-black">
           {Number(log.custom_amount).toFixed(0)}
         </span>
       ) : (
         <span className="text-[10px]">{STATUS_LABEL[log.status]}</span>
       )}
-      
+
       {log.note && (
         <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
@@ -154,16 +163,19 @@ interface AttendanceDialogProps {
   row: JournalRow
   dateStr: string
   openContext: 'edit' | 'note'
+  isDutyAdmin: boolean
   onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null }) => void
   onDelete: (logId: string) => void
   onClose: () => void
 }
 
-function AttendanceDialog({ row, dateStr, openContext, onSave, onDelete, onClose }: AttendanceDialogProps) {
+function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDelete, onClose }: AttendanceDialogProps) {
   const log = row.logs[dateStr]
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
+
+  const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
   const handleSave = () => {
     onSave({
@@ -171,7 +183,7 @@ function AttendanceDialog({ row, dateStr, openContext, onSave, onDelete, onClose
       dateStr,
       logId: log?.id ?? null,
       status,
-      amount: status === 'special' ? (amount === '' ? 0 : Number(amount)) : null,
+      amount: (!isDutyAdmin && status === 'special') ? (amount === '' ? 0 : Number(amount)) : null,
       note: note.trim() || null
     })
   }
@@ -189,27 +201,34 @@ function AttendanceDialog({ row, dateStr, openContext, onSave, onDelete, onClose
           </button>
         </div>
 
-        <div className="grid grid-cols-5 gap-1.5">
-          {(['present', 'absent_excused', 'absent_unexcused', 'special', 'separate_billing'] as AttendanceStatus[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatus(s)}
-              autoFocus={openContext === 'edit' && s === 'absent_excused'}
-              className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${
-                status === s
-                  ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500'
-                  : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'
-              }`}
-            >
-              {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
-              <div className="text-[8px] opacity-60 mt-0.5 leading-none">
-                {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
-              </div>
-            </button>
-          ))}
-        </div>
+        {isLockedSpecial ? (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 border border-green-200">
+            <span className="w-7 h-7 rounded border-2 border-green-600 bg-green-100 text-green-700 flex items-center justify-center text-xs font-black flex-shrink-0">П</span>
+            <span className="text-xs text-gray-500">Тариф встановлено адміністратором</span>
+          </div>
+        ) : (
+          <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            {(['present', 'absent_excused', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                autoFocus={openContext === 'edit' && s === 'absent_excused'}
+                className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${
+                  status === s
+                    ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500'
+                    : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'
+                }`}
+              >
+                {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
+                <div className="text-[8px] opacity-60 mt-0.5 leading-none">
+                  {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
-        {status === 'special' && (
+        {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума спец. тарифу (грн)</label>
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
@@ -304,6 +323,8 @@ export function JournalPage() {
   const { activityId } = useParams<{ activityId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
+  const isDutyAdmin = user?.role === 'duty_admin'
 
   const mode = (searchParams.get('mode') as Mode) ?? 'week'
   const baseDate = searchParams.get('date') ?? toStr(new Date())
@@ -617,6 +638,7 @@ export function JournalPage() {
                                 log={row.logs[dateStr]}
                                 frozen={isFrozenOn(row, dateStr)}
                                 isHighlightedDate={isCrosshair}
+                                isDutyAdmin={isDutyAdmin}
                                 onMarkQuick={handleMarkQuick}
                                 onOpenDialog={(r, d, context) => setDialogTarget({ row: r, dateStr: d, context })}
                                 onHoverDate={setHoveredDate}
@@ -633,7 +655,7 @@ export function JournalPage() {
             </tbody>
           </table>
         </div>
-      {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
+      {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} isDutyAdmin={isDutyAdmin} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
       {groupPopupTarget && (
         <GroupPopup
           log={groupPopupTarget.log}

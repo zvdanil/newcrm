@@ -206,24 +206,32 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
           .execute()
       : []
 
+    const isDutyAdmin = req.user.role === 'duty_admin'
+
     const logsIndex: Record<string, Record<string, typeof logs[0]>> = {}
     for (const log of logs) {
       if (!logsIndex[log.enrollment_id]) logsIndex[log.enrollment_id] = {}
       logsIndex[log.enrollment_id][toDateStr(log.date as unknown as Date)] = log
     }
 
-    const rows = enrollments.map(e => ({
-      enrollment_id: e.enrollment_id,
-      child_id:      e.child_id,
-      child_name:    e.child_name,
-      activity_id:   e.activity_id,
-      group_id:      e.group_id,
-      group_name:    e.group_name,
-      status:        e.status,
-      frozen_from:   e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
-      frozen_to:     e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
-      logs:          logsIndex[e.enrollment_id] ?? {},
-    }))
+    const rows = enrollments.map(e => {
+      const rowLogs = logsIndex[e.enrollment_id] ?? {}
+      const maskedLogs = isDutyAdmin
+        ? Object.fromEntries(Object.entries(rowLogs).map(([d, l]) => [d, { ...l, custom_amount: null }]))
+        : rowLogs
+      return {
+        enrollment_id: e.enrollment_id,
+        child_id:      e.child_id,
+        child_name:    e.child_name,
+        activity_id:   e.activity_id,
+        group_id:      e.group_id,
+        group_name:    e.group_name,
+        status:        e.status,
+        frozen_from:   e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+        frozen_to:     e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+        logs:          maskedLogs,
+      }
+    })
 
     return {
       merged_journal: mj,

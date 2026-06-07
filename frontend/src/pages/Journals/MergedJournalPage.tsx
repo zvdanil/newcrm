@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mergedJournalsApi } from '../../api/mergedJournals.api'
 import { attendanceApi } from '../../api/attendance.api'
+import { useAuthStore } from '../../store/auth.store'
 import type { AttendanceStatus } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
@@ -83,13 +84,14 @@ interface CellProps {
   log:          any
   frozen:       boolean
   isHighlighted: boolean
+  isDutyAdmin:  boolean
   onMark:       (enrollmentId: string, dateStr: string) => void
   onOpenDialog: (enrollmentId: string, dateStr: string, context: 'edit' | 'note') => void
   onHover:      (dateStr: string | null) => void
   pending:      boolean
 }
 
-const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, onMark, onOpenDialog, onHover, pending }: CellProps) => {
+const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, isDutyAdmin, onMark, onOpenDialog, onHover, pending }: CellProps) => {
   const baseClasses = `relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${
     isHighlighted ? 'border-iris-300' : 'border-transparent'
   }`
@@ -120,6 +122,11 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     )
   }
 
+  const isSpecialMasked = isDutyAdmin && log.status === 'special'
+  const cellStyle = isSpecialMasked
+    ? 'bg-green-100 text-green-700 border-green-600 hover:bg-green-200'
+    : STATUS_STYLE[log.status as AttendanceStatus]
+
   return (
     <button
       onClick={() => onOpenDialog(enrollmentId, dateStr, 'edit')}
@@ -127,9 +134,11 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
-      className={`${baseClasses} font-bold disabled:opacity-40 ${STATUS_STYLE[log.status as AttendanceStatus]}`}
+      className={`${baseClasses} font-bold disabled:opacity-40 ${cellStyle}`}
     >
-      {log.status === 'special' ? (
+      {isSpecialMasked ? (
+        'П'
+      ) : log.status === 'special' ? (
         <span className="font-black leading-tight">{Number(log.custom_amount).toFixed(0)}</span>
       ) : STATUS_LABEL[log.status as AttendanceStatus]}
       {log.note && (
@@ -152,10 +161,12 @@ const ACTIVITY_COLORS = [
 
 // ─── Attendance dialog ────────────────────────────────────────────────────────
 
-function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, onSave, onDelete, onClose }: any) {
+function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDutyAdmin, onSave, onDelete, onClose }: any) {
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
+
+  const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -169,19 +180,26 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, onSav
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        <div className="grid grid-cols-5 gap-1.5">
-          {(['present', 'absent_excused', 'absent_unexcused', 'special', 'separate_billing'] as AttendanceStatus[]).map((s) => (
-            <button key={s} onClick={() => setStatus(s)}
-              autoFocus={openContext === 'edit' && s === 'absent_excused'}
-              className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'}`}>
-              {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
-              <div className="text-[8px] opacity-60 mt-0.5 leading-none">
-                {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
-              </div>
-            </button>
-          ))}
-        </div>
-        {status === 'special' && (
+        {isLockedSpecial ? (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 border border-green-200">
+            <span className="w-7 h-7 rounded border-2 border-green-600 bg-green-100 text-green-700 flex items-center justify-center text-xs font-black flex-shrink-0">П</span>
+            <span className="text-xs text-gray-500">Тариф встановлено адміністратором</span>
+          </div>
+        ) : (
+          <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            {(['present', 'absent_excused', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
+              <button key={s} onClick={() => setStatus(s)}
+                autoFocus={openContext === 'edit' && s === 'absent_excused'}
+                className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'}`}>
+                {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
+                <div className="text-[8px] opacity-60 mt-0.5 leading-none">
+                  {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума (грн)</label>
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus className="w-full rounded-xl border-gray-200 text-sm font-medium shadow-sm focus:border-iris-500 focus:ring-iris-500" />
@@ -195,7 +213,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, onSav
         </div>
         <div className="flex gap-3 pt-2">
           {log && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
-          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: status === 'special' ? Number(amount) : null, note })}
+          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note })}
             className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all transform active:scale-95">Зберегти</button>
         </div>
       </div>
@@ -209,6 +227,8 @@ export function MergedJournalPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const isDutyAdmin = user?.role === 'duty_admin'
 
   const mode     = (searchParams.get('mode') as Mode) ?? 'week'
   const baseDate = searchParams.get('date') ?? toStr(new Date())
@@ -523,6 +543,7 @@ export function MergedJournalPage() {
                                 log={row.logs[dateStr]}
                                 frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
                                 isHighlighted={isCross}
+                                isDutyAdmin={isDutyAdmin}
                                 onMark={handleQuickMark}
                                 onOpenDialog={(eId, dStr, context) => setDialogTarget({ enrollmentId: eId, dateStr: dStr, log: row.logs[dStr], context })}
                                 onHover={setHoveredDate}
@@ -567,6 +588,7 @@ export function MergedJournalPage() {
           dateStr={dialogTarget.dateStr}
           log={dialogTarget.log}
           openContext={dialogTarget.context}
+          isDutyAdmin={isDutyAdmin}
           onSave={markMutation.mutate}
           onDelete={removeMutation.mutate}
           onClose={() => setDialogTarget(null)}
