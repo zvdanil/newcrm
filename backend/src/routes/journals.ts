@@ -696,6 +696,10 @@ export async function journalsRoutes(app: FastifyInstance) {
       const log = await db.selectFrom('attendance_logs').selectAll().where('id', '=', req.params.id).executeTakeFirst()
       if (!log) return reply.status(404).send({ error: 'NotFound' })
 
+      if (req.user.role === 'duty_admin' && log.status === 'special') {
+        return reply.status(403).send({ error: 'Forbidden', message: 'Адмін зміни не може видаляти записи з встановленим тарифом' })
+      }
+
       const enrollment = await db.selectFrom('enrollments').selectAll().where('id', '=', log.enrollment_id).executeTakeFirst()
 
       await db.deleteFrom('attendance_logs').where('id', '=', req.params.id).execute()

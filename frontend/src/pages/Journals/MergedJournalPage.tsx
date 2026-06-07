@@ -231,7 +231,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
             className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />
         </div>
         <div className="flex gap-3 pt-2">
-          {log && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
+          {log && !isLockedSpecial && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
           <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note })}
             className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all transform active:scale-95">Зберегти</button>
         </div>

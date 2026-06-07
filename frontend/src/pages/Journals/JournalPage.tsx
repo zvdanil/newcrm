@@ -269,7 +269,7 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
         </div>
 
         <div className="flex gap-3 pt-2">
-          {log && (
+          {log && !isLockedSpecial && (
             <button onClick={() => onDelete(log.id)}
               className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">
               Видалити
