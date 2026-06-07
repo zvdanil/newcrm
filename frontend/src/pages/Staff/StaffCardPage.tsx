@@ -1701,9 +1701,11 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                 className={`w-full rounded px-0.5 py-0.5 font-mono transition-colors ${
                                   dailyRate_?.rate_type === 'vacation'
                                     ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                    : cellTxs.some(t => t.type === 'CORRECTION')
-                                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                                      : 'bg-iris-50 text-iris-700 hover:bg-iris-100'
+                                    : (dailyRate_?.rate_type === 'monthly_by_day' && cellNet === 0)
+                                      ? 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                      : cellTxs.some(t => t.type === 'CORRECTION')
+                                        ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                        : 'bg-iris-50 text-iris-700 hover:bg-iris-100'
                                 }`}
                                 title={cellTxs.map(t => {
                                   const g = Number(t.gross_amount)
@@ -1711,7 +1713,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   return `${TX_TYPE_LABELS[t.type]}: ${fmt(g - d)} (gross ${fmt(g)})`
                                 }).join('\n')}
                               >
-                                {dailyRate_?.rate_type === 'vacation' ? 'В' : (
+                                {dailyRate_?.rate_type === 'vacation' ? 'В' :
+                                  (dailyRate_?.rate_type === 'monthly_by_day' && cellNet === 0) ? 'Н' : (
                                   <>
                                     <span className="block leading-tight">{cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}</span>
                                     {isCellHourly && cellHours > 0 && (

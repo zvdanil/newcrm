@@ -442,11 +442,11 @@ export function DailyMarkDialog({
   const qc = useQueryClient()
 
   const computed  = dailyRate(rate, date)
-  const initAmt   = existingTx ? fmt(existingTx.gross_amount) : fmt(computed)
+  const initPresent = existingTx ? Number(existingTx.gross_amount) > 0 : true
+  const initAmt   = existingTx && Number(existingTx.gross_amount) > 0 ? fmt(existingTx.gross_amount) : fmt(computed)
   const initNote  = existingTx?.note ?? ''
 
-  // для нової відмітки — одразу «Присутній»
-  const [present, setPresent] = useState<boolean>(existingTx !== null ? true : true)
+  const [present, setPresent] = useState<boolean>(initPresent)
   const [amount, setAmount]   = useState(initAmt)
   const [note, setNote]       = useState(initNote)
   const [error, setError]     = useState<string | null>(null)
@@ -465,23 +465,35 @@ export function DailyMarkDialog({
   }
 
   const createMutation = useMutation({
-    mutationFn: () => staffApi.addManualAccrual(staffId, {
-      rate_id:          rate.id,
-      gross_amount:     parseFloat(amount),
-      transaction_date: date,
-      note:             note || undefined,
-    }),
+    mutationFn: async () => {
+      // If switching from absent (0-tx) to present — remove the 0-tx first
+      if (existingTx && Number(existingTx.gross_amount) === 0) {
+        await staffApi.deleteAccrual(staffId, existingTx.id)
+      }
+      return staffApi.addManualAccrual(staffId, {
+        rate_id:          rate.id,
+        gross_amount:     parseFloat(amount),
+        transaction_date: date,
+        note:             note || undefined,
+      })
+    },
     onSuccess: () => { invalidateAll(); onClose() },
     onError:   () => setError('Помилка збереження'),
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: () => staffApi.deleteAccrual(staffId, existingTx!.id),
-    onSuccess: () => { invalidateAll(); onClose() },
-    onError:   (e: { response?: { status?: number } }) => {
-      if (e.response?.status === 404) { invalidateAll(); onClose() }
-      else setError('Помилка видалення')
+  const absentMutation = useMutation({
+    mutationFn: async () => {
+      if (existingTx && Number(existingTx.gross_amount) > 0) {
+        await staffApi.deleteAccrual(staffId, existingTx.id)
+      }
+      await staffApi.addManualAccrual(staffId, {
+        rate_id:          rate.id,
+        gross_amount:     0,
+        transaction_date: date,
+      })
     },
+    onSuccess: () => { invalidateAll(); onClose() },
+    onError:   () => setError('Помилка збереження'),
   })
 
   const editMutation = useMutation({
@@ -498,22 +510,22 @@ export function DailyMarkDialog({
     if (present) {
       const amt = parseFloat(amount)
       if (isNaN(amt) || amt < 0) { setError('Введіть коректну суму'); return }
-      if (existingTx) {
-        // amount or note changed — edit
+      if (existingTx && Number(existingTx.gross_amount) > 0) {
         editMutation.mutate()
       } else {
         createMutation.mutate()
       }
     } else {
-      if (existingTx) {
-        deleteMutation.mutate()
-      } else {
+      // absent → record as 0; if already 0 — nothing to do
+      if (existingTx && Number(existingTx.gross_amount) === 0) {
         onClose()
+      } else {
+        absentMutation.mutate()
       }
     }
   }
 
-  const isPending = createMutation.isPending || deleteMutation.isPending || editMutation.isPending
+  const isPending = createMutation.isPending || absentMutation.isPending || editMutation.isPending
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -532,7 +544,10 @@ export function DailyMarkDialog({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setPresent(true)}
+            onClick={() => {
+              if (!present) setAmount(fmt(computed))
+              setPresent(true)
+            }}
             className={`flex-1 py-2.5 text-sm font-medium rounded-xl border-2 transition-colors ${
               present
                 ? 'border-iris-500 bg-iris-50 text-iris-700'
