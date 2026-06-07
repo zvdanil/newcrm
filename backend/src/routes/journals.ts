@@ -200,6 +200,53 @@ function generateDates(from: string, to: string): string[] {
   return dates
 }
 
+interface AttributedNote { role: string; name: string; text: string }
+
+function transformLogNotes(
+  log: any,
+  userId: string,
+  role: string
+): { note: string | null; attributed_notes: AttributedNote[]; has_note: boolean } {
+  const entries: Array<{ user_id: string; role: string; name: string; text: string }> =
+    Array.isArray(log.notes_json) ? log.notes_json : []
+
+  if (role === 'duty_admin') {
+    const mine = entries.find(n => n.user_id === userId)
+    return { note: mine?.text ?? null, attributed_notes: [], has_note: !!mine?.text }
+  }
+
+  const mine   = entries.find(n => n.user_id === userId)
+  const others = entries.filter(n => n.user_id !== userId)
+
+  // For owner: fall back to legacy `note` field in textarea if no notes_json entry yet
+  let myNote = mine?.text ?? null
+  if (!myNote && role === 'owner') myNote = (log.note as string | null) ?? null
+
+  return {
+    note:             myNote,
+    attributed_notes: others.map(n => ({ role: n.role, name: n.name, text: n.text })),
+    has_note:         !!myNote || others.length > 0,
+  }
+}
+
+async function fetchUserName(userId: string): Promise<string> {
+  const u = await db.selectFrom('users').select(['name', 'email']).where('id', '=', userId).executeTakeFirst()
+  return u?.name || u?.email || 'Невідомо'
+}
+
+function buildNotesJsonUpsert(userId: string, userRole: string, userName: string, noteText: string | null) {
+  const entry = noteText?.trim()
+    ? JSON.stringify([{ user_id: userId, role: userRole, name: userName, text: noteText.trim() }])
+    : '[]'
+  return sql<unknown>`
+    COALESCE(
+      (SELECT jsonb_agg(e) FROM jsonb_array_elements(attendance_logs.notes_json) e
+       WHERE (e->>'user_id') != ${userId}),
+      '[]'::jsonb
+    ) || ${entry}::jsonb
+  `
+}
+
 export async function journalsRoutes(app: FastifyInstance) {
   // GET /api/journals?activity_id=&from=&to=
   // Возвращает данные журнала: активность + строки (дети + логи по датам)
@@ -273,7 +320,9 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       if (!activity) return reply.status(404).send({ error: 'NotFound' })
 
-      const isDutyAdmin = req.user.role === 'duty_admin'
+      const requestUserId = req.user.sub
+      const requestRole   = req.user.role
+      const isDutyAdmin   = requestRole === 'duty_admin'
 
       // Индекс логов: enrollment_id → date → log
       const logsIndex: Record<string, Record<string, typeof logs[0]>> = {}
@@ -302,9 +351,19 @@ export async function journalsRoutes(app: FastifyInstance) {
         dates: generateDates(from, to),
         rows: enrollments.map((e) => {
           const rowLogs = logsIndex[e.enrollment_id] ?? {}
-          const maskedLogs = isDutyAdmin
-            ? Object.fromEntries(Object.entries(rowLogs).map(([d, l]) => [d, { ...l, custom_amount: null }]))
-            : rowLogs
+          const maskedLogs = Object.fromEntries(
+            Object.entries(rowLogs).map(([d, l]) => {
+              const notesInfo = transformLogNotes(l, requestUserId, requestRole)
+              return [d, {
+                ...l,
+                custom_amount:    isDutyAdmin && l.status === 'special' ? null : l.custom_amount,
+                note:             notesInfo.note,
+                attributed_notes: notesInfo.attributed_notes,
+                has_note:         notesInfo.has_note,
+                notes_json:       undefined, // never expose raw array to client
+              }]
+            })
+          )
           return {
             enrollment_id: e.enrollment_id,
             child_id: e.child_id,
@@ -358,7 +417,12 @@ export async function journalsRoutes(app: FastifyInstance) {
         }
       }
 
-      const createdBy = (req.user as { sub: string }).sub
+      const createdBy = req.user.sub
+      const createdByRole = req.user.role
+      const createdByName = await fetchUserName(createdBy)
+      const initialNotesJson = JSON.stringify(
+        note?.trim() ? [{ user_id: createdBy, role: createdByRole, name: createdByName, text: note.trim() }] : []
+      )
 
       const log = await db.transaction().execute(async (trx) => {
         // Основна відмітка (upsert)
@@ -370,14 +434,15 @@ export async function journalsRoutes(app: FastifyInstance) {
             date,
             status,
             custom_amount: custom_amount ?? null,
-            note: note ?? null,
+            note: null,
+            notes_json: initialNotesJson,
             created_by: createdBy,
           })
           .onConflict((oc) =>
             oc.columns(['enrollment_id', 'date']).doUpdateSet({
               status,
               custom_amount: custom_amount ?? null,
-              note: note ?? null,
+              notes_json: buildNotesJsonUpsert(createdBy, createdByRole, createdByName, note ?? null),
               updated_at: new Date().toISOString() as unknown as Date,
             })
           )
@@ -521,9 +586,17 @@ export async function journalsRoutes(app: FastifyInstance) {
         ? existing.custom_amount
         : (custom_amount ?? null)
 
+      const putUserId   = req.user.sub
+      const putUserRole = req.user.role
+      const putUserName = await fetchUserName(putUserId)
+
       const updated = await db.transaction().execute(async (trx) => {
         const main = await trx.updateTable('attendance_logs')
-          .set({ status, custom_amount: safeCustomAmount, note: note ?? null })
+          .set({
+            status,
+            custom_amount: safeCustomAmount,
+            notes_json: buildNotesJsonUpsert(putUserId, putUserRole, putUserName, note ?? null),
+          })
           .where('id', '=', req.params.id)
           .returningAll()
           .executeTakeFirstOrThrow()

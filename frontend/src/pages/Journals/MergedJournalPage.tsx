@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { mergedJournalsApi } from '../../api/mergedJournals.api'
 import { attendanceApi } from '../../api/attendance.api'
 import { useAuthStore } from '../../store/auth.store'
-import type { AttendanceStatus } from '../../types'
+import type { AttendanceStatus, AttributedNote } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -123,8 +123,13 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   }
 
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
-  const cellStyle = isSpecialMasked
-    ? 'bg-green-100 text-green-700 border-green-600 hover:bg-green-200'
+
+  // Resolve border color in one place to avoid Tailwind class conflicts
+  const borderColor = isSpecialMasked
+    ? 'border-green-600'
+    : (isHighlighted ? 'border-iris-300' : 'border-transparent')
+  const cellBg = isSpecialMasked
+    ? 'bg-green-100 text-green-700 hover:bg-green-200'
     : STATUS_STYLE[log.status as AttendanceStatus]
 
   return (
@@ -134,14 +139,14 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
-      className={`${baseClasses} font-bold disabled:opacity-40 ${cellStyle}`}
+      className={`relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${borderColor} font-bold disabled:opacity-40 ${cellBg}`}
     >
       {isSpecialMasked ? (
         'П'
       ) : log.status === 'special' ? (
         <span className="font-black leading-tight">{Number(log.custom_amount).toFixed(0)}</span>
       ) : STATUS_LABEL[log.status as AttendanceStatus]}
-      {log.note && (
+      {(log.has_note ?? !!log.note) && (
         <div className="absolute top-0 right-0 w-1 h-1 bg-red-500 rounded-full border border-white" />
       )}
     </button>
@@ -205,8 +210,22 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
             <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus className="w-full rounded-xl border-gray-200 text-sm font-medium shadow-sm focus:border-iris-500 focus:ring-iris-500" />
           </div>
         )}
+        {!isDutyAdmin && log?.attributed_notes && log.attributed_notes.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-gray-400 uppercase ml-1">Інші примітки</label>
+            {log.attributed_notes.map((n: AttributedNote, i: number) => (
+              <div key={i} className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="text-[9px] font-black text-gray-400 uppercase mb-0.5">{n.name}</div>
+                <div className="text-xs text-gray-700">{n.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка</label>
+          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">
+            {isDutyAdmin ? 'Примітка' : 'Моя примітка'}
+          </label>
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
             autoFocus={openContext === 'note'}
             className="w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 resize-none" />

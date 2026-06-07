@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
 import { childrenApi } from '../../api/children.api'
 import { useAuthStore } from '../../store/auth.store'
-import type { AttendanceStatus, JournalRow, AttendanceLog } from '../../types'
+import type { AttendanceStatus, JournalRow, AttendanceLog, AttributedNote } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
@@ -128,9 +128,18 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   }
 
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
-  const cellStyle = isSpecialMasked
-    ? 'bg-green-100 text-green-700 border-green-600 hover:bg-green-200'
+
+  // Resolve border color in one place to avoid Tailwind class conflicts
+  const borderColor = isSpecialMasked
+    ? 'border-green-600'
+    : (isHighlightedDate ? 'border-iris-300' : 'border-transparent')
+  const cellBg = isSpecialMasked
+    ? 'bg-green-100 text-green-700 hover:bg-green-200'
     : STATUS_STYLE[log.status]
+
+  const baseClassesNoB = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
+    compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
+  }`
 
   return (
     <div
@@ -138,7 +147,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onContextMenu={handleContextMenu}
       onMouseEnter={() => onHoverDate(dateStr)}
       onMouseLeave={() => onHoverDate(null)}
-      className={`${baseClasses} font-bold ${cellStyle}`}
+      className={`${baseClassesNoB} ${borderColor} font-bold ${cellBg}`}
     >
       {isSpecialMasked ? (
         <span className="text-[10px]">П</span>
@@ -150,7 +159,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         <span className="text-[10px]">{STATUS_LABEL[log.status]}</span>
       )}
 
-      {log.note && (
+      {(log.has_note ?? !!log.note) && (
         <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
     </div>
@@ -237,8 +246,22 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
           </div>
         )}
 
+        {!isDutyAdmin && log?.attributed_notes && log.attributed_notes.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-gray-400 uppercase ml-1">Інші примітки</label>
+            {log.attributed_notes.map((n: AttributedNote, i: number) => (
+              <div key={i} className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="text-[9px] font-black text-gray-400 uppercase mb-0.5">{n.name}</div>
+                <div className="text-xs text-gray-700">{n.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div>
-          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Примітка (бачить адмін)</label>
+          <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">
+            {isDutyAdmin ? 'Примітка' : 'Моя примітка'}
+          </label>
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
             autoFocus={openContext === 'note'}
             placeholder="Введіть коментар..."

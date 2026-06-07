@@ -162,6 +162,12 @@ export interface Enrollment {
 
 export type AttendanceStatus = 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
 
+export interface AttributedNote {
+  role: string
+  name: string
+  text: string
+}
+
 export interface AttendanceLog {
   id: string
   enrollment_id: string
@@ -171,6 +177,8 @@ export interface AttendanceLog {
   status: AttendanceStatus
   custom_amount: string | null
   note: string | null
+  attributed_notes?: AttributedNote[]
+  has_note?: boolean
   created_by: string | null
   created_at: string
   updated_at: string

@@ -7,6 +7,33 @@ function toDateStr(d: Date | string): string {
   return d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)
 }
 
+interface AttributedNote { role: string; name: string; text: string }
+
+function transformLogNotes(
+  log: any,
+  userId: string,
+  role: string
+): { note: string | null; attributed_notes: AttributedNote[]; has_note: boolean } {
+  const entries: Array<{ user_id: string; role: string; name: string; text: string }> =
+    Array.isArray(log.notes_json) ? log.notes_json : []
+
+  if (role === 'duty_admin') {
+    const mine = entries.find(n => n.user_id === userId)
+    return { note: mine?.text ?? null, attributed_notes: [], has_note: !!mine?.text }
+  }
+
+  const mine   = entries.find(n => n.user_id === userId)
+  const others = entries.filter(n => n.user_id !== userId)
+  let myNote   = mine?.text ?? null
+  if (!myNote && role === 'owner') myNote = (log.note as string | null) ?? null
+
+  return {
+    note:             myNote,
+    attributed_notes: others.map(n => ({ role: n.role, name: n.name, text: n.text })),
+    has_note:         !!myNote || others.length > 0,
+  }
+}
+
 function generateDates(from: string, to: string): string[] {
   const dates: string[] = []
   const current = new Date(from)
@@ -206,7 +233,9 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
           .execute()
       : []
 
-    const isDutyAdmin = req.user.role === 'duty_admin'
+    const requestUserId = req.user.sub
+    const requestRole   = req.user.role
+    const isDutyAdmin   = requestRole === 'duty_admin'
 
     const logsIndex: Record<string, Record<string, typeof logs[0]>> = {}
     for (const log of logs) {
@@ -216,9 +245,19 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
 
     const rows = enrollments.map(e => {
       const rowLogs = logsIndex[e.enrollment_id] ?? {}
-      const maskedLogs = isDutyAdmin
-        ? Object.fromEntries(Object.entries(rowLogs).map(([d, l]) => [d, { ...l, custom_amount: null }]))
-        : rowLogs
+      const maskedLogs = Object.fromEntries(
+        Object.entries(rowLogs).map(([d, l]) => {
+          const notesInfo = transformLogNotes(l, requestUserId, requestRole)
+          return [d, {
+            ...l,
+            custom_amount:    isDutyAdmin && l.status === 'special' ? null : l.custom_amount,
+            note:             notesInfo.note,
+            attributed_notes: notesInfo.attributed_notes,
+            has_note:         notesInfo.has_note,
+            notes_json:       undefined,
+          }]
+        })
+      )
       return {
         enrollment_id: e.enrollment_id,
         child_id:      e.child_id,

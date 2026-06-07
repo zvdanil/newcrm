@@ -170,6 +170,7 @@ export interface AttendanceLogsTable {
   status:        'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
   custom_amount: ColumnType<string | null, number | string | null, number | string | null>
   note:          string | null
+  notes_json:    ColumnType<unknown, string | object, string | object>
   created_by:    string | null
   created_at:    Generated<Date>
   updated_at:    Generated<Date>
