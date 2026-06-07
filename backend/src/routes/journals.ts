@@ -486,6 +486,7 @@ export async function journalsRoutes(app: FastifyInstance) {
               status,
               custom_amount: null,
               note: null,
+              notes_json: '[]',
               created_by: createdBy,
             })
             .onConflict((oc) =>
