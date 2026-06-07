@@ -1468,7 +1468,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
   })
 
   const txs     = data?.transactions ?? []
-  const summary = data?.summary ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 }
+  const summary = data?.summary ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 }
   const days    = daysInMonth(month)
 
   // Active daily/vacation rates for current month — key: rowKey, value: rate
@@ -1781,8 +1781,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           </div>
 
           {/* Monthly summary */}
-          <div className="grid grid-cols-5 gap-3 pt-2 border-t border-gray-100">
-            <div className="col-span-5 mb-0.5">
+          <div className="grid grid-cols-6 gap-3 pt-2 border-t border-gray-100">
+            <div className="col-span-6 mb-0.5">
               <span className="text-xs text-gray-400 font-medium">Поточний місяць</span>
             </div>
             {[
@@ -1791,6 +1791,11 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
               { label: 'До виплати (net)', value: summary.net, color: 'text-iris-700 font-semibold' },
               { label: 'Виплачено', value: summary.paid, color: 'text-green-700' },
               { label: 'Залишок', value: summary.balance, color: summary.balance > 0 ? 'text-amber-700 font-semibold' : 'text-gray-400' },
+              {
+                label: 'Борг мин. місяців',
+                value: summary.debtPreviousPeriods,
+                color: summary.debtPreviousPeriods > 0 ? 'text-red-700 font-semibold' : 'text-gray-400',
+              },
             ].map(({ label, value, color }) => (
               <div key={label} className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">{label}</p>

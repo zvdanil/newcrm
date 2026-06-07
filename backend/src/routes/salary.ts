@@ -67,7 +67,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .orderBy('st.created_at', 'asc')
         .execute()
 
-      // Summary
+      // Summary for current month
       let totalGross = 0, totalDeduction = 0, totalPaid = 0
       for (const tx of txs) {
         const gross = Number(tx.gross_amount)
@@ -82,9 +82,30 @@ export async function salaryRoutes(app: FastifyInstance) {
       const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
       const balance  = Math.round((totalNet - totalPaid) * 100) / 100
 
+      // Debt from previous periods with waterfall: current month payments cover past debts first
+      const prevTxs = await db
+        .selectFrom('salary_transactions')
+        .where('staff_id',         '=', req.params.id)
+        .where('transaction_date', '<', billingStart)
+        .where('is_deleted',       '=', false)
+        .select(['type', 'gross_amount', 'deduction_pct'])
+        .execute()
+
+      let prevNet = 0
+      for (const tx of prevTxs) {
+        const gross = Number(tx.gross_amount)
+        const ded   = Math.round(gross * Number(tx.deduction_pct) / 100 * 100) / 100
+        if (tx.type === 'PAYMENT') {
+          prevNet -= gross
+        } else {
+          prevNet += (gross - ded)
+        }
+      }
+      const debtPreviousPeriods = Math.max(0, Math.round((prevNet - totalPaid) * 100) / 100)
+
       return {
         transactions: txs,
-        summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance },
+        summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods },
         month,
       }
     }
@@ -485,7 +506,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           ...s,
           rates: staffRates,
           transactions: staffTxs,
-          summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance },
+          summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0 },
         }
       })
 
@@ -513,10 +534,10 @@ export async function salaryRoutes(app: FastifyInstance) {
         .select(['staff_id', 'type', 'gross_amount', 'deduction_pct'])
         .execute()
 
-      const map = new Map<string, { gross: number; deduction: number; net: number; paid: number; balance: number }>()
+      const map = new Map<string, { gross: number; deduction: number; net: number; paid: number; balance: number; debtPreviousPeriods: number }>()
 
       for (const s of staff) {
-        map.set(s.id, { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 })
+        map.set(s.id, { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 })
       }
 
       for (const tx of txs) {
@@ -541,7 +562,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         month,
         rows: staff.map(s => ({
           ...s,
-          summary: map.get(s.id) ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 },
+          summary: map.get(s.id) ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 },
         })),
       }
     }
@@ -730,7 +751,7 @@ export async function salaryRoutes(app: FastifyInstance) {
       const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
       const balance  = Math.round((totalNet - totalPaid) * 100) / 100
 
-      return { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance }
+      return { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0 }
     }
   )
 

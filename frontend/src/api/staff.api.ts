@@ -72,11 +72,12 @@ export interface SalaryTransaction {
 }
 
 export interface SalarySummary {
-  gross:      number
-  deduction:  number
-  net:        number
-  paid:       number
-  balance:    number
+  gross:                 number
+  deduction:             number
+  net:                   number
+  paid:                  number
+  balance:               number
+  debtPreviousPeriods:   number
 }
 
 export interface SalaryMonthResponse {

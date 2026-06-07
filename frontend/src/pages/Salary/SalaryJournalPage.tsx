@@ -74,13 +74,14 @@ export function SalaryJournalPage() {
 
   const totals = filteredRows.reduce(
     (acc, r) => ({
-      gross:     acc.gross     + r.summary.gross,
-      deduction: acc.deduction + r.summary.deduction,
-      net:       acc.net       + r.summary.net,
-      paid:      acc.paid      + r.summary.paid,
-      balance:   acc.balance   + r.summary.balance,
+      gross:               acc.gross               + r.summary.gross,
+      deduction:           acc.deduction           + r.summary.deduction,
+      net:                 acc.net                 + r.summary.net,
+      paid:                acc.paid                + r.summary.paid,
+      balance:             acc.balance             + r.summary.balance,
+      debtPreviousPeriods: acc.debtPreviousPeriods + r.summary.debtPreviousPeriods,
     }),
-    { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0 }
+    { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 }
   )
 
   return (
