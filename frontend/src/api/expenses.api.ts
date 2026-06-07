@@ -45,6 +45,7 @@ export interface ExpenseAdvanceItem {
   amount: string
   staff_id: string | null
   staff_name: string | null
+  category_name: string | null
   accrual_date: string
   remaining_balance: number
 }
@@ -52,6 +53,7 @@ export interface ExpenseAdvanceItem {
 export interface StaffAdvancePool {
   staff_id: string | null
   staff_name: string | null
+  category_name: string | null
   remaining_balance: number
   advances: ExpenseAdvanceItem[]
 }
@@ -196,6 +198,11 @@ export const expensesApi = {
   // Advances
   getAdvances: async (categoryId: string): Promise<StaffAdvancePool[]> => {
     const { data } = await apiClient.get<StaffAdvancePool[]>(`/expenses/advances?category_id=${categoryId}`)
+    return data
+  },
+
+  getAllAdvancePools: async (): Promise<StaffAdvancePool[]> => {
+    const { data } = await apiClient.get<StaffAdvancePool[]>('/expenses/advances')
     return data
   },
 

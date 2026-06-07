@@ -1769,14 +1769,20 @@ export function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transfers'] }),
   })
 
+  const { data: advancePools = [] } = useQuery({
+    queryKey: ['advance-pools-all'],
+    queryFn: () => expensesApi.getAllAdvancePools(),
+    enabled: tab === 'expenses',
+  })
+
   let expenses = expensesData?.data ?? []
   let transfers = transfersData
 
   // Local filtering
   if (filters.account_ids.length > 0) {
     expenses = expenses.filter(e => filters.account_ids.includes(e.account_id))
-    transfers = transfers.filter(t => 
-      filters.account_ids.includes(t.from_account_id) || 
+    transfers = transfers.filter(t =>
+      filters.account_ids.includes(t.from_account_id) ||
       filters.account_ids.includes(t.to_account_id)
     )
   }
@@ -1797,7 +1803,9 @@ export function ExpensesPage() {
     )
   }
 
-  const totalAmount = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
+  const realExpenseTotal  = expenses.filter(e => !e.is_advance && !e.is_advance_return).reduce((sum, e) => sum + Number(e.amount), 0)
+  const advanceIssuedTotal = expenses.filter(e => e.is_advance).reduce((sum, e) => sum + Number(e.amount), 0)
+  const advanceRemainingTotal = advancePools.reduce((sum, p) => sum + p.remaining_balance, 0)
   const totalCount  = expenses.length
 
   const hasFilters = !!(filters.account_ids.length > 0 || filters.category_id || filters.status || filters.from !== firstOfMonth() || filters.to || filters.is_dividend !== undefined || filters.search)
@@ -1821,7 +1829,7 @@ export function ExpensesPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Витрати</h1>
           {tab === 'expenses' && !isLoading && (
-            <p className="text-sm text-gray-500">{totalCount} записів · {totalAmount.toFixed(2)} грн</p>
+            <p className="text-sm text-gray-500">{totalCount} записів · {realExpenseTotal.toFixed(2)} грн</p>
           )}
           {tab === 'salary' && !salaryLoading && (
             <p className="text-sm text-gray-500">{salaryCount} записів · {salaryTotal.toFixed(2)} грн</p>
@@ -2050,10 +2058,36 @@ export function ExpensesPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 text-sm font-medium text-gray-700 border-t border-gray-200">
-                  <td colSpan={3} className="px-4 py-2">Разом</td>
-                  <td className="px-4 py-2 text-right font-mono">{totalAmount.toFixed(2)}</td>
+                  <td colSpan={3} className="px-4 py-2">Реальні витрати</td>
+                  <td className="px-4 py-2 text-right font-mono">{realExpenseTotal.toFixed(2)}</td>
                   <td colSpan={2} />
                 </tr>
+                {advanceIssuedTotal > 0 && (
+                  <tr className="bg-gray-50 text-sm text-gray-600 border-t border-gray-100">
+                    <td colSpan={3} className="px-4 py-1.5">Видано авансів (у цьому періоді)</td>
+                    <td className="px-4 py-1.5 text-right font-mono">{advanceIssuedTotal.toFixed(2)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                )}
+                {advancePools.length > 0 && (
+                  <>
+                    <tr className="bg-amber-50 text-sm font-medium text-amber-800 border-t border-amber-100">
+                      <td colSpan={3} className="px-4 py-1.5">Залишок авансів (всього)</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{advanceRemainingTotal.toFixed(2)}</td>
+                      <td colSpan={2} />
+                    </tr>
+                    {advancePools.map((pool, i) => {
+                      const label = [pool.staff_name, pool.category_name].filter(Boolean).join(' → ') || 'Загальний'
+                      return (
+                        <tr key={i} className="bg-amber-50 text-xs text-amber-700 border-t border-amber-50">
+                          <td colSpan={3} className="px-4 py-1 pl-8 italic">{label}</td>
+                          <td className="px-4 py-1 text-right font-mono">{pool.remaining_balance.toFixed(2)}</td>
+                          <td colSpan={2} />
+                        </tr>
+                      )
+                    })}
+                  </>
+                )}
               </tfoot>
             </table>
           )}

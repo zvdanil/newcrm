@@ -382,22 +382,25 @@ export async function expensesRoutes(app: FastifyInstance) {
 
   // GET /api/expenses/advances?category_id=UUID
   // Returns advance pools grouped by staff_id, with FIFO-ordered individual advances inside.
-  app.get<{ Querystring: { category_id: string } }>(
+  // category_id is optional; when omitted, returns all active pools across all categories.
+  app.get<{ Querystring: { category_id?: string } }>(
     '/advances',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
       const { category_id } = req.query
-      if (!category_id) return reply.status(400).send({ error: 'BadRequest', message: 'category_id є обовʼязковим' })
 
-      const advances = await db
+      let q = db
         .selectFrom('expenses as e')
         .leftJoin('staff as s', 's.id', 'e.staff_id')
-        .select(['e.id', 'e.amount', 'e.staff_id', 's.full_name as staff_name', 'e.accrual_date'])
+        .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
+        .select(['e.id', 'e.amount', 'e.staff_id', 's.full_name as staff_name', 'e.accrual_date', 'c.name as category_name'])
         .where('e.is_advance', '=', true)
-        .where('e.category_id', '=', category_id)
         .where('e.is_deleted', '=', false)
         .orderBy('e.accrual_date', 'asc')
-        .execute()
+
+      if (category_id) q = q.where('e.category_id', '=', category_id)
+
+      const advances = await q.execute()
 
       // Calculate remaining balance per individual advance (backward-compatible: checks both
       // old utilized_advance_id link and new expense_advance_usages table)
@@ -432,18 +435,19 @@ export async function expensesRoutes(app: FastifyInstance) {
         advancesWithBalance.push({ ...adv, remaining_balance: Math.round(remaining * 100) / 100 })
       }
 
-      // Group by staff_id (null = no staff)
+      // Group by staff_id + category_name so advances from different categories stay separate
       const poolMap = new Map<string, {
         staff_id: string | null
         staff_name: string | null
+        category_name: string | null
         remaining_balance: number
         advances: typeof advancesWithBalance
       }>()
 
       for (const adv of advancesWithBalance) {
-        const key = adv.staff_id ?? '__no_staff__'
+        const key = `${adv.staff_id ?? '__no_staff__'}::${adv.category_name ?? '__no_cat__'}`
         if (!poolMap.has(key)) {
-          poolMap.set(key, { staff_id: adv.staff_id, staff_name: adv.staff_name, remaining_balance: 0, advances: [] })
+          poolMap.set(key, { staff_id: adv.staff_id, staff_name: adv.staff_name, category_name: adv.category_name ?? null, remaining_balance: 0, advances: [] })
         }
         const pool = poolMap.get(key)!
         pool.advances.push(adv)
