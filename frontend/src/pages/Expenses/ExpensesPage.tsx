@@ -1117,13 +1117,14 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
 
 // ── Expense Row ────────────────────────────────────────────────────────────
 
-function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh }: {
+function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh, view = 'row' }: {
   expense: Expense
   isOwner: boolean
   isAdmin: boolean
   categories: ExpenseCategory[]
   accounts: { id: string; name: string }[]
   onRefresh: () => void
+  view?: 'row' | 'card'
 }) {
   const qc = useQueryClient()
   const [editing, setEditing]             = useState(false)
@@ -1145,6 +1146,17 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   })
 
   if (editing) {
+    if (view === 'card') {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-iris-200 p-4">
+          <ExpenseForm
+            categories={categories} accounts={accounts} initial={expense}
+            onSave={() => setEditing(false)}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      )
+    }
     return (
       <tr>
         <td colSpan={6} className="px-4 py-2">
@@ -1155,6 +1167,150 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           />
         </td>
       </tr>
+    )
+  }
+
+  if (view === 'card') {
+    return (
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col gap-3 ${expense.is_dividend ? 'border-purple-200 bg-purple-50/30' : ''}`}>
+        <div className="flex justify-between items-start gap-2">
+          <div>
+            <div className="font-medium text-gray-900 text-sm mb-1">{categoryLabel(expense)}</div>
+            <div className="text-xs text-gray-500">{expense.accrual_date.slice(0, 10)} • {expense.account_name}</div>
+          </div>
+          <div className="text-right">
+            <div className="font-mono font-semibold text-gray-900">{fmt(expense.amount)}</div>
+            <div className="mt-1">
+              {expense.status === 'paid' ? (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-100">
+                  {expense.is_instant ? 'миттєво' : `оплачено`}
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-100">
+                  очікує
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {expense.is_dividend && (
+            <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
+              дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
+                ? ` (${Number(expense.dividend_amount).toFixed(2)} ₴)`
+                : ''}
+            </span>
+          )}
+          {expense.is_advance && (
+            <span className="text-[10px] bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">
+              аванс{expense.staff_name ? ` → ${expense.staff_name}` : ''}
+            </span>
+          )}
+          {(expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
+            <span className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
+              з авансу{
+                Number(expense.pool_advance_amount) > 0
+                  ? ` (${Number(expense.pool_advance_amount).toFixed(2)} ₴)`
+                  : expense.utilized_advance_amount
+                    ? ` (${expense.utilized_advance_amount} ₴)`
+                    : ''
+              }
+            </span>
+          )}
+          {expense.is_advance_return && (
+            <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>
+          )}
+        </div>
+
+        {(expense.note || expense.staff_name) && (
+          <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded break-words">
+            {fmtNote(expense.note)}{expense.staff_name ? ` (${expense.staff_name})` : ''}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+          {expense.is_advance && (
+            <button onClick={async () => {
+              const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
+              if (!amountStr) return
+              const amount = parseFloat(amountStr)
+              if (amount > 0) {
+                await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
+                qc.invalidateQueries({ queryKey: ['expenses'] })
+                onRefresh()
+              }
+            }}
+              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
+            >⮌ поверн.
+            </button>
+          )}
+          {expense.status === 'pending' && (isOwner || isAdmin) && (
+            <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
+              disabled={payMutation.isPending}
+              className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 transition-colors">
+              Оплатити
+            </button>
+          )}
+          {isOwner && (
+            expense.is_dividend ? (
+              <button onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
+                disabled={removeDividendMutation.isPending}
+                className="text-xs px-2 py-1 rounded border border-purple-200 transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
+              >₴↑</button>
+            ) : (
+              <button onClick={() => setMarkingDividend(true)}
+                className="text-xs px-2 py-1 rounded border border-gray-200 transition-colors text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+              >₴↑</button>
+            )
+          )}
+          {isOwner && (
+            expense.withdrawal_transfer_id ? (
+              <span className="text-xs text-amber-700 font-medium border border-amber-100 bg-amber-50 px-2 py-1 rounded">
+                ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)}` : ''}
+              </span>
+            ) : (
+              <button onClick={() => setWithdrawing(true)}
+                className="text-xs text-gray-500 border border-gray-200 hover:text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
+              >↗</button>
+            )
+          )}
+          {(isOwner || isAdmin) && (
+            <button onClick={() => setEditing(true)}
+              className="text-xs text-gray-500 border border-gray-200 hover:text-iris-600 hover:border-iris-200 hover:bg-iris-50 px-2 py-1 rounded transition-colors">ред.</button>
+          )}
+          {(isOwner || isAdmin) && (
+            <button onClick={() => setShowHistory(true)}
+              className="text-xs text-gray-400 border border-gray-200 hover:text-gray-600 hover:bg-gray-50 px-2 py-1 rounded transition-colors" title="Історія змін">
+              📋
+            </button>
+          )}
+          {(isOwner || isAdmin) && (
+            <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
+              disabled={deleteMutation.isPending}
+              className="text-xs text-red-400 border border-red-100 hover:text-red-600 hover:bg-red-50 hover:border-red-200 px-2 py-1 rounded ml-auto transition-colors">✕</button>
+          )}
+        </div>
+
+        {withdrawing && (
+          <WithdrawalDialog
+            expense={expense}
+            accounts={accounts}
+            onClose={() => setWithdrawing(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+        {markingDividend && (
+          <DividendMarkDialog
+            expense={expense}
+            onClose={() => setMarkingDividend(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+        {showHistory && (
+          <ExpenseHistoryPopup expenseId={expense.id} onClose={() => setShowHistory(false)} />
+        )}
+      </div>
     )
   }
 
@@ -2038,58 +2194,96 @@ export function ExpensesPage() {
           ) : expenses.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">Витрат не знайдено</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Дата</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Категорія</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Рахунок</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Сума</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Статус</th>
-                  <th className="px-4 py-3 w-44" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
+            <>
+              <div className="md:hidden flex flex-col gap-3 p-3 bg-gray-50/50">
                 {expenses.map(e => (
                   <ExpenseRow key={e.id} expense={e} isOwner={isOwner} isAdmin={isAdmin}
-                    categories={categories} accounts={accounts}
+                    categories={categories} accounts={accounts} view="card"
                     onRefresh={() => qc.invalidateQueries({ queryKey: ['expenses'] })} />
                 ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-gray-50 text-sm font-medium text-gray-700 border-t border-gray-200">
-                  <td colSpan={3} className="px-4 py-2">Реальні витрати</td>
-                  <td className="px-4 py-2 text-right font-mono">{realExpenseTotal.toFixed(2)}</td>
-                  <td colSpan={2} />
-                </tr>
-                {advanceIssuedTotal > 0 && (
-                  <tr className="bg-gray-50 text-sm text-gray-600 border-t border-gray-100">
-                    <td colSpan={3} className="px-4 py-1.5">Видано авансів (у цьому періоді)</td>
-                    <td className="px-4 py-1.5 text-right font-mono">{advanceIssuedTotal.toFixed(2)}</td>
+              </div>
+              <table className="hidden md:table w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 whitespace-nowrap">Дата</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Категорія</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Рахунок</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600">Сума</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Статус</th>
+                    <th className="px-4 py-3 w-44" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {expenses.map(e => (
+                    <ExpenseRow key={e.id} expense={e} isOwner={isOwner} isAdmin={isAdmin}
+                      categories={categories} accounts={accounts}
+                      onRefresh={() => qc.invalidateQueries({ queryKey: ['expenses'] })} />
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50 text-sm font-medium text-gray-700 border-t border-gray-200">
+                    <td colSpan={3} className="px-4 py-2">Реальні витрати</td>
+                    <td className="px-4 py-2 text-right font-mono">{realExpenseTotal.toFixed(2)}</td>
                     <td colSpan={2} />
                   </tr>
-                )}
-                {advancePools.length > 0 && (
-                  <>
-                    <tr className="bg-amber-50 text-sm font-medium text-amber-800 border-t border-amber-100">
-                      <td colSpan={3} className="px-4 py-1.5">Залишок авансів (всього)</td>
-                      <td className="px-4 py-1.5 text-right font-mono">{advanceRemainingTotal.toFixed(2)}</td>
+                  {advanceIssuedTotal > 0 && (
+                    <tr className="bg-gray-50 text-sm text-gray-600 border-t border-gray-100">
+                      <td colSpan={3} className="px-4 py-1.5">Видано авансів (у цьому періоді)</td>
+                      <td className="px-4 py-1.5 text-right font-mono">{advanceIssuedTotal.toFixed(2)}</td>
                       <td colSpan={2} />
                     </tr>
+                  )}
+                  {advancePools.length > 0 && (
+                    <>
+                      <tr className="bg-amber-50 text-sm font-medium text-amber-800 border-t border-amber-100">
+                        <td colSpan={3} className="px-4 py-1.5">Залишок авансів (всього)</td>
+                        <td className="px-4 py-1.5 text-right font-mono">{advanceRemainingTotal.toFixed(2)}</td>
+                        <td colSpan={2} />
+                      </tr>
+                      {advancePools.map((pool, i) => {
+                        const label = [pool.staff_name, pool.category_name].filter(Boolean).join(' → ') || 'Загальний'
+                        return (
+                          <tr key={i} className="bg-amber-50 text-xs text-amber-700 border-t border-amber-50">
+                            <td colSpan={3} className="px-4 py-1 pl-8 italic">{label}</td>
+                            <td className="px-4 py-1 text-right font-mono">{pool.remaining_balance.toFixed(2)}</td>
+                            <td colSpan={2} />
+                          </tr>
+                        )
+                      })}
+                    </>
+                  )}
+                </tfoot>
+              </table>
+              <div className="md:hidden bg-gray-50 border-t border-gray-200 p-4 space-y-2 text-sm">
+                <div className="flex justify-between font-medium text-gray-700">
+                  <span>Реальні витрати</span>
+                  <span className="font-mono">{realExpenseTotal.toFixed(2)}</span>
+                </div>
+                {advanceIssuedTotal > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Видано авансів (у цьому періоді)</span>
+                    <span className="font-mono">{advanceIssuedTotal.toFixed(2)}</span>
+                  </div>
+                )}
+                {advancePools.length > 0 && (
+                  <div className="pt-2 border-t border-amber-100 mt-2 space-y-1">
+                    <div className="flex justify-between font-medium text-amber-800">
+                      <span>Залишок авансів (всього)</span>
+                      <span className="font-mono">{advanceRemainingTotal.toFixed(2)}</span>
+                    </div>
                     {advancePools.map((pool, i) => {
                       const label = [pool.staff_name, pool.category_name].filter(Boolean).join(' → ') || 'Загальний'
                       return (
-                        <tr key={i} className="bg-amber-50 text-xs text-amber-700 border-t border-amber-50">
-                          <td colSpan={3} className="px-4 py-1 pl-8 italic">{label}</td>
-                          <td className="px-4 py-1 text-right font-mono">{pool.remaining_balance.toFixed(2)}</td>
-                          <td colSpan={2} />
-                        </tr>
+                        <div key={i} className="flex justify-between text-xs text-amber-700 pl-4">
+                          <span className="italic">{label}</span>
+                          <span className="font-mono">{pool.remaining_balance.toFixed(2)}</span>
+                        </div>
                       )
                     })}
-                  </>
+                  </div>
                 )}
-              </tfoot>
-            </table>
+              </div>
+            </>
           )}
         </div>
       )}
