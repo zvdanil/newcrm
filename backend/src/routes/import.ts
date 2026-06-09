@@ -224,8 +224,13 @@ type ProfileRow = { child_id: string; full_name: string; family_id: string | nul
 function profilesToCandidates(profiles: ProfileRow[]): CandidateFamily[] {
   return deduplicateFamilies(
     profiles.map((p) => ({
+      /* --- FAMILY LOGIC DISABLED ---
       family_id: p.family_id,
       child_id: p.family_id ? null : p.child_id,
+      family_name: p.full_name,
+      --------------------------------- */
+      family_id: null,
+      child_id: p.child_id,
       family_name: p.full_name,
       parent_name: p.full_name,
     })),
@@ -279,7 +284,21 @@ async function matchRow(
   if (row.edrpou) {
     const matched = allParents.filter((p) => p.edrpou === row.edrpou)
     if (matched.length > 0) {
-      const families = deduplicateFamilies(matched.flatMap((p) => parentFamilies.get(p.id) ?? []))
+      let families = deduplicateFamilies(matched.flatMap((p) => parentFamilies.get(p.id) ?? []))
+      
+      // If multiple children matched, narrow down by description/counterparty name
+      if (families.length > 1) {
+        const searchTexts = [row.description.trim(), row.counterparty_name.trim()].filter(Boolean)
+        if (searchTexts.length > 0) {
+          const narrowed = families.filter((f) => {
+            const childTokens = tokens(f.family_name)
+            if (childTokens.length === 0) return false
+            return searchTexts.some((text) => containsAllTokens(text, childTokens))
+          })
+          if (narrowed.length === 1) families = narrowed
+        }
+      }
+
       if (families.length > 0) return { method: 'edrpou', families }
     }
   }
@@ -287,7 +306,21 @@ async function matchRow(
   if (row.iban) {
     const matched = allParents.filter((p) => p.iban === row.iban)
     if (matched.length > 0) {
-      const families = deduplicateFamilies(matched.flatMap((p) => parentFamilies.get(p.id) ?? []))
+      let families = deduplicateFamilies(matched.flatMap((p) => parentFamilies.get(p.id) ?? []))
+      
+      // If multiple children matched, narrow down by description/counterparty name
+      if (families.length > 1) {
+        const searchTexts = [row.description.trim(), row.counterparty_name.trim()].filter(Boolean)
+        if (searchTexts.length > 0) {
+          const narrowed = families.filter((f) => {
+            const childTokens = tokens(f.family_name)
+            if (childTokens.length === 0) return false
+            return searchTexts.some((text) => containsAllTokens(text, childTokens))
+          })
+          if (narrowed.length === 1) families = narrowed
+        }
+      }
+
       if (families.length > 0) return { method: 'iban', families }
     }
   }
@@ -357,6 +390,7 @@ function collectFuzzyCandidates(
     const matchesName = containsAllTokens(c.full_name, needle)
     const matchesNote = c.note ? containsAllTokens(c.note, needle) : false
     if (matchesName || matchesNote) {
+      /* --- FAMILY LOGIC DISABLED ---
       if (c.family_id) {
         const fam = childFamilies.get(c.family_id)
         if (fam && !matchedKeys.has(fam.family_id)) {
@@ -370,9 +404,18 @@ function collectFuzzyCandidates(
           candidates.push({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name })
         }
       }
+      --------------------------------- */
+      // --- INDIVIDUAL CHILD LOGIC INSTEAD ---
+      const childKey = `child:${c.id}`
+      if (!matchedKeys.has(childKey)) {
+        matchedKeys.add(childKey)
+        candidates.push({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name })
+      }
+      // ----------------------------------------
     }
   }
 
+  /* --- FAMILY LOGIC DISABLED ---
   for (const f of allFamilies) {
     const familyTokens = tokens(f.name)
     if (familyTokens.length > 0 && containsAllTokens(searchText, familyTokens)) {
@@ -382,6 +425,7 @@ function collectFuzzyCandidates(
       }
     }
   }
+  --------------------------------- */
 
   const partialMap = new Map<string, { candidate: CandidateFamily; score: number }>()
 
@@ -403,12 +447,17 @@ function collectFuzzyCandidates(
     const fields = [c.full_name, c.note].filter((f): f is string => f !== null)
     const score = Math.max(0, ...fields.map((f) => partialMatchScore(f, needle)))
     if (score > 0) {
+      /* --- FAMILY LOGIC DISABLED ---
       if (c.family_id) {
         const fam = childFamilies.get(c.family_id)
         if (fam) tryPartial({ family_id: fam.family_id, child_id: null, family_name: fam.family_name, parent_name: c.full_name }, score)
       } else {
         tryPartial({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name }, score)
       }
+      --------------------------------- */
+      // --- INDIVIDUAL CHILD LOGIC INSTEAD ---
+      tryPartial({ family_id: null, child_id: c.id, family_name: c.full_name, parent_name: c.full_name }, score)
+      // ----------------------------------------
     }
   }
 
@@ -499,6 +548,7 @@ export async function importRoutes(app: FastifyInstance) {
         .execute()
 
       // Load family memberships for all parents
+      /* --- FAMILY LOGIC DISABLED ---
       const allMemberships = await db
         .selectFrom('family_members as fm')
         .innerJoin('families as f', 'f.id', 'fm.family_id')
@@ -512,6 +562,23 @@ export async function importRoutes(app: FastifyInstance) {
         list.push({ family_id: m.family_id, child_id: null, family_name: m.family_name, parent_name: m.parent_name })
         parentFamilies.set(m.parent_id, list)
       }
+      --------------------------------- */
+      // --- INDIVIDUAL CHILD LOGIC INSTEAD ---
+      const allMemberships = await db
+        .selectFrom('family_members as fm')
+        .innerJoin('children as c', 'c.family_id', 'fm.family_id')
+        .innerJoin('parents as p', 'p.id', 'fm.parent_id')
+        .where('c.is_active', '=', true)
+        .select(['fm.parent_id', 'c.id as child_id', 'c.full_name as child_name', 'p.full_name as parent_name'])
+        .execute()
+
+      const parentFamilies = new Map<string, CandidateFamily[]>()
+      for (const m of allMemberships) {
+        const list = parentFamilies.get(m.parent_id) ?? []
+        list.push({ family_id: null, child_id: m.child_id, family_name: m.child_name, parent_name: m.parent_name })
+        parentFamilies.set(m.parent_id, list)
+      }
+      // ----------------------------------------
 
       // Also include parents linked via child_parents (direct child-parent link, newer system)
       const childParentLinks = await db
@@ -524,6 +591,7 @@ export async function importRoutes(app: FastifyInstance) {
 
       for (const link of childParentLinks) {
         const list = parentFamilies.get(link.parent_id) ?? []
+        /* --- FAMILY LOGIC DISABLED ---
         const entryKey = link.family_id ?? `child:${link.child_id}`
         const alreadyPresent = list.some((e) => (e.family_id ?? `child:${e.child_id}`) === entryKey)
         if (!alreadyPresent) {
@@ -534,6 +602,19 @@ export async function importRoutes(app: FastifyInstance) {
             parent_name: link.parent_name,
           })
         }
+        --------------------------------- */
+        // --- INDIVIDUAL CHILD LOGIC INSTEAD ---
+        const entryKey = `child:${link.child_id}`
+        const alreadyPresent = list.some((e) => (e.family_id ?? `child:${e.child_id}`) === entryKey)
+        if (!alreadyPresent) {
+          list.push({
+            family_id: null,
+            child_id: link.child_id,
+            family_name: link.child_name,
+            parent_name: link.parent_name,
+          })
+        }
+        // ----------------------------------------
         parentFamilies.set(link.parent_id, list)
       }
 
@@ -773,12 +854,14 @@ export async function importRoutes(app: FastifyInstance) {
 
           } else if (row.family_id) {
             // Family waterfall payment
+            /* 
             const debts = await getFamilyDebts(row.family_id, account_id)
             const waterfall = computeWaterfall(debts, row.amount, undefined)
+            */
             const dateStr = row.date
 
-            if (waterfall.allocations.length === 0) {
-              // No debts — create advance for first active child
+            // if (waterfall.allocations.length === 0) {
+              // No debts — create advance for first active child (temporarily used for ALL family payments)
               const firstChild = await db
                 .selectFrom('children')
                 .select(['id', 'full_name'])
@@ -817,6 +900,7 @@ export async function importRoutes(app: FastifyInstance) {
                 family_name: family?.name ?? '',
                 allocations: [{ child_id: firstChild.id, child_name: firstChild.full_name, amount: row.amount, tx_id }],
               })
+            /* 
             } else {
               const rowAllocations: AllocationEntry[] = []
               const profiledChildren = new Set<string>()
@@ -879,6 +963,7 @@ export async function importRoutes(app: FastifyInstance) {
                 allocations: rowAllocations,
               })
             }
+            */
 
             const lastAlloc = allocationsOut[allocationsOut.length - 1]?.allocations[0]
             if (lastAlloc) {
