@@ -11,6 +11,8 @@ export interface EquityParticipant {
 export interface DividendSettings {
   id: number
   default_tax_pct: string | number
+  initial_skew_amount: string | number
+  initial_skew_participant_id: string | null
 }
 
 export interface LedgerParticipant extends EquityParticipant {
@@ -79,7 +81,7 @@ export const dividendsApi = {
     return data
   },
 
-  updateSettings: async (payload: { default_tax_pct: number }) => {
+  updateSettings: async (payload: { default_tax_pct?: number; initial_skew_amount?: number; initial_skew_participant_id?: string | null }) => {
     const { data } = await apiClient.put<DividendSettings>('/dividends/settings', payload)
     return data
   },

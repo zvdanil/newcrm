@@ -84,25 +84,48 @@ export async function dividendsRoutes(app: FastifyInstance) {
   app.get('/settings', { preHandler: requireRole('owner') }, async () => {
     let settings = await db.selectFrom('dividend_settings').selectAll().where('id', '=', 1).executeTakeFirst()
     if (!settings) {
-      settings = await db.insertInto('dividend_settings').values({ id: 1, default_tax_pct: 0 }).returningAll().executeTakeFirstOrThrow()
+      settings = await db.insertInto('dividend_settings').values({ id: 1, default_tax_pct: 0, initial_skew_amount: 0, initial_skew_participant_id: null }).returningAll().executeTakeFirstOrThrow()
     }
     return settings
   })
 
-  app.put<{ Body: { default_tax_pct: number } }>(
+  app.put<{ Body: { default_tax_pct?: number; initial_skew_amount?: number; initial_skew_participant_id?: string | null } }>(
     '/settings',
     { preHandler: requireRole('owner') },
     async (req, reply) => {
-      if (req.body.default_tax_pct < 0 || req.body.default_tax_pct > 100) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Відсоток податку повинен бути від 0 до 100' })
+      const { default_tax_pct, initial_skew_amount, initial_skew_participant_id } = req.body
+      const updates: any = {}
+
+      if (default_tax_pct !== undefined) {
+        if (default_tax_pct < 0 || default_tax_pct > 100) {
+          return reply.status(400).send({ error: 'BadRequest', message: 'Відсоток податку повинен бути від 0 до 100' })
+        }
+        updates.default_tax_pct = default_tax_pct
       }
+
+      if (initial_skew_amount !== undefined) {
+        if (initial_skew_amount < 0) {
+          return reply.status(400).send({ error: 'BadRequest', message: 'Сума перекосу не може бути відʼємною' })
+        }
+        updates.initial_skew_amount = initial_skew_amount
+      }
+
+      if (initial_skew_participant_id !== undefined) {
+        updates.initial_skew_participant_id = initial_skew_participant_id || null
+      }
+
       const updated = await db.updateTable('dividend_settings')
-        .set({ default_tax_pct: req.body.default_tax_pct })
+        .set(updates)
         .where('id', '=', 1)
         .returningAll()
         .executeTakeFirst()
       if (!updated) {
-        return db.insertInto('dividend_settings').values({ id: 1, default_tax_pct: req.body.default_tax_pct }).returningAll().executeTakeFirstOrThrow()
+        return db.insertInto('dividend_settings').values({
+          id: 1,
+          default_tax_pct: default_tax_pct ?? 0,
+          initial_skew_amount: initial_skew_amount ?? 0,
+          initial_skew_participant_id: initial_skew_participant_id || null
+        }).returningAll().executeTakeFirstOrThrow()
       }
       return updated
     }
@@ -128,15 +151,36 @@ export async function dividendsRoutes(app: FastifyInstance) {
     if (to) payoutsQuery = payoutsQuery.where('date', '<=', to as any)
     const payouts = await payoutsQuery.groupBy('participant_id').execute()
 
+    const settings = await db.selectFrom('dividend_settings').selectAll().where('id', '=', 1).executeTakeFirst()
+    const initialSkewAmount = settings ? Number(settings.initial_skew_amount) : 0
+    const initialSkewFavoredId = settings ? settings.initial_skew_participant_id : null
+    const favoredParticipant = participants.find(p => p.id === initialSkewFavoredId)
+    const favShare = favoredParticipant ? Number(favoredParticipant.share_pct) : 0
+    const restShareSum = 100 - favShare
+
     let totalNet = 0
     const participantStats = participants.map(p => {
       const actualNet = Number(payouts.find(po => po.participant_id === p.id)?.actual_net ?? 0)
-      totalNet += actualNet
+      
+      let initialSkew = 0
+      if (initialSkewAmount > 0 && favoredParticipant) {
+        if (p.id === initialSkewFavoredId) {
+          initialSkew = initialSkewAmount
+        } else if (restShareSum > 0) {
+          initialSkew = -initialSkewAmount * (Number(p.share_pct) / restShareSum)
+        }
+      }
+
+      const adjustedNet = actualNet + initialSkew
+      totalNet += adjustedNet
+
       return {
         id: p.id,
         name: p.name,
         share_pct: Number(p.share_pct),
-        actual_net: actualNet,
+        actual_net: adjustedNet,
+        raw_actual_net: actualNet,
+        initial_skew: initialSkew,
       }
     })
 

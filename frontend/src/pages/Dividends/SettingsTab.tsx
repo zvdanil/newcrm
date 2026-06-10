@@ -23,6 +23,10 @@ export function SettingsTab() {
   const [taxPct, setTaxPct] = useState('')
   const [isEditingTax, setIsEditingTax] = useState(false)
 
+  const [skewAmount, setSkewAmount] = useState('')
+  const [skewFavoredId, setSkewFavoredId] = useState('')
+  const [isEditingSkew, setIsEditingSkew] = useState(false)
+
   const addMut = useMutation({
     mutationFn: dividendsApi.createParticipant,
     onSuccess: () => {
@@ -50,6 +54,7 @@ export function SettingsTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dividends'] })
       setIsEditingTax(false)
+      setIsEditingSkew(false)
     }
   })
 
@@ -100,6 +105,83 @@ export function SettingsTab() {
                   onClick={() => {
                     setTaxPct(String(settings?.default_tax_pct || 0))
                     setIsEditingTax(true)
+                  }}
+                  className="ml-4 text-iris-600 hover:text-iris-700 text-sm font-medium"
+                >
+                  Змінити
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 flex items-center justify-between mt-4">
+          <div>
+            <div className="font-medium text-gray-900">Початковий перекіс дивідендів</div>
+            <div className="text-sm text-gray-500">Застосовується при перенесенні даних з іншої системи для коригування балансу.</div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {isEditingSkew ? (
+              <>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Сума"
+                    className="w-32 px-3 py-1.5 rounded border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-iris-500/20 focus:border-iris-500"
+                    value={skewAmount}
+                    onChange={e => setSkewAmount(e.target.value)}
+                  />
+                  <span className="absolute right-3 top-2 text-gray-400 text-sm">грн</span>
+                </div>
+                <select
+                  className="px-3 py-1.5 rounded border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-iris-500/20 focus:border-iris-500"
+                  value={skewFavoredId}
+                  onChange={e => setSkewFavoredId(e.target.value)}
+                >
+                  <option value="">-- На чию користь --</option>
+                  {participants.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => updateSettingsMut.mutate({
+                    initial_skew_amount: Number(skewAmount) || 0,
+                    initial_skew_participant_id: skewFavoredId || null
+                  })}
+                  className="px-3 py-1.5 bg-gray-900 text-white rounded font-medium text-sm hover:bg-gray-800"
+                >
+                  Зберегти
+                </button>
+                <button
+                  onClick={() => setIsEditingSkew(false)}
+                  className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded font-medium text-sm hover:bg-gray-300"
+                >
+                  Скасувати
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-right">
+                  {Number(settings?.initial_skew_amount) > 0 && settings?.initial_skew_participant_id ? (
+                    <>
+                      <div className="font-semibold text-lg">{Number(settings.initial_skew_amount).toLocaleString('uk-UA')} ₴</div>
+                      <div className="text-xs text-gray-500">
+                        на користь: {participants.find((p: any) => p.id === settings.initial_skew_participant_id)?.name || 'Невідомо'}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-gray-500 text-sm">Не налаштовано</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setSkewAmount(String(settings?.initial_skew_amount || 0))
+                    setSkewFavoredId(settings?.initial_skew_participant_id || '')
+                    setIsEditingSkew(true)
                   }}
                   className="ml-4 text-iris-600 hover:text-iris-700 text-sm font-medium"
                 >

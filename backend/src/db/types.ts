@@ -635,6 +635,8 @@ export interface EquityParticipantsTable {
 export interface DividendSettingsTable {
   id:              Generated<number>
   default_tax_pct: ColumnType<string, number | string, number | string>
+  initial_skew_amount: ColumnType<string, number | string, number | string>
+  initial_skew_participant_id: string | null
 }
 
 export interface DividendPayoutsTable {
