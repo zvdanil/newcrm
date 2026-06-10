@@ -1793,17 +1793,26 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
               { label: 'Утримання', value: -summary.deduction, color: 'text-red-600' },
               { label: 'До виплати (net)', value: summary.net, color: 'text-iris-700 font-semibold' },
               { label: 'Виплачено', value: summary.paid, color: 'text-green-700' },
-              { label: 'Залишок', value: summary.balance, color: summary.balance > 0 ? 'text-amber-700 font-semibold' : 'text-gray-400' },
+              {
+                label: summary.balance > 0 ? 'Борг у цьому місяці' : summary.balance < 0 ? 'Переплата у місяці' : 'Залишок',
+                value: summary.balance,
+                color: summary.balance > 0
+                  ? 'text-red-600 font-semibold'
+                  : summary.balance < 0
+                    ? 'text-green-700 font-semibold'
+                    : 'text-gray-400',
+                displayValue: summary.balance < 0 ? fmt(Math.abs(summary.balance)) : undefined,
+              },
               {
                 label: 'Борг мин. місяців',
                 value: summary.debtPreviousPeriods,
                 color: summary.debtPreviousPeriods > 0 ? 'text-red-700 font-semibold' : 'text-gray-400',
               },
-            ].map(({ label, value, color }) => (
+            ].map(({ label, value, color, displayValue }) => (
               <div key={label} className="text-center">
                 <p className="text-xs text-gray-500 mb-0.5">{label}</p>
                 <p className={`text-sm font-mono ${color}`}>
-                  {value < 0 ? '−' : ''}{fmt(Math.abs(value))}
+                  {displayValue !== undefined ? displayValue : `${value < 0 ? '−' : ''}${fmt(Math.abs(value))}`}
                 </p>
               </div>
             ))}
