@@ -1821,19 +1821,20 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                 { label: 'До виплати (net)', value: totalSummary.net, color: 'text-iris-700 font-semibold' },
                 { label: 'Виплачено', value: totalSummary.paid, color: 'text-green-700' },
                 {
-                  label: 'Поточний борг',
+                  label: totalSummary.balance > 0 ? 'Поточний борг' : totalSummary.balance < 0 ? 'Поточна переплата' : 'Поточний борг',
                   value: totalSummary.balance,
                   color: totalSummary.balance > 0
-                    ? 'text-amber-700 font-bold'
+                    ? 'text-red-600 font-bold'
                     : totalSummary.balance < 0
-                      ? 'text-red-600 font-bold'
+                      ? 'text-green-700 font-bold'
                       : 'text-gray-400',
+                  displayValue: totalSummary.balance < 0 ? fmt(Math.abs(totalSummary.balance)) : undefined,
                 },
-              ].map(({ label, value, color }) => (
+              ].map(({ label, value, color, displayValue }) => (
                 <div key={label} className="text-center">
                   <p className="text-xs text-gray-400 mb-0.5">{label}</p>
                   <p className={`text-sm font-mono ${color}`}>
-                    {value < 0 ? '−' : ''}{fmt(Math.abs(value))}
+                    {displayValue !== undefined ? displayValue : `${value < 0 ? '−' : ''}${fmt(Math.abs(value))}`}
                   </p>
                 </div>
               ))}
