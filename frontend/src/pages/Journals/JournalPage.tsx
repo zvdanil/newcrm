@@ -8,6 +8,13 @@ import type { AttendanceStatus, JournalRow, AttendanceLog, AttributedNote } from
 
 type Mode = 'day' | 'week' | 'month'
 
+const MODE_LABEL: Record<Mode, string> = {
+  day: 'ДЕНЬ',
+  week: 'ТИЖДЕНЬ',
+  month: 'МІСЯЦЬ',
+}
+
+
 // ─── Утиліти дат ──────────────────────────────────────────────────────────────
 
 function toStr(d: Date) {
@@ -437,6 +444,24 @@ export function JournalPage() {
     return totals
   }, [dates, rows])
 
+  const rowTotals = useMemo(() => {
+    const totals: Record<string, { present: number, excused: number, unexcused: number }> = {}
+    rows.forEach(r => {
+      let present = 0
+      let excused = 0
+      let unexcused = 0
+      dates.forEach(d => {
+        const log = r.logs[d]
+        if (!log) return
+        if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
+        else if (log.status === 'absent_excused') excused++
+        else if (log.status === 'absent_unexcused') unexcused++
+      })
+      totals[r.enrollment_id] = { present, excused, unexcused }
+    })
+    return totals
+  }, [dates, rows])
+
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
 
   return (
@@ -459,7 +484,7 @@ export function JournalPage() {
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
               className={`px-3 py-1.5 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-500'}`}>
-              {m.toUpperCase()}
+              {MODE_LABEL[m]}
             </button>
           ))}
         </div>
@@ -505,16 +530,17 @@ export function JournalPage() {
                   </th>
                 )
               })}
+              <th className="bg-gray-50 text-center px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[45px]">Разом</th>
             </tr>
             <tr className="bg-white">
-              <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[8px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+              <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[11px] font-black text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
               {dates.map(d => {
                 const t = columnTotals[d]
                 const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
                 const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
                 const baseBg = isWeekend ? 'bg-amber-50/50' : ''
                 return (
-                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[8px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                  <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[11px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
                     <div className="flex flex-col gap-0 items-center font-black leading-none">
                       {t.present > 0 && <span className="text-green-500">{t.present}</span>}
                       {t.excused > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -523,6 +549,7 @@ export function JournalPage() {
                   </th>
                 )
               })}
+              <th className="bg-white border-b border-gray-200" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -562,6 +589,7 @@ export function JournalPage() {
                          </td>
                        )
                      })}
+                     <td className="border-b border-gray-200 bg-inherit" />
                    </tr>
                    <tr className="bg-gray-50/30">
                      <td className="sticky left-0 z-10 px-3 py-1 font-black text-gray-400 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
@@ -585,6 +613,7 @@ export function JournalPage() {
                          <td key={`additional-${d}`} className={`border-r border-b border-gray-200 min-w-[32px] ${isWeekend ? 'bg-amber-50/20' : ''}`} />
                        )
                      })}
+                     <td className="border-b border-gray-200 bg-inherit" />
                    </tr>
                  </>
                )}
@@ -606,6 +635,7 @@ export function JournalPage() {
                    {dates.map(d => (
                      <td key={`teacher-${d}`} className="border-r border-b border-gray-200 min-w-[32px]" />
                    ))}
+                   <td className="border-b border-gray-200 bg-inherit" />
                  </tr>
                )}
 
@@ -613,7 +643,7 @@ export function JournalPage() {
                 <React.Fragment key={group.groupName || 'all'}>
                   {group.groupName && (
                     <tr className="bg-gray-100/30">
-                      <td colSpan={dates.length + 1} className="sticky left-0 z-10 px-3 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-200">
+                      <td colSpan={dates.length + 2} className="sticky left-0 z-10 px-3 py-1 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-inherit border-y border-gray-200">
                         {group.groupName}
                       </td>
                     </tr>
@@ -670,6 +700,18 @@ export function JournalPage() {
                             </td>
                           )
                         })}
+                        {(() => {
+                          const t = rowTotals[row.enrollment_id] ?? { present: 0, excused: 0, unexcused: 0 }
+                          return (
+                            <td className="px-1 py-0.5 text-center border-r border-b border-gray-200 min-w-[45px] transition-colors">
+                              <div className="flex flex-col items-center leading-none text-[11px] font-bold">
+                                {t.present   > 0 && <span className="text-green-600">{t.present}</span>}
+                                {t.excused   > 0 && <span className="text-amber-600">{t.excused}</span>}
+                                {t.unexcused > 0 && <span className="text-red-600">{t.unexcused}</span>}
+                              </div>
+                            </td>
+                          )
+                        })()}
                       </tr>
                     )
                   })}

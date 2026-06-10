@@ -8,6 +8,13 @@ import type { AttendanceStatus, AttributedNote } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
 
+const MODE_LABEL: Record<Mode, string> = {
+  day: 'ДЕНЬ',
+  week: 'ТИЖДЕНЬ',
+  month: 'МІСЯЦЬ',
+}
+
+
 // ─── Date utils ───────────────────────────────────────────────────────────────
 
 function toStr(d: Date) {
@@ -407,7 +414,7 @@ export function MergedJournalPage() {
           {(['day', 'week', 'month'] as Mode[]).map((m) => (
             <button key={m} onClick={() => setMode(m)}
               className={`px-3 py-1.5 rounded-lg transition-all ${mode === m ? 'bg-white text-iris-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
-              {m.toUpperCase()}
+              {MODE_LABEL[m]}
             </button>
           ))}
         </div>
