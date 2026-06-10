@@ -499,7 +499,7 @@ export function MergedJournalPage() {
               </tr>
               {/* Підсумки row */}
               <tr className="bg-white">
-                <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[9px] text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
+                <th className="sticky left-0 z-40 bg-white border-b border-gray-200 text-[11px] text-gray-300 text-right pr-3 uppercase py-0.5">Підсумки:</th>
                 {hasActCol && <th className="bg-white border-b border-gray-200" />}
                 {dates.map(d => {
                   const t = columnTotals[d]
@@ -507,7 +507,7 @@ export function MergedJournalPage() {
                   const hoverBg = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
                   const baseBg  = isWeekend ? 'bg-amber-50/50' : ''
                   return (
-                    <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[9px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                    <th key={`total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[11px] min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
                       <div className="flex flex-col items-center leading-none">
                         {t.present   > 0 && <span className="text-green-500">{t.present}</span>}
                         {t.excused   > 0 && <span className="text-amber-500">{t.excused}</span>}
@@ -595,7 +595,7 @@ export function MergedJournalPage() {
                           const t = rowTotals[row.enrollment_id] ?? { present: 0, excused: 0, unexcused: 0 }
                           return (
                             <td className="px-1 py-0.5 text-center border-r border-b border-gray-200 min-w-[45px] transition-colors">
-                              <div className="flex flex-col items-center leading-none text-[9px] font-bold">
+                              <div className="flex flex-col items-center leading-none text-[11px] font-bold">
                                 {t.present   > 0 && <span className="text-green-600">{t.present}</span>}
                                 {t.excused   > 0 && <span className="text-amber-600">{t.excused}</span>}
                                 {t.unexcused > 0 && <span className="text-red-600">{t.unexcused}</span>}
@@ -609,13 +609,13 @@ export function MergedJournalPage() {
                   {/* Group subtotals row */}
                   {groupMode === 'group' && group.groupName && (
                     <tr className="bg-gray-50/60">
-                      <td className="sticky left-0 z-10 bg-gray-50/60 border-b border-gray-200 text-[9px] text-gray-300 text-right pr-3 py-0.5">підсумок:</td>
+                      <td className="sticky left-0 z-10 bg-gray-50/60 border-b border-gray-200 text-[11px] text-gray-300 text-right pr-3 py-0.5">підсумок:</td>
                       {hasActCol && <td className="border-b border-gray-200" />}
                       {dates.map(d => {
                         const t = groupColumnTotals[group.groupName!]?.[d] ?? { present: 0, excused: 0, unexcused: 0 }
                         const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
                         return (
-                          <td key={`grp-total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[9px] min-w-[32px] ${isWeekend ? 'bg-amber-50/30' : ''}`}>
+                          <td key={`grp-total-${d}`} className={`px-0.5 py-0.5 border-b border-gray-200 text-[11px] min-w-[32px] ${isWeekend ? 'bg-amber-50/30' : ''}`}>
                             <div className="flex flex-col items-center leading-none">
                               {t.present   > 0 && <span className="text-green-500">{t.present}</span>}
                               {t.excused   > 0 && <span className="text-amber-500">{t.excused}</span>}
