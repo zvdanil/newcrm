@@ -293,7 +293,7 @@ export function MergedJournalPage() {
   const dates      = data?.dates ?? []
   const allRows    = data?.rows ?? []
   const hasActCol  = activities.length > 1
-  const totalCols  = 1 + (hasActCol ? 1 : 0) + dates.length
+  const totalCols  = 1 + (hasActCol ? 1 : 0) + dates.length + 1
 
   const activityColorMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -336,6 +336,24 @@ export function MergedJournalPage() {
         else if (log.status === 'absent_excused') totals[d].excused++
         else if (log.status === 'absent_unexcused') totals[d].unexcused++
       })
+    })
+    return totals
+  }, [dates, rows])
+
+  const rowTotals = useMemo(() => {
+    const totals: Record<string, { present: number; excused: number; unexcused: number }> = {}
+    rows.forEach(r => {
+      let present = 0
+      let excused = 0
+      let unexcused = 0
+      dates.forEach(d => {
+        const log = r.logs[d]
+        if (!log) return
+        if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
+        else if (log.status === 'absent_excused') excused++
+        else if (log.status === 'absent_unexcused') unexcused++
+      })
+      totals[r.enrollment_id] = { present, excused, unexcused }
     })
     return totals
   }, [dates, rows])
@@ -477,6 +495,7 @@ export function MergedJournalPage() {
                     </th>
                   )
                 })}
+                <th className="bg-gray-50 text-center px-2 py-2 font-black text-gray-400 text-[9px] uppercase tracking-widest border-b border-gray-200 min-w-[45px]">Разом</th>
               </tr>
               {/* Підсумки row */}
               <tr className="bg-white">
@@ -497,6 +516,7 @@ export function MergedJournalPage() {
                     </th>
                   )
                 })}
+                <th className="bg-white border-b border-gray-200" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -571,6 +591,18 @@ export function MergedJournalPage() {
                             </td>
                           )
                         })}
+                        {(() => {
+                          const t = rowTotals[row.enrollment_id] ?? { present: 0, excused: 0, unexcused: 0 }
+                          return (
+                            <td className="px-1 py-0.5 text-center border-r border-b border-gray-200 min-w-[45px] transition-colors">
+                              <div className="flex flex-col items-center leading-none text-[9px] font-bold">
+                                {t.present   > 0 && <span className="text-green-600">{t.present}</span>}
+                                {t.excused   > 0 && <span className="text-amber-600">{t.excused}</span>}
+                                {t.unexcused > 0 && <span className="text-red-600">{t.unexcused}</span>}
+                              </div>
+                            </td>
+                          )
+                        })()}
                       </tr>
                     )
                   })}
@@ -592,6 +624,7 @@ export function MergedJournalPage() {
                           </td>
                         )
                       })}
+                      <td className="border-b border-gray-200 bg-gray-50/60" />
                     </tr>
                   )}
                 </React.Fragment>
