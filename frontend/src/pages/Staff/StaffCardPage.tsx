@@ -1425,7 +1425,14 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
 
 function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean }) {
   const currentMonth = localMonthStr()
+  const maxMonth = useMemo(() => monthNav(currentMonth, 3), [currentMonth])
   const [month, setMonth] = useState(currentMonth)
+
+  const isWeekend = (d: number) => {
+    const date = new Date(`${month}-${String(d).padStart(2, '0')}T00:00:00`)
+    const dayOfWeek = date.getDay()
+    return dayOfWeek === 0 || dayOfWeek === 6
+  }
   const [selectedTx, setSelectedTx] = useState<SalaryTransaction | null>(null)
   const [selectedTxGroup, setSelectedTxGroup] = useState<SalaryTransaction[] | null>(null)
   const [selectedAccrualGroup, setSelectedAccrualGroup] = useState<SalaryTransaction[] | null>(null)
@@ -1534,7 +1541,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           <span className="text-sm font-medium text-gray-800 min-w-[90px] text-center">
             {new Date(month + '-01').toLocaleString('uk', { month: 'long', year: 'numeric' })}
           </span>
-          <button onClick={() => setMonth(m => monthNav(m, 1))} disabled={month >= currentMonth}
+          <button onClick={() => setMonth(m => monthNav(m, 1))} disabled={month >= maxMonth}
             className="text-gray-400 hover:text-gray-700 disabled:opacity-30 px-2 py-1">→</button>
           {isAdmin && (
             <button
@@ -1648,11 +1655,19 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                   <th className="text-left px-2 py-1.5 font-medium text-gray-600 min-w-[140px] border-b border-gray-200">
                     Активність
                   </th>
-                  {Array.from({ length: days }, (_, i) => i + 1).map(d => (
-                    <th key={d} className="px-1 py-1.5 font-medium text-gray-400 min-w-[28px] text-center border-b border-gray-200">
-                      {d}
-                    </th>
-                  ))}
+                  {Array.from({ length: days }, (_, i) => i + 1).map(d => {
+                    const isWe = isWeekend(d)
+                    return (
+                      <th
+                        key={d}
+                        className={`px-1 py-1.5 font-medium min-w-[28px] text-center border-b border-gray-200 ${
+                          isWe ? 'text-red-500 bg-red-50/30' : 'text-gray-400'
+                        }`}
+                      >
+                        {d}
+                      </th>
+                    )
+                  })}
                   <th className="px-2 py-1.5 font-medium text-gray-600 border-b border-gray-200 text-right">Разом</th>
                 </tr>
               </thead>
@@ -1687,8 +1702,9 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         }, 0) : 0
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
                         const dailyRate_ = rowDailyRate
+                        const isWe       = isWeekend(d)
                         return (
-                          <td key={d} className="px-0.5 py-1 text-center">
+                          <td key={d} className={`px-0.5 py-1 text-center ${isWe ? 'bg-red-50/20' : ''}`}>
                             {cellTxs.length > 0 ? (
                               <button
                                 onClick={() => {
@@ -1755,8 +1771,9 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                       const dateStr = `${month}-${String(d).padStart(2, '0')}`
                       const dayPays = payments.filter(p => String(p.transaction_date).slice(0, 10) === dateStr)
                       const total   = dayPays.reduce((s, p) => s + Number(p.gross_amount), 0)
+                      const isWe    = isWeekend(d)
                       return (
-                        <td key={d} className="px-0.5 py-1 text-center">
+                        <td key={d} className={`px-0.5 py-1 text-center ${isWe ? 'bg-red-50/20' : ''}`}>
                           {total > 0 ? (
                             <button
                               onClick={() => setPayDayDialog(dateStr)}
