@@ -137,9 +137,7 @@ function CategoryPicker({ categories, value, onChange, onNewSubcategory }: Categ
     setChildId('')
     setAddingChild(false)
     setNewChildName('')
-    // If parent has no subcategories → use parent as the value directly
-    const kids = pid ? childrenOf(pid) : []
-    onChange(kids.length === 0 ? pid : '')
+    onChange(pid)
   }
 
   function handleChildChange(cid: string) {
@@ -456,7 +454,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
   const { data: advancePools = [] } = useQuery<StaffAdvancePool[]>({
     queryKey: ['advances', form.category_id],
     queryFn: () => expensesApi.getAdvances(form.category_id),
-    enabled: !!form.category_id && !form.is_advance && !isEdit,
+    enabled: !form.is_advance && !isEdit,
   })
 
   // Завантажуємо активних співробітників для видачі авансу
@@ -489,13 +487,23 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
 
   const createMutation = useMutation({
     mutationFn: expensesApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onSave(form.account_id) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['advances'] })
+      qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+      onSave(form.account_id)
+    },
     onError: () => setError('Помилка збереження'),
   })
 
   const updateMutation = useMutation({
     mutationFn: (p: Parameters<typeof expensesApi.update>[1]) => expensesApi.update(initial!.id!, p),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onSave(form.account_id) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['advances'] })
+      qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+      onSave(form.account_id)
+    },
     onError: () => setError('Помилка збереження'),
   })
 
@@ -1238,6 +1246,8 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               if (amount > 0) {
                 await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
                 qc.invalidateQueries({ queryKey: ['expenses'] })
+                qc.invalidateQueries({ queryKey: ['advances'] })
+                qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
                 onRefresh()
               }
             }}
@@ -1380,6 +1390,8 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               if (amount > 0) {
                 await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
                 qc.invalidateQueries({ queryKey: ['expenses'] })
+                qc.invalidateQueries({ queryKey: ['advances'] })
+                qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
                 onRefresh()
               }
             }}
@@ -2269,7 +2281,11 @@ export function ExpensesPage() {
                 {expenses.map(e => (
                   <ExpenseRow key={e.id} expense={e} isOwner={isOwner} isAdmin={isAdmin}
                     categories={categories} accounts={accounts} view="card"
-                    onRefresh={() => qc.invalidateQueries({ queryKey: ['expenses'] })} />
+                    onRefresh={() => {
+                      qc.invalidateQueries({ queryKey: ['expenses'] })
+                      qc.invalidateQueries({ queryKey: ['advances'] })
+                      qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+                    }} />
                 ))}
               </div>
               <table className="hidden md:table w-full text-sm">
@@ -2287,7 +2303,11 @@ export function ExpensesPage() {
                   {expenses.map(e => (
                     <ExpenseRow key={e.id} expense={e} isOwner={isOwner} isAdmin={isAdmin}
                       categories={categories} accounts={accounts}
-                      onRefresh={() => qc.invalidateQueries({ queryKey: ['expenses'] })} />
+                      onRefresh={() => {
+                        qc.invalidateQueries({ queryKey: ['expenses'] })
+                        qc.invalidateQueries({ queryKey: ['advances'] })
+                        qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+                      }} />
                   ))}
                 </tbody>
                 <tfoot>

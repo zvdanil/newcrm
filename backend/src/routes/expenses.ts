@@ -236,63 +236,70 @@ export async function expensesRoutes(app: FastifyInstance) {
           .returningAll()
           .executeTakeFirstOrThrow()
 
-        // FIFO pool deduction: find advances for this staff+category ordered by date, deduct in order
-        // advance_staff_id === null  → "no-staff" pool (staff_id IS NULL)
-        // advance_staff_id === uuid  → named-staff pool
+        // FIFO pool deduction: find advances for this staff / category ordered by date, deduct in order
+        // advance_staff_id === null  → "no-staff" pool (staff_id IS NULL), bound to category_id
+        // advance_staff_id === uuid  → named-staff pool, can be used for any category
         // advance_staff_id === undefined → no pool selected, skip
-        if (advance_staff_id !== undefined && category_id) {
-          let poolQ = trx
-            .selectFrom('expenses as e')
-            .select(['e.id', 'e.amount'])
-            .where('e.is_advance', '=', true)
-            .where('e.category_id', '=', category_id)
-            .where('e.is_deleted', '=', false)
-            .orderBy('e.accrual_date', 'asc')
+        if (advance_staff_id !== undefined) {
+          if (advance_staff_id === null && !category_id) {
+            // Can't use category-bound advance without a category, skip
+          } else {
+            let poolQ = trx
+              .selectFrom('expenses as e')
+              .select(['e.id', 'e.amount'])
+              .where('e.is_advance', '=', true)
+              .where('e.is_deleted', '=', false)
+              .orderBy('e.accrual_date', 'asc')
 
-          poolQ = advance_staff_id === null
-            ? poolQ.where('e.staff_id', 'is', null)
-            : poolQ.where('e.staff_id', '=', advance_staff_id)
+            if (advance_staff_id === null) {
+              poolQ = poolQ
+                .where('e.category_id', '=', category_id!)
+                .where('e.staff_id', 'is', null)
+            } else {
+              poolQ = poolQ.where('e.staff_id', '=', advance_staff_id)
+            }
 
-          const poolAdvances = await poolQ.execute()
+            const poolAdvances = await poolQ.execute()
 
-          let remaining = amount
-          for (const adv of poolAdvances) {
-            if (remaining <= 0) break
+            let remaining = amount
+            for (const adv of poolAdvances) {
+              if (remaining <= 0) break
 
-            const [oldSpentRes, newSpentRes, retRes] = await Promise.all([
-              trx.selectFrom('expenses')
-                .select((eb) => eb.fn.sum<string>('utilized_advance_amount').as('spent'))
-                .where('utilized_advance_id', '=', adv.id)
-                .where('is_advance_return', '=', false)
-                .where('is_deleted', '=', false)
-                .executeTakeFirst(),
-              trx.selectFrom('expense_advance_usages as u')
-                .innerJoin('expenses as e', 'e.id', 'u.expense_id')
-                .select((eb) => eb.fn.sum<string>('u.amount').as('spent'))
-                .where('u.advance_id', '=', adv.id)
-                .where('e.is_deleted', '=', false)
-                .executeTakeFirst(),
-              trx.selectFrom('expenses')
-                .select((eb) => eb.fn.sum<string>('amount').as('returned'))
-                .where('utilized_advance_id', '=', adv.id)
-                .where('is_advance_return', '=', true)
-                .where('is_deleted', '=', false)
-                .executeTakeFirst(),
-            ])
+              const [oldSpentRes, newSpentRes, retRes] = await Promise.all([
+                trx.selectFrom('expenses')
+                  .select((eb) => eb.fn.sum<string>('utilized_advance_amount').as('spent'))
+                  .where('utilized_advance_id', '=', adv.id)
+                  .where('is_advance_return', '=', false)
+                  .where('is_deleted', '=', false)
+                  .executeTakeFirst(),
+                trx.selectFrom('expense_advance_usages as u')
+                  .innerJoin('expenses as e', 'e.id', 'u.expense_id')
+                  .select((eb) => eb.fn.sum<string>('u.amount').as('spent'))
+                  .where('u.advance_id', '=', adv.id)
+                  .where('e.is_deleted', '=', false)
+                  .executeTakeFirst(),
+                trx.selectFrom('expenses')
+                  .select((eb) => eb.fn.sum<string>('amount').as('returned'))
+                  .where('utilized_advance_id', '=', adv.id)
+                  .where('is_advance_return', '=', true)
+                  .where('is_deleted', '=', false)
+                  .executeTakeFirst(),
+              ])
 
-            const advRemaining = Number(adv.amount)
-              - Number(oldSpentRes?.spent ?? 0)
-              - Number(newSpentRes?.spent ?? 0)
-              - Number(retRes?.returned ?? 0)
+              const advRemaining = Number(adv.amount)
+                - Number(oldSpentRes?.spent ?? 0)
+                - Number(newSpentRes?.spent ?? 0)
+                - Number(retRes?.returned ?? 0)
 
-            if (advRemaining <= 0) continue
+              if (advRemaining <= 0) continue
 
-            const deduct = Math.min(remaining, advRemaining)
-            await trx.insertInto('expense_advance_usages')
-              .values({ expense_id: expense.id, advance_id: adv.id, amount: deduct })
-              .execute()
+              const deduct = Math.min(remaining, advRemaining)
+              await trx.insertInto('expense_advance_usages')
+                .values({ expense_id: expense.id, advance_id: adv.id, amount: deduct })
+                .execute()
 
-            remaining = Math.round((remaining - deduct) * 100) / 100
+              remaining = Math.round((remaining - deduct) * 100) / 100
+            }
           }
         }
 
@@ -398,7 +405,19 @@ export async function expensesRoutes(app: FastifyInstance) {
         .where('e.is_deleted', '=', false)
         .orderBy('e.accrual_date', 'asc')
 
-      if (category_id) q = q.where('e.category_id', '=', category_id)
+      if (category_id !== undefined) {
+        if (category_id && category_id.trim() !== '') {
+          q = q.where((eb) =>
+            eb.or([
+              eb('e.category_id', '=', category_id),
+              eb('e.staff_id', 'is not', null)
+            ])
+          )
+        } else {
+          // If category_id is present but empty, only fetch staff-bound advances
+          q = q.where('e.staff_id', 'is not', null)
+        }
+      }
 
       const advances = await q.execute()
 
@@ -435,7 +454,8 @@ export async function expensesRoutes(app: FastifyInstance) {
         advancesWithBalance.push({ ...adv, remaining_balance: Math.round(remaining * 100) / 100 })
       }
 
-      // Group by staff_id + category_name so advances from different categories stay separate
+      // Group by staff_id if staff_id is set (all their advances in one pool),
+      // otherwise by category_name if staff_id is null.
       const poolMap = new Map<string, {
         staff_id: string | null
         staff_name: string | null
@@ -445,9 +465,17 @@ export async function expensesRoutes(app: FastifyInstance) {
       }>()
 
       for (const adv of advancesWithBalance) {
-        const key = `${adv.staff_id ?? '__no_staff__'}::${adv.category_name ?? '__no_cat__'}`
+        const key = adv.staff_id
+          ? `staff::${adv.staff_id}`
+          : `cat::${adv.category_name ?? '__no_cat__'}`
         if (!poolMap.has(key)) {
-          poolMap.set(key, { staff_id: adv.staff_id, staff_name: adv.staff_name, category_name: adv.category_name ?? null, remaining_balance: 0, advances: [] })
+          poolMap.set(key, {
+            staff_id: adv.staff_id,
+            staff_name: adv.staff_id ? adv.staff_name : null,
+            category_name: adv.staff_id ? null : (adv.category_name ?? null),
+            remaining_balance: 0,
+            advances: []
+          })
         }
         const pool = poolMap.get(key)!
         pool.advances.push(adv)
