@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type StaffAdvancePool, type SalaryPayment } from '../../api/expenses.api'
@@ -464,13 +464,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     enabled: form.is_advance && !isEdit,
   })
 
-  // Авто-вибір першого пулу при завантаженні
-  useEffect(() => {
-    if (!form.is_advance && advancePools.length > 0 && !form.advance_staff_id) {
-      const firstPool = advancePools[0]
-      setForm(f => ({ ...f, advance_staff_id: firstPool.staff_id ?? '__no_staff__' }))
-    }
-  }, [advancePools])
+
 
   const selectedPool = advancePools.find(p =>
     form.advance_staff_id === '__no_staff__' ? p.staff_id === null : p.staff_id === form.advance_staff_id
