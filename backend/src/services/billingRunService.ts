@@ -462,20 +462,36 @@ export async function recalcActivityAccruals(
         if (shouldRefund && effectiveType !== 'smart') {
           const absences = await db
             .selectFrom('attendance_logs')
-            .select(['id', 'date'])
+            .select(['id', 'date', 'status'])
             .where('enrollment_id', '=', e.enrollment_id)
-            .where('status', '=', 'absent_excused')
+            .where('status', 'in', ['absent_excused', 'absent_excused_30'])
             .where('date', '>=', new Date(monthStr))
             .where('date', '<=', new Date(monthLastDay))
             .execute()
 
           for (const abs of absences) {
-            let refundAmount = 0
+            let R = 0
             if (refundConfig!.refund_amount != null) {
-              refundAmount = parseFloat(refundConfig!.refund_amount as string)
+              R = parseFloat(refundConfig!.refund_amount as string)
             } else if (refundConfig!.refund_pct != null) {
-              refundAmount = Math.round(price * parseFloat(refundConfig!.refund_pct as string) / 100 * 100) / 100
+              R = Math.round(price * parseFloat(refundConfig!.refund_pct as string) / 100 * 100) / 100
             }
+
+            let refundAmount = R
+            if (abs.status === 'absent_excused_30') {
+              const firstDay = new Date(Date.UTC(billingDate.getUTCFullYear(), billingDate.getUTCMonth(), 1))
+              const lastDay  = new Date(Date.UTC(billingDate.getUTCFullYear(), billingDate.getUTCMonth() + 1, 0))
+              const W = countWorkingDays(firstDay, lastDay)
+              if (W > 0) {
+                const D = Math.round(price / W)
+                const diff = D - R
+                if (diff > 0) {
+                  refundAmount = R + 0.3 * diff
+                }
+              }
+            }
+            refundAmount = Math.round(refundAmount * 100) / 100
+
             if (refundAmount <= 0) continue
 
             await createTransaction({

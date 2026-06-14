@@ -85,7 +85,7 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.count<string>('id').as('count'))
     .where('enrollment_id', '=', enrollmentId)
-    .where('status', '=', 'absent_excused')
+    .where('status', 'in', ['absent_excused', 'absent_excused_30'])
     .where('date', '>=', billingDate)
     .where('date', '<', nextMonth)
     .executeTakeFirstOrThrow()

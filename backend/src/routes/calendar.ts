@@ -162,7 +162,7 @@ export async function calendarRoutes(app: FastifyInstance) {
             .where('activity_id', 'in', allActivityIds)
             .where('date', '>=', new Date(from))
             .where('date', '<=', new Date(to))
-            .where('status', 'in', ['present', 'special', 'absent_excused', 'absent_unexcused'])
+            .where('status', 'in', ['present', 'special', 'absent_excused', 'absent_excused_30', 'absent_unexcused'])
             .execute()
         : []
 

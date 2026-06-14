@@ -160,7 +160,7 @@ export interface Enrollment {
   created_at: string
 }
 
-export type AttendanceStatus = 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
+export type AttendanceStatus = 'present' | 'absent_excused' | 'absent_excused_30' | 'absent_unexcused' | 'special' | 'separate_billing'
 
 export interface AttributedNote {
   role: string

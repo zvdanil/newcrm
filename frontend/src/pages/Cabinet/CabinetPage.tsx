@@ -58,6 +58,7 @@ function groupBy<T>(arr: T[], key: (item: T) => string): Record<string, T[]> {
 const STATUS_LABEL: Record<string, string> = {
   present:          'Присутній',
   absent_excused:   'Відсутній (поважна)',
+  absent_excused_30: 'Відсутній (поважна 30%)',
   absent_unexcused: 'Відсутній',
   special:          'Особливий',
 }
@@ -65,6 +66,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   present:          'text-green-700 bg-green-50',
   absent_excused:   'text-yellow-700 bg-yellow-50',
+  absent_excused_30: 'text-yellow-700 bg-yellow-50',
   absent_unexcused: 'text-red-700 bg-red-50',
   special:          'text-purple-700 bg-purple-50',
 }

@@ -22,7 +22,7 @@ export interface ParentLedgerRow {
 export interface ParentAttendanceRow {
   id: string
   date: string
-  status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special'
+  status: 'present' | 'absent_excused' | 'absent_excused_30' | 'absent_unexcused' | 'special' | 'separate_billing'
   note: string | null
   activity_name: string
 }

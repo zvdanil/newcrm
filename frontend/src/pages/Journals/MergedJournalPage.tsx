@@ -65,6 +65,7 @@ function formatDayCol(dateStr: string) {
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
   present:          'bg-green-100 text-green-700 border-green-200 hover:bg-green-200',
   absent_excused:   'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200',
+  absent_excused_30: 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200',
   absent_unexcused: 'bg-red-100 text-red-700 border-red-200 hover:bg-red-200',
   special:          'bg-iris-100 text-iris-700 border-iris-200 hover:bg-iris-200',
   separate_billing: 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200',
@@ -72,6 +73,7 @@ const STATUS_STYLE: Record<AttendanceStatus, string> = {
 const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present:          'П',
   absent_excused:   'В',
+  absent_excused_30: '30%',
   absent_unexcused: 'Н',
   special:          '',
   separate_billing: 'ОР',
@@ -198,14 +200,14 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
             <span className="text-xs text-gray-500">Тариф встановлено адміністратором</span>
           </div>
         ) : (
-          <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-4' : 'grid-cols-5'}`}>
-            {(['present', 'absent_excused', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
+          <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-5' : 'grid-cols-6'}`}>
+            {(['present', 'absent_excused', 'absent_excused_30', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
               <button key={s} onClick={() => setStatus(s)}
                 autoFocus={openContext === 'edit' && s === 'absent_excused'}
                 className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'}`}>
-                {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
+                {s === 'present' ? 'П' : s === 'absent_excused' ? 'В' : s === 'absent_excused_30' ? '30%' : s === 'absent_unexcused' ? 'Н' : s === 'special' ? '$$$' : 'ОР'}
                 <div className="text-[8px] opacity-60 mt-0.5 leading-none">
-                  {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
+                  {s === 'present' ? 'Прис' : s === 'absent_excused' ? 'Пов' : s === 'absent_excused_30' ? 'Пов30' : s === 'absent_unexcused' ? 'Неп' : s === 'special' ? 'Спец' : 'Окр'}
                 </div>
               </button>
             ))}
@@ -340,7 +342,7 @@ export function MergedJournalPage() {
       Object.entries(r.logs).forEach(([d, log]: [string, any]) => {
         if (!totals[d]) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') totals[d].present++
-        else if (log.status === 'absent_excused') totals[d].excused++
+        else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') totals[d].excused++
         else if (log.status === 'absent_unexcused') totals[d].unexcused++
       })
     })
@@ -357,7 +359,7 @@ export function MergedJournalPage() {
         const log = r.logs[d]
         if (!log) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
-        else if (log.status === 'absent_excused') excused++
+        else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') excused++
         else if (log.status === 'absent_unexcused') unexcused++
       })
       totals[r.enrollment_id] = { present, excused, unexcused }
@@ -375,7 +377,7 @@ export function MergedJournalPage() {
         Object.entries(r.logs).forEach(([d, log]: [string, any]) => {
           if (!result[key][d]) return
           if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') result[key][d].present++
-          else if (log.status === 'absent_excused') result[key][d].excused++
+          else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') result[key][d].excused++
           else if (log.status === 'absent_unexcused') result[key][d].unexcused++
         })
       })

@@ -658,7 +658,7 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
     .where('activity_id', '=', rate.activity_id)
     .where('date', '>=', new Date(billingMonth))
     .where('date', '<', new Date(billingEnd))
-    .where('status', 'in', ['absent_excused', 'absent_unexcused'])
+    .where('status', 'in', ['absent_excused', 'absent_excused_30', 'absent_unexcused'])
     .executeTakeFirst()
 
   const absences = Number(absenceResult?.cnt ?? 0)

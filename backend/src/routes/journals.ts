@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
-import { getChildIndividualTariff } from '../services/billingRunService.js'
+import { getChildIndividualTariff, getEffectivePrice, countWorkingDays } from '../services/billingRunService.js'
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -21,6 +21,7 @@ async function triggerRefund(
   accountId: string,
   activityId: string,
   date: string,
+  status: string,
   createdBy: string | null,
 ): Promise<string | null> {
   const [activity, refundConfig, tariff] = await Promise.all([
@@ -38,15 +39,39 @@ async function triggerRefund(
   if (!refundConfig?.refund_on_excused) return null
   if (activity?.is_rigid) return null  // жёсткий абонемент блокирует возврат основной услуги
 
-  let amount = 0
+  let R = 0
   if (refundConfig.refund_amount !== null) {
-    amount = parseFloat(refundConfig.refund_amount as string)
+    R = parseFloat(refundConfig.refund_amount as string)
   } else if (refundConfig.refund_pct !== null && tariff) {
     const pct = parseFloat(refundConfig.refund_pct as string)
     const base = parseFloat(tariff.base_fee as string)
-    amount = Math.round(base * pct) / 100
+    R = Math.round(base * pct) / 100
   }
 
+  let amount = R
+  if (status === 'absent_excused_30') {
+    const billingDate = new Date(date)
+    const ind = await getChildIndividualTariff(childId, activityId, billingDate)
+    const P = ind
+      ? Math.round(parseFloat(ind.price as string) * 100) / 100
+      : await getEffectivePrice(childId, activityId, billingDate)
+    if (P !== null && P > 0) {
+      const year = billingDate.getUTCFullYear()
+      const month = billingDate.getUTCMonth()
+      const firstDay = new Date(Date.UTC(year, month, 1))
+      const lastDay = new Date(Date.UTC(year, month + 1, 0))
+      const W = countWorkingDays(firstDay, lastDay)
+      if (W > 0) {
+        const D = Math.round(P / W)
+        const diff = D - R
+        if (diff > 0) {
+          amount = R + 0.3 * diff
+        }
+      }
+    }
+  }
+
+  amount = Math.round(amount * 100) / 100
   if (amount <= 0) return null
 
   return createTransaction({
@@ -386,7 +411,7 @@ export async function journalsRoutes(app: FastifyInstance) {
     Body: {
       enrollment_id: string
       date: string
-      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
+      status: 'present' | 'absent_excused' | 'absent_excused_30' | 'absent_unexcused' | 'special' | 'separate_billing'
       custom_amount?: number | null
       note?: string | null
     }
@@ -434,7 +459,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             date,
             status,
             custom_amount: custom_amount ?? null,
-            note: null,
+            note: note?.trim() || null,
             notes_json: initialNotesJson,
             created_by: createdBy,
           })
@@ -442,7 +467,8 @@ export async function journalsRoutes(app: FastifyInstance) {
             oc.columns(['enrollment_id', 'date']).doUpdateSet({
               status,
               custom_amount: custom_amount ?? null,
-              notes_json: buildNotesJsonUpsert(createdBy, createdByRole, createdByName, note ?? null),
+              note: note?.trim() || null,
+              notes_json: initialNotesJson,
               updated_at: new Date().toISOString() as unknown as Date,
             })
           )
@@ -511,7 +537,7 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special' || status === 'separate_billing')) {
         await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, indPrice, createdBy)
-      } else if (effectiveTariffType === 'monthly' && status === 'absent_excused') {
+      } else if (effectiveTariffType === 'monthly' && (status === 'absent_excused' || status === 'absent_excused_30')) {
         const existingRefund = await db.selectFrom('transactions').select('id')
           .where('enrollment_id', '=', enrollment_id)
           .where('type', '=', 'REFUND')
@@ -519,7 +545,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('is_deleted', '=', false)
           .executeTakeFirst()
         if (!existingRefund) {
-          await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, createdBy)
+          await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, status, createdBy)
           for (const le of log.linkedEnrollments) {
             const leExistingRefund = await db.selectFrom('transactions').select('id')
               .where('enrollment_id', '=', le.id)
@@ -528,7 +554,7 @@ export async function journalsRoutes(app: FastifyInstance) {
               .where('is_deleted', '=', false)
               .executeTakeFirst()
             if (!leExistingRefund) {
-              await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, createdBy)
+              await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, status, createdBy)
             }
           }
         }
@@ -562,7 +588,7 @@ export async function journalsRoutes(app: FastifyInstance) {
   app.put<{
     Params: { id: string }
     Body: {
-      status: 'present' | 'absent_excused' | 'absent_unexcused' | 'special' | 'separate_billing'
+      status: 'present' | 'absent_excused' | 'absent_excused_30' | 'absent_unexcused' | 'special' | 'separate_billing'
       custom_amount?: number | null
       note?: string | null
     }
@@ -648,16 +674,29 @@ export async function journalsRoutes(app: FastifyInstance) {
           await recalcSmartBenefit(existing.enrollment_id, billingMonth)
         }
       } else {
-        // monthly: логика возврата за absent_excused
+        // monthly: логика возврата за absent_excused / absent_excused_30
+        const oldIsExcused = oldStatus === 'absent_excused' || oldStatus === 'absent_excused_30'
+        const newIsExcused = status === 'absent_excused' || status === 'absent_excused_30'
         const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', existing.activity_id).execute()
 
-        if (oldStatus !== 'absent_excused' && status === 'absent_excused') {
-          await triggerRefund(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, createdBy)
+        if (oldIsExcused && newIsExcused && oldStatus !== status) {
+          // Status changed between absent_excused and absent_excused_30: reverse and re-trigger
+          await reverseRefund(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
+          await triggerRefund(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, status, createdBy)
           for (const { child_activity_id } of linked) {
             const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
-            if (le) await triggerRefund(le.id, existing.child_id, le.account_id, child_activity_id, dateStr, createdBy)
+            if (le) {
+              await reverseRefund(le.id, le.account_id, existing.child_id, dateStr, createdBy)
+              await triggerRefund(le.id, existing.child_id, le.account_id, child_activity_id, dateStr, status, createdBy)
+            }
           }
-        } else if (oldStatus === 'absent_excused' && status !== 'absent_excused') {
+        } else if (!oldIsExcused && newIsExcused) {
+          await triggerRefund(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, status, createdBy)
+          for (const { child_activity_id } of linked) {
+            const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+            if (le) await triggerRefund(le.id, existing.child_id, le.account_id, child_activity_id, dateStr, status, createdBy)
+          }
+        } else if (oldIsExcused && !newIsExcused) {
           await reverseRefund(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
           for (const { child_activity_id } of linked) {
             const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
@@ -715,11 +754,11 @@ export async function journalsRoutes(app: FastifyInstance) {
             await reversePerLessonAccrual(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
           }
         } else if (delEffectiveType === 'smart') {
-          if (log.status === 'absent_excused') {
+          if (log.status === 'absent_excused' || log.status === 'absent_excused_30') {
             const billingMonth = dateStr.slice(0, 7) + '-01'
             await recalcSmartBenefit(log.enrollment_id, billingMonth)
           }
-        } else if (log.status === 'absent_excused') {
+        } else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') {
           await reverseRefund(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
           const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', log.activity_id).execute()
           for (const { child_activity_id } of linked) {

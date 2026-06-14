@@ -93,7 +93,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
           // Delete absent_excused attendance marks for this enrollment in this billing month
           await db.deleteFrom('attendance_logs')
             .where('enrollment_id', '=', tx.enrollment_id)
-            .where('status', '=', 'absent_excused')
+            .where('status', 'in', ['absent_excused', 'absent_excused_30'])
             .where('date', '>=', billingDate)
             .where('date', '<=', new Date(monthLastDay))
             .execute()
@@ -128,7 +128,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
 
               await db.deleteFrom('attendance_logs')
                 .where('enrollment_id', '=', le.id)
-                .where('status', '=', 'absent_excused')
+                .where('status', 'in', ['absent_excused', 'absent_excused_30'])
                 .where('date', '>=', billingDate)
                 .where('date', '<=', new Date(monthLastDay))
                 .execute()
