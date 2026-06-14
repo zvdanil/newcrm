@@ -383,37 +383,7 @@ function ScheduleItem({ sched, isEditing, onEdit, onDelete, isDeleting }: Schedu
   )
 }
 
-// ─── Journal Modal ─────────────────────────────────────────────────────────────
 
-function JournalModal({ type, id, date, onClose }: {
-  type:    'activity' | 'merged'
-  id:      string
-  date:    string
-  onClose: () => void
-}) {
-  const src = type === 'merged'
-    ? `/journals/merged/${id}?mode=day&date=${date}&layout=none`
-    : `/journals/${id}?mode=day&date=${date}&layout=none`
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="bg-white rounded-xl shadow-2xl flex flex-col"
-        style={{ width: '98vw', maxWidth: '98vw', height: '96vh' }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <span className="text-sm font-semibold text-gray-800">Журнал відвідування · {date}</span>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl font-bold leading-none">✕</button>
-        </div>
-        <iframe
-          src={src}
-          className="flex-1 w-full border-0 rounded-b-xl"
-          title="Журнал"
-        />
-      </div>
-    </div>
-  )
-}
 
 // ─── Move Dialog ───────────────────────────────────────────────────────────────
 
@@ -551,7 +521,6 @@ export function CalendarPage() {
   const [formError, setFormError]   = useState<string | null>(null)
 
   // Modals
-  const [journalModal,  setJournalModal]  = useState<{ type: 'activity' | 'merged'; id: string; date: string } | null>(null)
   const [moveDialog,    setMoveDialog]    = useState<{ scheduleId: string; origDate: string; newDate: string; newTime?: string } | null>(null)
   const [subDialog,     setSubDialog]     = useState<{ scheduleId: string; date: string; origStaffId: string | null } | null>(null)
   const [eventPopup,    setEventPopup]    = useState<{ event: CalendarEvent; pos: { x: number; y: number } } | null>(null)
@@ -568,16 +537,6 @@ export function CalendarPage() {
     qc.invalidateQueries({ queryKey: ['cal-events'] })
     qc.invalidateQueries({ queryKey: ['cal-schedules'] })
   }, [qc])
-
-  // postMessage from journal iframe
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return
-      if (e.data?.type === 'JOURNAL_SAVED') { setJournalModal(null); refetchEvents() }
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [refetchEvents])
 
   // Mutations
   const createMutation = useMutation({
@@ -847,9 +806,7 @@ export function CalendarPage() {
 
       {/* ── Modals ── */}
 
-      {journalModal && (
-        <JournalModal type={journalModal.type} id={journalModal.id} date={journalModal.date} onClose={() => setJournalModal(null)} />
-      )}
+
 
       {moveDialog && (
         <MoveDialog
@@ -895,11 +852,10 @@ export function CalendarPage() {
           onClose={closePopup}
           onOpenJournal={() => {
             const ev = eventPopup.event
-            if (ev.mergedJournalId) {
-              setJournalModal({ type: 'merged', id: ev.mergedJournalId, date: ev.date })
-            } else if (ev.activityId) {
-              setJournalModal({ type: 'activity', id: ev.activityId, date: ev.date })
-            }
+            const url = ev.mergedJournalId
+              ? `/journals/merged/${ev.mergedJournalId}?mode=day&date=${ev.date}`
+              : `/journals/${ev.activityId}?mode=day&date=${ev.date}`
+            window.open(url, '_blank')
             closePopup()
           }}
           onAddSubstitution={() => { setSubDialog({ scheduleId: eventPopup.event.scheduleId, date: eventPopup.event.date, origStaffId: eventPopup.event.staffId }); closePopup() }}
