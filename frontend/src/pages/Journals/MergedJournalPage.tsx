@@ -201,7 +201,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
           </div>
         ) : (
           <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-5' : 'grid-cols-6'}`}>
-            {(['present', 'absent_excused', 'absent_excused_30', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
+            {(['present', 'absent_excused', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing', 'absent_excused_30'] as AttendanceStatus[]).map((s) => (
               <button key={s} onClick={() => setStatus(s)}
                 autoFocus={openContext === 'edit' && s === 'absent_excused'}
                 className={`py-2 px-0.5 rounded-xl border text-xs font-bold transition-all focus:outline-none ${status === s ? STATUS_STYLE[s] + ' ring-2 ring-offset-1 ring-iris-500' : 'bg-gray-50 text-gray-400 border-gray-100 hover:bg-gray-100 focus:ring-2 focus:ring-iris-200'}`}>

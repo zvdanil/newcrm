@@ -226,7 +226,7 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
           </div>
         ) : (
           <div className={`grid gap-1.5 ${isDutyAdmin ? 'grid-cols-5' : 'grid-cols-6'}`}>
-            {(['present', 'absent_excused', 'absent_excused_30', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing'] as AttendanceStatus[]).map((s) => (
+            {(['present', 'absent_excused', 'absent_unexcused', ...(isDutyAdmin ? [] : ['special']), 'separate_billing', 'absent_excused_30'] as AttendanceStatus[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatus(s)}
