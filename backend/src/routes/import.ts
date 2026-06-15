@@ -98,6 +98,7 @@ function paymentAmountKey(amount: number): string {
 interface DuplicateHit {
   txId: string
   childId: string
+  childName: string
 }
 
 interface DuplicateIndex {
@@ -110,6 +111,7 @@ function buildDuplicateIndex(
   existingTxRows: {
     id: string
     child_id: string
+    child_name: string
     amount: string
     transaction_date: string
     family_id: string | null
@@ -121,7 +123,7 @@ function buildDuplicateIndex(
   const byChild = new Map<string, DuplicateHit>()
 
   for (const tx of existingTxRows) {
-    const hit: DuplicateHit = { txId: tx.id, childId: tx.child_id }
+    const hit: DuplicateHit = { txId: tx.id, childId: tx.child_id, childName: tx.child_name }
     const meta = tx.metadata_json_raw ? JSON.parse(tx.metadata_json_raw) as Record<string, unknown> : null
     if (meta && meta['source'] === 'bank_import' && typeof meta['bank_ref'] === 'string') {
       byBankRef.set(meta['bank_ref'] as string, hit)
@@ -173,8 +175,9 @@ function registerImportedPayment(
   row: { bank_ref: string; date: string; amount: number; family_id?: string | null },
   txId: string,
   childId: string,
+  childName: string,
 ): void {
-  const hit: DuplicateHit = { txId, childId }
+  const hit: DuplicateHit = { txId, childId, childName }
   index.byBankRef.set(row.bank_ref, hit)
   const amt = paymentAmountKey(row.amount)
   const date = normalizeTxDate(row.date)
@@ -477,10 +480,10 @@ function applyDuplicateToPreview(
   index: DuplicateIndex,
   familyId: string | null,
   childId: string | null,
-): { is_duplicate: boolean; duplicate_tx_id: string | null; status: PreviewRow['status'] | null } {
+): { is_duplicate: boolean; duplicate_tx_id: string | null; status: PreviewRow['status'] | null; duplicate_child_name: string | null } {
   const hit = findPaymentDuplicate(index, row, familyId, childId)
-  if (!hit) return { is_duplicate: false, duplicate_tx_id: null, status: null }
-  return { is_duplicate: true, duplicate_tx_id: hit.txId, status: 'duplicate' }
+  if (!hit) return { is_duplicate: false, duplicate_tx_id: null, status: null, duplicate_child_name: null }
+  return { is_duplicate: true, duplicate_tx_id: hit.txId, status: 'duplicate', duplicate_child_name: hit.childName }
 }
 
 function deduplicateFamilies(input: CandidateFamily[]): CandidateFamily[] {
@@ -644,6 +647,7 @@ export async function importRoutes(app: FastifyInstance) {
         .select([
           't.id',
           't.child_id',
+          'c.full_name as child_name',
           sql<string>`t.amount::text`.as('amount'),
           sql<string>`t.transaction_date::text`.as('transaction_date'),
           'c.family_id',
@@ -670,8 +674,8 @@ export async function importRoutes(app: FastifyInstance) {
             status: 'duplicate',
             match_method: null,
             matched_family_id: null,
-            matched_child_id: null,
-            matched_family_name: null,
+            matched_child_id: bankRefHit.childId,
+            matched_family_name: bankRefHit.childName,
             matched_parent_name: null,
             candidate_families: [],
             bank_ref,
@@ -719,6 +723,9 @@ export async function importRoutes(app: FastifyInstance) {
           is_duplicate = true
           duplicate_tx_id = primaryDup.duplicate_tx_id
           status = 'duplicate'
+          if (primaryDup.duplicate_child_name) {
+            matched_family_name = primaryDup.duplicate_child_name
+          }
         }
 
         // Among candidates: if exactly one would duplicate an existing manual payment, pre-select it
@@ -737,6 +744,7 @@ export async function importRoutes(app: FastifyInstance) {
             is_duplicate = true
             duplicate_tx_id = hit.txId
             status = 'duplicate'
+            matched_family_name = hit.childName
           }
         }
 
@@ -777,6 +785,7 @@ export async function importRoutes(app: FastifyInstance) {
         .select([
           't.id',
           't.child_id',
+          'c.full_name as child_name',
           sql<string>`t.amount::text`.as('amount'),
           sql<string>`t.transaction_date::text`.as('transaction_date'),
           'c.family_id',
@@ -849,7 +858,7 @@ export async function importRoutes(app: FastifyInstance) {
               family_name: child.full_name,
               allocations: [{ child_id: child.id, child_name: child.full_name, amount: row.amount, tx_id }],
             })
-            registerImportedPayment(dupIndex, row, tx_id, child.id)
+            registerImportedPayment(dupIndex, row, tx_id, child.id, child.full_name)
             imported++
 
           } else if (row.family_id) {
@@ -967,7 +976,7 @@ export async function importRoutes(app: FastifyInstance) {
 
             const lastAlloc = allocationsOut[allocationsOut.length - 1]?.allocations[0]
             if (lastAlloc) {
-              registerImportedPayment(dupIndex, { ...row, family_id: row.family_id }, lastAlloc.tx_id, lastAlloc.child_id)
+              registerImportedPayment(dupIndex, { ...row, family_id: row.family_id }, lastAlloc.tx_id, lastAlloc.child_id, lastAlloc.child_name)
             }
             imported++
 

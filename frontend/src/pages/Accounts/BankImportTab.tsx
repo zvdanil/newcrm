@@ -520,10 +520,10 @@ export function BankImportTab({ accountId }: Props) {
               <th className="px-3 py-2.5 w-8"></th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600 whitespace-nowrap">Дата</th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600">Контрагент</th>
-              <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[160px]">Призначення</th>
+              <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[300px]">Призначення</th>
               <th className="px-3 py-2.5 text-right font-medium text-gray-600 whitespace-nowrap">Сума</th>
               <th className="px-3 py-2.5 text-left font-medium text-gray-600">Статус</th>
-              <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[180px]">Сімʼя</th>
+              <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[200px]">Сімʼя</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -556,11 +556,11 @@ export function BankImportTab({ accountId }: Props) {
                     {row.date ? new Date(row.date).toLocaleDateString('uk-UA') : row.date}
                   </td>
 
-                  <td className="px-3 py-2 text-gray-700 max-w-[200px] truncate" title={row.counterparty_name}>
+                  <td className="px-3 py-2 text-gray-700 max-w-[300px] truncate" title={row.counterparty_name}>
                     {row.counterparty_name || <span className="text-gray-400">—</span>}
                   </td>
 
-                  <td className="px-3 py-2 text-gray-600 text-xs max-w-[220px] truncate" title={row.description || undefined}>
+                  <td className="px-3 py-2 text-gray-600 text-xs max-w-[400px] truncate" title={row.description || undefined}>
                     {row.description || <span className="text-gray-300">—</span>}
                   </td>
 
@@ -598,7 +598,9 @@ export function BankImportTab({ accountId }: Props) {
 
                   <td className="px-3 py-2">
                     {displayStatus === 'duplicate' ? (
-                      <span className="text-xs text-gray-400 line-through">{row.matched_family_name ?? 'вже імпортовано'}</span>
+                      <span className="text-xs text-gray-400 line-through">
+                        {row.matched_family_name ? `Вже внесено для: ${row.matched_family_name}` : 'вже імпортовано'}
+                      </span>
                     ) : row.status === 'matched' && !override ? (
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-gray-700">{row.matched_family_name}</span>

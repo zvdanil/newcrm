@@ -306,10 +306,10 @@ export function AccountCardPage() {
   if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
   if (!account)   return <div className="py-16 text-center text-sm text-red-500">Рахунок не знайдено</div>
 
-  const balance = parseFloat(account.balance ?? '0')
+  const isImportActive = activeTab === 'import' || activeTab === 'expense-import'
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className={`${isImportActive ? 'max-w-7xl' : 'max-w-4xl'} space-y-6 transition-all duration-300`}>
 
       <div className="flex items-start gap-3">
         <Link to="/accounts" className="mt-1 text-gray-400 hover:text-gray-600 transition-colors text-sm">← Рахунки</Link>
