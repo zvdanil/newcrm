@@ -82,7 +82,8 @@ function containsAllTokens(haystack: string, needleTokens: string[]): boolean {
 
 function makeBankRef(row: BankRow): string {
   const key = row.edrpou ?? normalize(row.counterparty_name)
-  return `${row.date}|${row.amount.toFixed(2)}|${key}`
+  const desc = normalize(row.description)
+  return `${row.date}|${row.amount.toFixed(2)}|${key}|${desc}`
 }
 
 function normalizeTxDate(d: string): string {
@@ -376,8 +377,10 @@ function collectFuzzyCandidates(
   const candidates: CandidateFamily[] = []
 
   for (const p of allParents) {
-    const matchesName = containsAllTokens(p.full_name, needle)
-    const matchesNote = p.note ? containsAllTokens(p.note, needle) : false
+    const parentTokens = tokens(p.full_name)
+    const matchesName = parentTokens.length > 0 && containsAllTokens(searchText, parentTokens)
+    const noteTokens = p.note ? tokens(p.note) : []
+    const matchesNote = noteTokens.length > 0 && containsAllTokens(searchText, noteTokens)
     if (matchesName || matchesNote) {
       for (const fam of parentFamilies.get(p.id) ?? []) {
         const key = fam.family_id ?? `child:${fam.child_id}`
@@ -390,8 +393,10 @@ function collectFuzzyCandidates(
   }
 
   for (const c of allChildren) {
-    const matchesName = containsAllTokens(c.full_name, needle)
-    const matchesNote = c.note ? containsAllTokens(c.note, needle) : false
+    const childTokens = tokens(c.full_name)
+    const matchesName = childTokens.length > 0 && containsAllTokens(searchText, childTokens)
+    const noteTokens = c.note ? tokens(c.note) : []
+    const matchesNote = noteTokens.length > 0 && containsAllTokens(searchText, noteTokens)
     if (matchesName || matchesNote) {
       /* --- FAMILY LOGIC DISABLED ---
       if (c.family_id) {
@@ -440,7 +445,7 @@ function collectFuzzyCandidates(
 
   for (const p of allParents) {
     const fields = [p.full_name, p.note].filter((f): f is string => f !== null)
-    const score = Math.max(0, ...fields.map((f) => partialMatchScore(f, needle)))
+    const score = Math.max(0, ...fields.map((f) => partialMatchScore(searchText, tokens(f))))
     if (score > 0) {
       for (const fam of parentFamilies.get(p.id) ?? []) tryPartial(fam, score)
     }
@@ -448,7 +453,7 @@ function collectFuzzyCandidates(
 
   for (const c of allChildren) {
     const fields = [c.full_name, c.note].filter((f): f is string => f !== null)
-    const score = Math.max(0, ...fields.map((f) => partialMatchScore(f, needle)))
+    const score = Math.max(0, ...fields.map((f) => partialMatchScore(searchText, tokens(f))))
     if (score > 0) {
       /* --- FAMILY LOGIC DISABLED ---
       if (c.family_id) {
