@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { sql } from 'kysely'
 import { requireRole } from '../plugins/authenticate.js'
-import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
+import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit, recalcFixedMonthlyAccruals } from '../services/salaryService.js'
 
 function countDaysInPeriod(periodStart: string, periodEnd: string, calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS'): number {
   const start = new Date(periodStart + 'T00:00:00')
@@ -566,6 +566,9 @@ export async function staffRoutes(app: FastifyInstance) {
           await recalcSmartPerChildBenefit(r.id, billingMonth)
         }
       }
+
+      // Пересчёт фиксированных месячных окладов
+      await recalcFixedMonthlyAccruals(staffId, billingMonth)
 
       return reply.send({ ok: true })
     }

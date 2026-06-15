@@ -177,7 +177,7 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
 
   const existingAccrual = await db
     .selectFrom('salary_transactions')
-    .select(['id', 'gross_amount'])
+    .select(['id', 'gross_amount', 'deduction_pct'])
     .where('staff_id',    '=', rate.staff_id)
     .where('rate_id',     '=', rateId)
     .where('billing_month', '=', new Date(billingMonth))
@@ -236,7 +236,10 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
       note:             noteStr,
       metadata_json:    meta,
     }).execute()
-  } else if (Math.abs(Number(existingAccrual.gross_amount) - totalGross) > 0.001) {
+  } else if (
+    Math.abs(Number(existingAccrual.gross_amount) - totalGross) > 0.001 ||
+    Math.abs(Number(existingAccrual.deduction_pct) - Number(rate.deduction_pct)) > 0.001
+  ) {
     await db.updateTable('salary_transactions')
       .set({ is_deleted: true, deleted_at: now })
       .where('id', '=', existingAccrual.id)
@@ -518,7 +521,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const existingAccruals = await db
     .selectFrom('salary_transactions as st')
     .innerJoin('staff_rates as sr', 'sr.id', 'st.rate_id')
-    .select(['st.id', 'st.rate_id', 'st.gross_amount'])
+    .select(['st.id', 'st.rate_id', 'st.gross_amount', 'st.deduction_pct'])
     .where('st.activity_id',      '=', activityId)
     .where('st.transaction_date', '=', new Date(date))
     .where('st.type',             '=', 'ACCRUAL')
@@ -574,7 +577,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
         billing_month:    billing,
         metadata_json:    meta,
       }).execute()
-    } else if (Math.abs(Number(existing.gross_amount) - newAmount) > 0.001) {
+    } else if (
+      Math.abs(Number(existing.gross_amount) - newAmount) > 0.001 ||
+      Math.abs(Number(existing.deduction_pct) - Number(rate.deduction_pct)) > 0.001
+    ) {
       await db.updateTable('salary_transactions')
         .set({ is_deleted: true, deleted_at: now })
         .where('id', '=', existing.id)
@@ -677,7 +683,7 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
 
   const existingCorrection = await db
     .selectFrom('salary_transactions')
-    .select(['id', 'gross_amount'])
+    .select(['id', 'gross_amount', 'deduction_pct'])
     .where('staff_id', '=', rate.staff_id)
     .where('rate_id', '=', rateId)
     .where('billing_month', '=', new Date(billingMonth))
@@ -701,7 +707,10 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
         note:             `Смарт коригування: пропусків ${absences} ≥ ${config.absence_threshold}`,
         metadata_json:    { source: 'smart_staff', absences, threshold: config.absence_threshold, threshold_rate: thresholdRate },
       }).execute()
-    } else if (Math.abs(Number(existingCorrection.gross_amount) - correction) > 0.001) {
+    } else if (
+      Math.abs(Number(existingCorrection.gross_amount) - correction) > 0.001 ||
+      Math.abs(Number(existingCorrection.deduction_pct) - Number(rate.deduction_pct)) > 0.001
+    ) {
       await db.updateTable('salary_transactions')
         .set({ is_deleted: true, deleted_at: now })
         .where('id', '=', existingCorrection.id)
@@ -880,4 +889,91 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
   // Но recalcStaffAccruals уже вызывается внутри цикла выше.
   // Если ставка глобальная (activityId === null), логика сложнее, 
   // но в текущей архитектуре авто-ставки всегда привязаны к активности.
+}
+
+/**
+ * Recalculates fixed_monthly ACCRUAL for a staff member in a billing month.
+ * If deduction_pct or gross_amount has changed, recreation is triggered.
+ */
+export async function recalcFixedMonthlyAccruals(staffId: string, billingMonth: string): Promise<void> {
+  const now = new Date().toISOString()
+  const billingObj = new Date(billingMonth)
+
+  const rates = await db
+    .selectFrom('staff_rates')
+    .where('staff_id', '=', staffId)
+    .where('rate_type', '=', 'fixed_monthly')
+    .where('rate_category', '=', 'auto')
+    .where('valid_from', '<=', billingObj)
+    .where((eb) => eb.or([
+      eb('valid_to', 'is', null),
+      eb('valid_to', '>', billingObj),
+    ]))
+    .selectAll()
+    .execute()
+
+  for (const rate of rates) {
+    const existing = await db
+      .selectFrom('salary_transactions')
+      .select(['id', 'gross_amount', 'deduction_pct'])
+      .where('staff_id',    '=', rate.staff_id)
+      .where('rate_id',     '=', rate.id)
+      .where('billing_month', '=', billingObj)
+      .where('type',        '=', 'ACCRUAL')
+      .where('is_deleted',  '=', false)
+      .executeTakeFirst()
+
+    const rv = Number(rate.rate_value)
+    let gross = rv
+    let meta: Record<string, unknown> = { source: 'auto_fixed_monthly', rate_value: rv }
+
+    if (rate.value_mode === 'percent_of_revenue' && rate.activity_id) {
+      const revenue = await revenueForActivityMonth(rate.activity_id, billingObj)
+      gross = Math.round(revenue * rv / 100 * 100) / 100
+      meta  = { source: 'auto_fixed_monthly_pct', revenue, rate_pct: rv }
+    }
+
+    if (gross <= 0) {
+      if (existing) {
+        await db.updateTable('salary_transactions')
+          .set({ is_deleted: true, deleted_at: now })
+          .where('id', '=', existing.id)
+          .execute()
+      }
+      continue
+    }
+
+    if (!existing) {
+      await db.insertInto('salary_transactions').values({
+        staff_id:         rate.staff_id,
+        rate_id:          rate.id,
+        activity_id:      rate.activity_id ?? null,
+        type:             'ACCRUAL',
+        gross_amount:     gross,
+        deduction_pct:    rate.deduction_pct,
+        transaction_date: billingMonth,
+        billing_month:    billingMonth,
+        metadata_json:    meta,
+      }).execute()
+    } else if (
+      Math.abs(Number(existing.gross_amount) - gross) > 0.001 ||
+      Math.abs(Number(existing.deduction_pct) - Number(rate.deduction_pct)) > 0.001
+    ) {
+      await db.updateTable('salary_transactions')
+        .set({ is_deleted: true, deleted_at: now })
+        .where('id', '=', existing.id)
+        .execute()
+      await db.insertInto('salary_transactions').values({
+        staff_id:         rate.staff_id,
+        rate_id:          rate.id,
+        activity_id:      rate.activity_id ?? null,
+        type:             'ACCRUAL',
+        gross_amount:     gross,
+        deduction_pct:    rate.deduction_pct,
+        transaction_date: billingMonth,
+        billing_month:    billingMonth,
+        metadata_json:    meta,
+      }).execute()
+    }
+  }
 }
