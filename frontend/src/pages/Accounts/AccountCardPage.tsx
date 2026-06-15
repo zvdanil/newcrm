@@ -306,6 +306,7 @@ export function AccountCardPage() {
   if (acctLoading) return <div className="py-16 text-center text-sm text-gray-400">Завантаження...</div>
   if (!account)   return <div className="py-16 text-center text-sm text-red-500">Рахунок не знайдено</div>
 
+  const balance = parseFloat(account.balance ?? '0')
   const isImportActive = activeTab === 'import' || activeTab === 'expense-import'
 
   return (
