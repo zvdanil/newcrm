@@ -1675,6 +1675,8 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                 {activities.map(({ key: rowKey, name: actName }) => {
                   const dayMap = grid.get(rowKey) ?? new Map<number, SalaryTransaction[]>()
                   let rowTotal = 0
+                  let rowHoursTotal = 0
+                  let isRowHourly = false
 
                   // Find the effective rate for this row: first by exact rowKey, then by
                   // rate_id from any transaction in this row (covers old txs with activity_id=null)
@@ -1696,10 +1698,12 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         }, 0)
                         if (cellNet) rowTotal += cellNet
                         const isCellHourly = cellTxs.some(t => t.rate_type === 'hourly')
+                        if (isCellHourly) isRowHourly = true
                         const cellHours = isCellHourly ? cellTxs.reduce((s, t) => {
                           const meta = t.metadata_json as Record<string, unknown> | null
                           return s + (typeof meta?.quantity === 'number' ? meta.quantity : 0)
                         }, 0) : 0
+                        rowHoursTotal += cellHours
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
                         const dailyRate_ = rowDailyRate
                         const isWe       = isWeekend(d)
@@ -1757,7 +1761,14 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         )
                       })}
                       <td className="px-2 py-1.5 text-right font-mono text-gray-700">
-                        {rowTotal > 0 ? fmt(rowTotal) : '—'}
+                        {rowTotal > 0 ? (
+                          <>
+                            <span className="block leading-tight">{fmt(rowTotal)}</span>
+                            {isRowHourly && rowHoursTotal > 0 && (
+                              <span className="block text-[9px] opacity-60 leading-none">{rowHoursTotal.toFixed(1)}</span>
+                            )}
+                          </>
+                        ) : '—'}
                       </td>
                     </tr>
                   )
