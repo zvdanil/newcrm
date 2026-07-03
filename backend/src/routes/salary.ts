@@ -102,10 +102,11 @@ export async function salaryRoutes(app: FastifyInstance) {
         }
       }
       const debtPreviousPeriods = Math.max(0, Math.round((prevNet - totalPaid) * 100) / 100)
+      const paidPreviousPeriod = prevNet > 0 ? Math.round(Math.min(prevNet, totalPaid) * 100) / 100 : 0
 
       return {
         transactions: txs,
-        summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods },
+        summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods, paidPreviousPeriod },
         month,
       }
     }
@@ -506,7 +507,7 @@ export async function salaryRoutes(app: FastifyInstance) {
           ...s,
           rates: staffRates,
           transactions: staffTxs,
-          summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0 },
+          summary: { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0, paidPreviousPeriod: 0 },
         }
       })
 
@@ -534,10 +535,10 @@ export async function salaryRoutes(app: FastifyInstance) {
         .select(['staff_id', 'type', 'gross_amount', 'deduction_pct'])
         .execute()
 
-      const map = new Map<string, { gross: number; deduction: number; net: number; paid: number; balance: number; debtPreviousPeriods: number }>()
+      const map = new Map<string, { gross: number; deduction: number; net: number; paid: number; balance: number; debtPreviousPeriods: number; paidPreviousPeriod: number }>()
 
       for (const s of staff) {
-        map.set(s.id, { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 })
+        map.set(s.id, { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0, paidPreviousPeriod: 0 })
       }
 
       for (const tx of txs) {
@@ -562,7 +563,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         month,
         rows: staff.map(s => ({
           ...s,
-          summary: map.get(s.id) ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 },
+          summary: map.get(s.id) ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0, paidPreviousPeriod: 0 },
         })),
       }
     }
@@ -751,7 +752,7 @@ export async function salaryRoutes(app: FastifyInstance) {
       const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
       const balance  = Math.round((totalNet - totalPaid) * 100) / 100
 
-      return { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0 }
+      return { gross: totalGross, deduction: totalDeduction, net: totalNet, paid: totalPaid, balance, debtPreviousPeriods: 0, paidPreviousPeriod: 0 }
     }
   )
 

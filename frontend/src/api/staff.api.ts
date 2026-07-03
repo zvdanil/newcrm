@@ -78,6 +78,7 @@ export interface SalarySummary {
   paid:                  number
   balance:               number
   debtPreviousPeriods:   number
+  paidPreviousPeriod:    number
 }
 
 export interface SalaryMonthResponse {
