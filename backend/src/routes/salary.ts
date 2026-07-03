@@ -79,9 +79,6 @@ export async function salaryRoutes(app: FastifyInstance) {
           totalDeduction += ded
         }
       }
-      const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
-      const balance  = Math.round((totalNet - totalPaid) * 100) / 100
-
       // Debt from previous periods with waterfall: current month payments cover past debts first
       const prevTxs = await db
         .selectFrom('salary_transactions')
@@ -101,8 +98,14 @@ export async function salaryRoutes(app: FastifyInstance) {
           prevNet += (gross - ded)
         }
       }
-      const debtPreviousPeriods = Math.max(0, Math.round((prevNet - totalPaid) * 100) / 100)
+
+      const totalNet = Math.round((totalGross - totalDeduction) * 100) / 100
       const paidPreviousPeriod = prevNet > 0 ? Math.round(Math.min(prevNet, totalPaid) * 100) / 100 : 0
+      const debtPreviousPeriods = prevNet > 0 ? Math.round((prevNet - paidPreviousPeriod) * 100) / 100 : 0
+
+      const paidCurrentMonth = Math.round((totalPaid - paidPreviousPeriod) * 100) / 100
+      const overpaymentPreviousPeriods = prevNet < 0 ? -prevNet : 0
+      const balance = Math.round((totalNet - (paidCurrentMonth + overpaymentPreviousPeriods)) * 100) / 100
 
       return {
         transactions: txs,
