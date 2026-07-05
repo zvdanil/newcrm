@@ -133,7 +133,7 @@ export async function reportsRoutes(app: FastifyInstance) {
   //          expense_turnover, expense_turnover_no_div, balance_no_div, account_balance
   app.get<{ Querystring: { from?: string; to?: string } }>(
     '/pnl',
-    { preHandler: requireRole('owner') },
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
       const { from, to } = req.query
 

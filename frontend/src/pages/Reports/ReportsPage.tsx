@@ -6,6 +6,7 @@ import type { ARFilters, DebtorRow } from '../../api/reports.api'
 import { accountsApi } from '../../api/accounts.api'
 import { PnLReport } from './PnLReport'
 import { ARAnalyticsReport } from './ARAnalyticsReport'
+import { useCanAccess } from '../../hooks/useCanAccess'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ const EMPTY_FILTERS: ARFilters = {
 // ─── component ──────────────────────────────────────────────────────────────
 
 export function ReportsPage() {
+  const canViewPnL = useCanAccess('owner', 'admin', 'accountant')
   const [activeTab, setActiveTab] = useState<'ar' | 'pnl' | 'analytics'>('ar')
   const [filters, setFilters]         = useState<ARFilters>(EMPTY_FILTERS)
   const [committed, setCommitted]     = useState<ARFilters | null>(null)
@@ -106,11 +108,11 @@ export function ReportsPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
-          {([
-            { id: 'ar',        label: 'Дебіторська заборгованість' },
-            { id: 'analytics', label: 'Аналітика AR' },
-            { id: 'pnl',       label: 'PnL' },
-          ] as const).map(tab => (
+          {[
+            { id: 'ar' as const,        label: 'Дебіторська заборгованість' },
+            { id: 'analytics' as const, label: 'Аналітика AR' },
+            ...(canViewPnL ? [{ id: 'pnl' as const, label: 'PnL' }] : []),
+          ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
