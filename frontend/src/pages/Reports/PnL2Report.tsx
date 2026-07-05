@@ -411,7 +411,7 @@ export function PnL2Report() {
                               {/* Children details */}
                               {isActExpanded && uniqueKids.map(kid => (
                                 <tr key={kid.id} className="bg-gray-50/10 text-[11px] text-gray-500">
-                                  <td className="pl-14 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 whitespace-nowrap">
+                                  <td className="pl-14 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 whitespace-normal break-words max-w-[320px]">
                                     {kid.name}
                                   </td>
                                   {rows.map(r => {
@@ -593,7 +593,7 @@ export function PnL2Report() {
                               {/* Category Transactions */}
                               {isCatExpanded && txs.map(tx => (
                                 <tr key={tx.id} className="bg-gray-50/10 text-[11px] text-gray-500">
-                                  <td className="pl-14 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] truncate" title={tx.note}>
+                                  <td className="pl-14 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] whitespace-normal break-words" title={tx.note}>
                                     <span className="font-semibold text-gray-400 mr-2">{tx.date}</span>
                                     {tx.note || '(без примітки)'}
                                   </td>
@@ -717,7 +717,7 @@ export function PnL2Report() {
                         {/* Withdrawal transactions */}
                         {isWitExpanded && txs.map(tx => (
                           <tr key={tx.id} className="bg-gray-50/10 text-[11px] text-gray-500">
-                            <td className="pl-8 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] truncate" title={tx.note}>
+                            <td className="pl-8 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] whitespace-normal break-words" title={tx.note}>
                               <span className="font-semibold text-gray-400 mr-2">{tx.date}</span>
                               {tx.note || '(без примітки)'}
                             </td>
@@ -771,7 +771,7 @@ export function PnL2Report() {
                         {/* Dividend transactions */}
                         {isDivExpanded && txs.map(tx => (
                           <tr key={tx.id} className="bg-gray-50/10 text-[11px] text-gray-500">
-                            <td className="pl-8 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] truncate" title={tx.note}>
+                            <td className="pl-8 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 max-w-[320px] whitespace-normal break-words" title={tx.note}>
                               <span className="font-semibold text-gray-400 mr-2">{tx.date}</span>
                               <span className="font-medium text-iris-600 mr-2">[{tx.recipient || 'Учасник'}]</span>
                               {tx.note || '(без примітки)'}
