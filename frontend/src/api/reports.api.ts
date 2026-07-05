@@ -131,20 +131,74 @@ export const reportsApi = {
   },
 }
 
+export interface PnL2ChildDetail {
+  child_id: string
+  child_name: string
+  accrued: number
+  paid: number
+}
+
+export interface PnL2ActivityDetail {
+  activity_id: string
+  activity_name: string
+  accrued: number
+  paid: number
+  children: PnL2ChildDetail[]
+}
+
 export interface PnL2Account {
   account_id: string
   name: string
   accrued: number
   paid: number
+  details: PnL2ActivityDetail[]
+}
+
+export interface PnL2StaffDetail {
+  staff_id: string
+  staff_name: string
+  accrued: number
+  paid: number
+}
+
+export interface PnL2ExpenseTxDetail {
+  id: string
+  date: string
+  amount: number
+  note: string
+  type: 'accrued' | 'paid'
+}
+
+export interface PnL2CategoryDetail {
+  category_id: string
+  category_name: string
+  accrued: number
+  paid: number
+  transactions: PnL2ExpenseTxDetail[]
+}
+
+export interface PnL2WithdrawalTxDetail {
+  id: string
+  date: string
+  amount: number
+  note: string
+}
+
+export interface PnL2DividendTxDetail {
+  id: string
+  date: string
+  recipient: string
+  amount: number
+  note: string
 }
 
 export interface PnL2Row {
   month: string
   accounts: PnL2Account[]
-  salary: { accrued: number; paid: number }
-  expenses: { accrued: number; paid: number }
-  withdrawals: { paid: number }
-  dividends: { paid: number }
+  salary: { accrued: number; paid: number; details: PnL2StaffDetail[] }
+  expenses: { accrued: number; paid: number; details: PnL2CategoryDetail[] }
+  withdrawals: { paid: number; transactions: PnL2WithdrawalTxDetail[] }
+  dividends: { paid: number; transactions: PnL2DividendTxDetail[] }
 }
 
 export interface PnL2Report {
