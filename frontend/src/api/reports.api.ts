@@ -121,4 +121,34 @@ export const reportsApi = {
     const { data } = await apiClient.get<PnLReport>(`/reports/pnl?${params}`)
     return data
   },
+
+  getPnL2: async (from?: string, to?: string): Promise<PnL2Report> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to)   params.set('to', to)
+    const { data } = await apiClient.get<PnL2Report>(`/reports/pnl2?${params}`)
+    return data
+  },
+}
+
+export interface PnL2Account {
+  account_id: string
+  name: string
+  accrued: number
+  paid: number
+}
+
+export interface PnL2Row {
+  month: string
+  accounts: PnL2Account[]
+  salary: { accrued: number; paid: number }
+  expenses: { accrued: number; paid: number }
+  withdrawals: { paid: number }
+  dividends: { paid: number }
+}
+
+export interface PnL2Report {
+  months: string[]
+  accounts: Array<{ id: string; name: string }>
+  rows: PnL2Row[]
 }

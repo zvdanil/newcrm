@@ -531,4 +531,186 @@ export async function reportsRoutes(app: FastifyInstance) {
       return { rows, totals, period_months: periodMonths }
     }
   )
+
+  // ── PnL 2 Report ─────────────────────────────────────────────────────────────
+  // GET /api/reports/pnl2?from=YYYY-MM&to=YYYY-MM
+  // Returns parallel Accrual and Cash metrics for each account and category.
+  app.get<{ Querystring: { from?: string; to?: string } }>(
+    '/pnl2',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const { from, to } = req.query
+
+      // Parse range — default: last 6 months
+      const now = new Date()
+      const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+      const fromDate = from ? new Date(`${from}-01`) : defaultFrom
+      const toDate   = to   ? new Date(`${to}-01`)   : new Date(now.getFullYear(), now.getMonth(), 1)
+
+      // Helper: format Date as 'YYYY-MM-01'
+      const fmtMonth = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        return `${y}-${m}-01`
+      }
+
+      // Generate requested months list
+      const months: string[] = []
+      const cursor = new Date(fromDate)
+      while (cursor <= toDate) {
+        months.push(fmtMonth(cursor))
+        cursor.setMonth(cursor.getMonth() + 1)
+      }
+
+      // 1. Fetch active accounts
+      const accounts = await db.selectFrom('accounts')
+        .select(['id', 'name'])
+        .where('is_active', '=', true)
+        .orderBy('name', 'asc')
+        .execute()
+
+      // 2. Fetch withdrawal category
+      const withdrawalCat = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+      const withdrawalCatId = withdrawalCat?.id ?? null
+
+      // 3. Parallel DB queries
+      const [
+        clientAccruals,
+        clientPayments,
+        salaryAccruals,
+        salaryPayments,
+        expenseAccruals,
+        expensePayments,
+      ] = await Promise.all([
+        // 1. Client Accruals by account and month
+        db.selectFrom('transactions as t')
+          .innerJoin('accounts as a', 'a.id', 't.account_id')
+          .select([
+            't.account_id',
+            sql<string>`to_char(COALESCE(t.billing_month, date_trunc('month', t.transaction_date)), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(t.amount), 0)`.as('total')
+          ])
+          .where('t.type', '=', 'ACCRUAL')
+          .where('t.is_deleted', '=', false)
+          .groupBy(['t.account_id', sql`COALESCE(t.billing_month, date_trunc('month', t.transaction_date))`])
+          .execute(),
+
+        // 2. Client Payments by account and month
+        db.selectFrom('transactions as t')
+          .innerJoin('accounts as a', 'a.id', 't.account_id')
+          .select([
+            't.account_id',
+            sql<string>`to_char(date_trunc('month', t.transaction_date), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(t.amount), 0)`.as('total')
+          ])
+          .where('t.type', '=', 'PAYMENT')
+          .where('t.is_deleted', '=', false)
+          .groupBy(['t.account_id', sql`date_trunc('month', t.transaction_date)`])
+          .execute(),
+
+        // 3. Salary Accruals by month (gross)
+        db.selectFrom('salary_transactions')
+          .select([
+            sql<string>`to_char(COALESCE(billing_month, date_trunc('month', transaction_date)), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(gross_amount), 0)`.as('total'),
+          ])
+          .where('type', '=', 'ACCRUAL')
+          .where('is_deleted', '=', false)
+          .groupBy(sql`COALESCE(billing_month, date_trunc('month', transaction_date))`)
+          .execute(),
+
+        // 4. Salary Payments (split no-div vs div)
+        db.selectFrom('salary_transactions')
+          .select([
+            sql<string>`to_char(date_trunc('month', transaction_date), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN gross_amount ELSE 0 END), 0)`.as('total_no_div'),
+            sql<string>`COALESCE(SUM(CASE WHEN is_dividend THEN gross_amount ELSE 0 END), 0)`.as('total_div'),
+          ])
+          .where('type', '=', 'PAYMENT')
+          .where('is_deleted', '=', false)
+          .groupBy(sql`date_trunc('month', transaction_date)`)
+          .execute(),
+
+        // 5. General Expenses Accrued (excluding withdrawal and dividend)
+        db.selectFrom('expenses')
+          .select([
+            sql<string>`to_char(date_trunc('month', accrual_date), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
+          ])
+          .where('is_deleted', '=', false)
+          .where('is_dividend', '=', false)
+          .where('is_advance', '=', false)
+          .where('is_advance_return', '=', false)
+          .where((eb) => withdrawalCatId ? eb.or([eb('category_id', '!=', withdrawalCatId), eb('category_id', 'is', null)]) : eb.val(true))
+          .groupBy(sql`date_trunc('month', accrual_date)`)
+          .execute(),
+
+        // 6. General Expenses Paid (split regular vs withdrawal vs dividend)
+        db.selectFrom('expenses as e')
+          .select([
+            sql<string>`to_char(date_trunc('month', e.payment_date), 'YYYY-MM-01')`.as('month'),
+            sql<string>`COALESCE(SUM(CASE WHEN e.is_dividend = false ${withdrawalCatId ? sql`AND (e.category_id IS NULL OR e.category_id != ${withdrawalCatId})` : sql``} THEN (CASE WHEN e.is_advance_return THEN -e.amount ELSE e.amount - COALESCE(e.utilized_advance_amount, 0) END) ELSE 0 END), 0)`.as('total_regular'),
+            sql<string>`COALESCE(SUM(CASE WHEN ${withdrawalCatId ? sql`e.category_id = ${withdrawalCatId}` : sql`1=0`} THEN (CASE WHEN e.is_advance_return THEN -e.amount ELSE e.amount - COALESCE(e.utilized_advance_amount, 0) END) ELSE 0 END), 0)`.as('total_withdrawal'),
+            sql<string>`COALESCE(SUM(CASE WHEN e.is_dividend = true THEN (CASE WHEN e.is_advance_return THEN -e.amount ELSE e.amount - COALESCE(e.utilized_advance_amount, 0) END) ELSE 0 END), 0)`.as('total_dividend'),
+          ])
+          .where('e.status', '=', 'paid')
+          .where('e.is_deleted', '=', false)
+          .where('e.payment_date', 'is not', null)
+          .groupBy(sql`date_trunc('month', e.payment_date)`)
+          .execute(),
+      ])
+
+      // 4. Group helpers
+      const getAccrual = (accountId: string, month: string) =>
+        Number(clientAccruals.find(r => r.account_id === accountId && r.month === month)?.total ?? 0)
+
+      const getPayment = (accountId: string, month: string) =>
+        Number(clientPayments.find(r => r.account_id === accountId && r.month === month)?.total ?? 0)
+
+      const getVal = (data: Array<{ month: string; total: string }>, month: string) =>
+        Number(data.find(r => r.month === month)?.total ?? 0)
+
+      // Assemble results by month
+      const rows = months.map(month => {
+        const monthAccounts = accounts.map(a => {
+          const accrued = getAccrual(a.id, month)
+          const paid = getPayment(a.id, month)
+          return {
+            account_id: a.id,
+            name: a.name,
+            accrued,
+            paid,
+          }
+        })
+
+        const salary_accrued = getVal(salaryAccruals, month)
+        const salary_paid = Number(salaryPayments.find(r => r.month === month)?.total_no_div ?? 0)
+
+        const expenses_accrued = getVal(expenseAccruals, month)
+        const expenses_paid = Number(expensePayments.find(r => r.month === month)?.total_regular ?? 0)
+
+        const withdrawal_paid = Number(expensePayments.find(r => r.month === month)?.total_withdrawal ?? 0)
+        const dividend_paid = Number(expensePayments.find(r => r.month === month)?.total_dividend ?? 0)
+                            + Number(salaryPayments.find(r => r.month === month)?.total_div ?? 0)
+
+        return {
+          month,
+          accounts: monthAccounts,
+          salary: { accrued: salary_accrued, paid: salary_paid },
+          expenses: { accrued: expenses_accrued, paid: expenses_paid },
+          withdrawals: { paid: withdrawal_paid },
+          dividends: { paid: dividend_paid },
+        }
+      })
+
+      return {
+        months,
+        accounts,
+        rows,
+      }
+    }
+  )
 }
