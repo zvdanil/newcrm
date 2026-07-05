@@ -582,6 +582,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         salaryTxDetails,
         expenseTxDetails,
         dividendPayouts,
+        cashoutTransfers,
       ] = await Promise.all([
         // 1. Client transactions with activity and child info
         db.selectFrom('transactions as t')
@@ -664,6 +665,37 @@ export async function reportsRoutes(app: FastifyInstance) {
           .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
           .select(['dp.id', 'ep.name as participant_name'])
           .execute(),
+
+        // 5. Cash-out transfers (linked to active expenses or salary payments)
+        db.selectFrom('account_transfers as t')
+          .innerJoin('accounts as fa', 'fa.id', 't.from_account_id')
+          .innerJoin('accounts as ta', 'ta.id', 't.to_account_id')
+          .select([
+            't.id',
+            't.amount',
+            't.transfer_date',
+            't.note',
+            't.from_account_id',
+            'fa.name as from_account_name',
+            't.to_account_id',
+            'ta.name as to_account_name',
+            sql<string>`to_char(date_trunc('month', t.transfer_date), 'YYYY-MM-01')`.as('month')
+          ])
+          .where((eb) => eb.or([
+            eb.exists(
+              db.selectFrom('expenses as e')
+                .select('e.id')
+                .where(sql<boolean>`e.withdrawal_transfer_id = t.id`)
+                .where('e.is_deleted', '=', false)
+            ),
+            eb.exists(
+              db.selectFrom('salary_transactions as st')
+                .select('st.id')
+                .where(sql<boolean>`st.withdrawal_transfer_id = t.id`)
+                .where('st.is_deleted', '=', false)
+            )
+          ]))
+          .execute(),
       ])
 
       // 4. Post-process Revenue Details
@@ -699,6 +731,27 @@ export async function reportsRoutes(app: FastifyInstance) {
           if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
           actObj.children[chId].paid += total
         }
+      }
+
+      // Fold in cash-out transfers as revenue on the target account
+      for (const w of cashoutTransfers) {
+        const m = w.month
+        const accId = w.to_account_id
+        const actId = 'withdrawal'
+        const actName = 'Обналичування'
+        const chId = w.id
+        const chName = `[Переказ з ${w.from_account_name}] ${w.note || 'Обналичування'}`
+        const total = Number(w.amount)
+
+        if (!revDetailsMap[m]) revDetailsMap[m] = {}
+        if (!revDetailsMap[m][accId]) revDetailsMap[m][accId] = {}
+        if (!revDetailsMap[m][accId][actId]) {
+          revDetailsMap[m][accId][actId] = { activity_name: actName, accrued: 0, paid: 0, children: {} }
+        }
+        const actObj = revDetailsMap[m][accId][actId]
+        actObj.paid += total
+        if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
+        actObj.children[chId].paid += total
       }
 
       // 5. Post-process Salary Details
