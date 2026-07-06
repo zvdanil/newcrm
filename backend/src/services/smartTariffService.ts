@@ -2,6 +2,7 @@ import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { createTransaction, recalcBalance } from './balanceService.js'
 import { getChildIndividualTariff } from './billingRunService.js'
+import { castAsDate, toDbDateStr } from './dateUtils.js'
 
 type SmartConfig = {
   base_lessons:          number | null
@@ -25,9 +26,7 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
   if (!enrollment) return
 
   const billingDate = new Date(billingMonth)
-
-  // Resolve config and base price — child individual tariff takes priority
-  const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, billingDate)
+  const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, billingMonth)
 
   let config: SmartConfig | null = null
   let B: number
@@ -66,8 +65,8 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
       .selectFrom('tariffs')
       .select('base_fee')
       .where('activity_id', '=', enrollment.activity_id)
-      .where('valid_from', '<=', billingDate)
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', billingDate)]))
+      .where('valid_from', '<=', castAsDate(billingMonth))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(billingMonth))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -80,14 +79,15 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
   // Count excused absences in the billing month
   const nextMonth = new Date(billingDate)
   nextMonth.setMonth(nextMonth.getMonth() + 1)
+  const nextMonthStr = toDbDateStr(nextMonth)
 
   const { count: rawCount } = await db
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.count<string>('id').as('count'))
     .where('enrollment_id', '=', enrollmentId)
     .where('status', 'in', ['absent_excused', 'absent_excused_30'])
-    .where('date', '>=', billingDate)
-    .where('date', '<', nextMonth)
+    .where('date', '>=', castAsDate(billingMonth))
+    .where('date', '<', castAsDate(nextMonthStr))
     .executeTakeFirstOrThrow()
 
   const absenceCount = Number(rawCount)
@@ -111,7 +111,7 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     .select(['id', 'amount'])
     .where('enrollment_id', '=', enrollmentId)
     .where('type', '=', 'REFUND')
-    .where('billing_month', '=', billingDate)
+    .where('billing_month', '=', castAsDate(billingMonth))
     .where('is_deleted', '=', false)
     .where(sql<string>`metadata_json->>'source'`, '=', 'smart_benefit')
     .executeTakeFirst()
@@ -168,16 +168,16 @@ export async function runSmartAccruals(
   for (const e of smartEnrollments) {
     if (new Date(e.start_date as Date) > billingDate) { skipped++; continue }
 
-    const ind = await getChildIndividualTariff(e.child_id, e.activity_id, billingDate)
+    const ind = await getChildIndividualTariff(e.child_id, e.activity_id, billingMonthStr)
     if (ind && ind.tariff_type !== 'smart') { skipped++; continue } // overridden to monthly/per_lesson
 
     const price = ind
       ? Math.round(parseFloat(ind.price as string) * 100) / 100
-      : await resolveSmartPrice(e.child_id, e.activity_id, billingDate)
+      : await resolveSmartPrice(e.child_id, e.activity_id, billingMonthStr)
 
     if (!price || price <= 0) { skipped++; continue }
 
-    if (await hasSmartAccrual(e.enrollment_id, billingDate)) { skipped++; continue }
+    if (await hasSmartAccrual(e.enrollment_id, billingMonthStr)) { skipped++; continue }
 
     await createSmartAccrual(e.enrollment_id, e.child_id, e.account_id, e.activity_id, price, billingMonthStr, triggeredBy)
     created++
@@ -197,15 +197,15 @@ export async function runSmartAccruals(
     .where('cit.tariff_type', '=', 'smart')
     .where('act.tariff_type', '!=', 'smart')
     .where('e.status', '=', 'active')
-    .where('cit.valid_from', '<=', billingDate)
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', billingDate)]))
+    .where('cit.valid_from', '<=', castAsDate(billingMonthStr))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', castAsDate(billingMonthStr))]))
     .execute()
 
   for (const e of individualSmart) {
     if (new Date(e.start_date as Date) > billingDate) { skipped++; continue }
     const price = Math.round(parseFloat(e.ind_price as string) * 100) / 100
     if (price <= 0) { skipped++; continue }
-    if (await hasSmartAccrual(e.enrollment_id, billingDate)) { skipped++; continue }
+    if (await hasSmartAccrual(e.enrollment_id, billingMonthStr)) { skipped++; continue }
     await createSmartAccrual(e.enrollment_id, e.child_id, e.account_id, e.activity_id, price, billingMonthStr, triggeredBy)
     created++
   }
@@ -215,25 +215,25 @@ export async function runSmartAccruals(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function resolveSmartPrice(childId: string, activityId: string, billingDate: Date): Promise<number | null> {
+async function resolveSmartPrice(childId: string, activityId: string, billingDate: Date | string): Promise<number | null> {
   const tariff = await db
     .selectFrom('tariffs')
     .select('base_fee')
     .where('activity_id', '=', activityId)
-    .where('valid_from', '<=', billingDate)
-    .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', billingDate)]))
+    .where('valid_from', '<=', castAsDate(billingDate))
+    .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(billingDate))]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
   if (!tariff) return null
   return parseFloat(tariff.base_fee as string)
 }
 
-async function hasSmartAccrual(enrollmentId: string, billingDate: Date): Promise<boolean> {
+async function hasSmartAccrual(enrollmentId: string, billingDate: Date | string): Promise<boolean> {
   const existing = await db
     .selectFrom('transactions')
     .select('id')
     .where('enrollment_id', '=', enrollmentId)
-    .where('billing_month', '=', billingDate)
+    .where('billing_month', '=', castAsDate(billingDate))
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()

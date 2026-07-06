@@ -1,6 +1,7 @@
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { createTransaction, recalcBalance } from './balanceService.js'
+import { castAsDate, toDbDateStr } from './dateUtils.js'
 
 // Підрахунок робочих днів (пн–пт) у діапазоні [from, to] включно
 export function countWorkingDays(from: Date, to: Date): number {
@@ -27,7 +28,7 @@ interface RunResult {
  * Returns the active individual tariff (with smart config if any) for a child+activity on a date.
  * When present, its tariff_type overrides the activity's tariff_type, and its price is used directly.
  */
-export async function getChildIndividualTariff(childId: string, activityId: string, date: Date) {
+export async function getChildIndividualTariff(childId: string, activityId: string, date: Date | string) {
   return db
     .selectFrom('child_individual_tariffs as cit')
     .leftJoin('child_smart_tariff_configs as csc', 'csc.individual_tariff_id', 'cit.id')
@@ -38,8 +39,8 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
     ])
     .where('cit.child_id', '=', childId)
     .where('cit.activity_id', '=', activityId)
-    .where('cit.valid_from', '<=', date)
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', date)]))
+    .where('cit.valid_from', '<=', castAsDate(date))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(date))]))
     .orderBy('cit.valid_from', 'desc')
     .executeTakeFirst()
 }
@@ -50,16 +51,16 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
  *   2. Base tariff + global discount
  * Used when no child_individual_tariff overrides the tariff type.
  */
-export async function getEffectivePrice(childId: string, activityId: string, billingDate: Date): Promise<number | null> {
+export async function getEffectivePrice(childId: string, activityId: string, billingDate: Date | string): Promise<number | null> {
   const childPrice = await db
     .selectFrom('child_prices')
     .select(['price', 'discount_pct'])
     .where('child_id', '=', childId)
     .where('activity_id', '=', activityId)
-    .where('valid_from', '<=', billingDate)
+    .where('valid_from', '<=', castAsDate(billingDate))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', billingDate),
+      eb('valid_to', '>', castAsDate(billingDate)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -68,10 +69,10 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .selectFrom('tariffs')
     .select('base_fee')
     .where('activity_id', '=', activityId)
-    .where('valid_from', '<=', billingDate)
+    .where('valid_from', '<=', castAsDate(billingDate))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', billingDate),
+      eb('valid_to', '>', castAsDate(billingDate)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -92,10 +93,10 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .selectFrom('child_global_discounts')
     .select('discount_pct')
     .where('child_id', '=', childId)
-    .where('valid_from', '<=', billingDate)
+    .where('valid_from', '<=', castAsDate(billingDate))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', billingDate),
+      eb('valid_to', '>', castAsDate(billingDate)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -124,7 +125,7 @@ async function billMonthlyEnrollment(
     .selectFrom('transactions')
     .select(['id', 'amount'])
     .where('enrollment_id', '=', enrollmentId)
-    .where('billing_month', '=', billingDate)
+    .where('billing_month', '=', castAsDate(billingMonthStr))
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -156,7 +157,7 @@ async function billMonthlyEnrollment(
         .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
         .where('type', '=', 'ADJUSTMENT')
         .where('enrollment_id', '=', enrollmentId)
-        .where('billing_month', '=', billingDate)
+        .where('billing_month', '=', castAsDate(billingMonthStr))
         .where('is_deleted', '=', false)
         .where(sql`metadata_json->>'adjustment_reason'`, '=', 'tariff_changed')
         .execute()
@@ -258,8 +259,8 @@ export async function runBilling(billingMonthStr: string, triggeredBy: string | 
       .where('cit.tariff_type', '=', 'monthly')
       .where('act.tariff_type', '!=', 'monthly')
       .where('e.status', 'in', ['active', 'frozen'])
-      .where('cit.valid_from', '<=', billingDate)
-      .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', billingDate)]))
+      .where('cit.valid_from', '<=', castAsDate(billingMonthStr))
+      .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', castAsDate(billingMonthStr))]))
       .execute()
 
     for (const e of individualMonthly) {
@@ -352,7 +353,7 @@ export async function recalcActivityAccruals(
         await db.updateTable('transactions')
           .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
-          .where('billing_month', '=', billingDate)
+          .where('billing_month', '=', castAsDate(monthStr))
           .where('type', '=', 'ACCRUAL')
           .where('is_deleted', '=', false)
           .execute()
@@ -361,7 +362,7 @@ export async function recalcActivityAccruals(
         await db.updateTable('transactions')
           .set(softDeleteSet)
           .where('enrollment_id', '=', e.enrollment_id)
-          .where('billing_month', '=', billingDate)
+          .where('billing_month', '=', castAsDate(monthStr))
           .where('type', '=', 'ADJUSTMENT')
           .where('is_deleted', '=', false)
           .execute()
@@ -373,8 +374,8 @@ export async function recalcActivityAccruals(
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
-          .where('transaction_date', '>=', billingDate)
-          .where('transaction_date', '<=', new Date(monthLastDay))
+          .where('transaction_date', '>=', castAsDate(monthStr))
+          .where('transaction_date', '<=', castAsDate(monthLastDay))
           .where(sql`metadata_json->>'source'`, 'is', null)
           .execute()
 
@@ -384,8 +385,8 @@ export async function recalcActivityAccruals(
           .where('enrollment_id', '=', e.enrollment_id)
           .where('type', '=', 'REFUND')
           .where('is_deleted', '=', false)
-          .where('transaction_date', '>=', billingDate)
-          .where('transaction_date', '<=', new Date(monthLastDay))
+          .where('transaction_date', '>=', castAsDate(monthStr))
+          .where('transaction_date', '<=', castAsDate(monthLastDay))
           .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
@@ -465,8 +466,8 @@ export async function recalcActivityAccruals(
             .select(['id', 'date', 'status'])
             .where('enrollment_id', '=', e.enrollment_id)
             .where('status', 'in', ['absent_excused', 'absent_excused_30'])
-            .where('date', '>=', new Date(monthStr))
-            .where('date', '<=', new Date(monthLastDay))
+            .where('date', '>=', castAsDate(monthStr))
+            .where('date', '<=', castAsDate(monthLastDay))
             .execute()
 
           for (const abs of absences) {
@@ -532,8 +533,8 @@ export async function recalcActivityAccruals(
       .where('enrollment_id', 'in', enrollmentIds)
       .where('type', '=', 'ACCRUAL')
       .where('is_deleted', '=', false)
-      .where('transaction_date', '>=', fromDate)
-      .where('transaction_date', '<=', toDate)
+      .where('transaction_date', '>=', castAsDate(fromDate))
+      .where('transaction_date', '<=', castAsDate(toDate))
       .execute()
 
     const needsRecalc = new Set<string>()
@@ -553,8 +554,8 @@ export async function recalcActivityAccruals(
       .select(['al.id as log_id', 'al.enrollment_id', 'al.child_id', 'al.date', 'e.account_id'])
       .where('al.activity_id', '=', activityId)
       .where('al.status', 'in', ['present', 'special'])
-      .where('al.date', '>=', fromDate)
-      .where('al.date', '<=', toDate)
+      .where('al.date', '>=', castAsDate(fromDate))
+      .where('al.date', '<=', castAsDate(toDate))
       .where('al.custom_amount', 'is', null)
       .execute()
 
@@ -649,8 +650,8 @@ export async function recalcForIndividualTariff(
       .where('type', '=', 'ACCRUAL')
       .where('is_deleted', '=', false)
       .where('billing_month', 'is', null)
-      .where('transaction_date', '>=', billingDate)
-      .where('transaction_date', '<=', new Date(monthLastDay))
+      .where('transaction_date', '>=', castAsDate(monthStr))
+      .where('transaction_date', '<=', castAsDate(monthLastDay))
       .execute()
 
     for (const tx of existingPerLesson) {
@@ -664,7 +665,7 @@ export async function recalcForIndividualTariff(
       .where('enrollment_id', '=', enrollment.enrollment_id)
       .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
       .where('is_deleted', '=', false)
-      .where('billing_month', '=', billingDate)
+      .where('billing_month', '=', castAsDate(monthStr))
       .execute()
 
     const price = Math.round(parseFloat(ind.price as string) * 100) / 100
@@ -723,8 +724,8 @@ export async function recalcForIndividualTariff(
         .select(['id as log_id', 'date', 'custom_amount'])
         .where('enrollment_id', '=', enrollment.enrollment_id)
         .where('status', 'in', ['present', 'special', 'separate_billing'])
-        .where('date', '>=', billingDate)
-        .where('date', '<=', new Date(monthLastDay))
+        .where('date', '>=', castAsDate(monthStr))
+        .where('date', '<=', castAsDate(monthLastDay))
         .execute()
 
       for (const mark of marks) {
@@ -734,7 +735,7 @@ export async function recalcForIndividualTariff(
         const accrualAmount = markCustom ?? price
         if (accrualAmount <= 0) continue
 
-        const lessonDateStr = new Date(mark.date as Date).toISOString().slice(0, 10)
+        const lessonDateStr = toDbDateStr(mark.date as Date)
 
         // Marks with custom_amount may already have an ACCRUAL from the journal trigger — don't duplicate.
         if (markCustom !== null) {
@@ -743,7 +744,7 @@ export async function recalcForIndividualTariff(
             .select('id')
             .where('enrollment_id', '=', enrollment.enrollment_id)
             .where('type', '=', 'ACCRUAL')
-            .where('transaction_date', '=', new Date(lessonDateStr))
+            .where('transaction_date', '=', castAsDate(lessonDateStr))
             .where('billing_month', 'is', null)
             .where('is_deleted', '=', false)
             .executeTakeFirst()

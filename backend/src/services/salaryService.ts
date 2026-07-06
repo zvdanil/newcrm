@@ -1,5 +1,6 @@
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
+import { castAsDate, toDbDateStr } from './dateUtils.js'
 
 function billingMonthOf(date: string): string {
   return date.slice(0, 7) + '-01'
@@ -19,11 +20,7 @@ function workingDaysInMonthFromDate(date: Date | string): number {
 }
 
 function toLocalDateString(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return toDbDateStr(date)
 }
 
 /**
@@ -91,8 +88,8 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .innerJoin('children as c', 'c.id', 'al.child_id')
     .select(['al.child_id', 'c.full_name', 'al.custom_amount', 'al.date'])
     .where('al.activity_id', '=', rate.activity_id!)
-    .where('al.date', '>=', new Date(billingStart))
-    .where('al.date', '<', new Date(billingEnd))
+    .where('al.date', '>=', castAsDate(billingStart))
+    .where('al.date', '<', castAsDate(billingEnd))
     .where('al.status', 'in', ['present', 'special'])
     .execute()
 
@@ -180,7 +177,7 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .select(['id', 'gross_amount', 'deduction_pct'])
     .where('staff_id',    '=', rate.staff_id)
     .where('rate_id',     '=', rateId)
-    .where('billing_month', '=', new Date(billingMonth))
+    .where('billing_month', '=', castAsDate(billingMonth))
     .where('type',        '=', 'ACCRUAL')
     .where('is_deleted',  '=', false)
     .executeTakeFirst()
@@ -351,7 +348,7 @@ export async function recalcRetroAccruals(
       .where('staff_id',   '=', staffId)
       .where('rate_id',    '=', newRateId)
       .where('type',       '=', 'CORRECTION')
-      .where('billing_month', '=', billingDate)
+      .where('billing_month', '=', castAsDate(billing))
       .where('is_deleted', '=', false)
       .executeTakeFirst()
 
@@ -389,12 +386,12 @@ export async function recalcRetroAccruals(
 }
 
 /** Returns total child billing revenue for an activity on a specific date. */
-async function revenueForActivityDate(activityId: string, dateObj: Date): Promise<number> {
+async function revenueForActivityDate(activityId: string, dateObj: Date | string): Promise<number> {
   const result = await db
     .selectFrom('transactions')
     .select((eb) => eb.fn.sum<string>('amount').as('total'))
     .where('activity_id', '=', activityId)
-    .where('transaction_date', '=', new Date(dateObj))
+    .where('transaction_date', '=', castAsDate(dateObj))
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -403,12 +400,12 @@ async function revenueForActivityDate(activityId: string, dateObj: Date): Promis
 }
 
 /** Returns total child billing revenue for an activity in a billing month. */
-async function revenueForActivityMonth(activityId: string, billingStart: Date): Promise<number> {
+async function revenueForActivityMonth(activityId: string, billingStart: Date | string): Promise<number> {
   const result = await db
     .selectFrom('transactions')
     .select((eb) => eb.fn.sum<string>('amount').as('total'))
     .where('activity_id', '=', activityId)
-    .where('billing_month', '=', new Date(billingStart))
+    .where('billing_month', '=', castAsDate(billingStart))
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -461,7 +458,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .innerJoin('activity_schedules as s', 's.id', 'sub.schedule_id')
     .select(['sub.original_staff_id', 'sub.substitute_staff_id', 'sub.salary_tx_id'])
     .where('s.activity_id', '=', activityId)
-    .where('sub.occurrence_date', '=', new Date(date))
+    .where('sub.occurrence_date', '=', castAsDate(date))
     .executeTakeFirst()
 
   const blockedStaffId = substitution?.original_staff_id ?? null
@@ -475,10 +472,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       eb('rate_type', '=', 'per_child'),
       eb('rate_type', '=', 'group_lesson'),
     ]))
-    .where('valid_from', '<=', new Date(date))
+    .where('valid_from', '<=', castAsDate(date))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', new Date(date)),
+      eb('valid_to', '>', castAsDate(date)),
     ]))
     .selectAll()
     .orderBy('valid_from', 'desc')
@@ -501,7 +498,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', activityId)
-    .where('date', '=', new Date(date))
+    .where('date', '=', castAsDate(date))
     .where('status', 'in', ['present', 'special'])
     .executeTakeFirst()
 
@@ -511,7 +508,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .selectFrom('group_lesson_logs')
     .select(['status', 'lessons_count'])
     .where('activity_id', '=', activityId)
-    .where('date', '=', new Date(date))
+    .where('date', '=', castAsDate(date))
     .executeTakeFirst()
 
   const groupConducted = groupLog?.status === 'conducted'
@@ -523,7 +520,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .innerJoin('staff_rates as sr', 'sr.id', 'st.rate_id')
     .select(['st.id', 'st.rate_id', 'st.gross_amount', 'st.deduction_pct'])
     .where('st.activity_id',      '=', activityId)
-    .where('st.transaction_date', '=', new Date(date))
+    .where('st.transaction_date', '=', castAsDate(date))
     .where('st.type',             '=', 'ACCRUAL')
     .where('st.is_deleted',       '=', false)
     .where('sr.rate_category',    '=', 'auto') // Только автоматические
@@ -625,10 +622,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select('id')
     .where('activity_id', '=', activityId)
     .where('rate_type', '=', 'smart')
-    .where('valid_from', '<=', new Date(date))
+    .where('valid_from', '<=', castAsDate(date))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', new Date(date)),
+      eb('valid_to', '>', castAsDate(date)),
     ]))
     .execute()
 
@@ -662,8 +659,8 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', rate.activity_id)
-    .where('date', '>=', new Date(billingMonth))
-    .where('date', '<', new Date(billingEnd))
+    .where('date', '>=', castAsDate(billingMonth))
+    .where('date', '<', castAsDate(billingEnd))
     .where('status', 'in', ['absent_excused', 'absent_excused_30', 'absent_unexcused'])
     .executeTakeFirst()
 
@@ -676,7 +673,7 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
     .select('gross_amount')
     .where('staff_id', '=', rate.staff_id)
     .where('rate_id', '=', rateId)
-    .where('billing_month', '=', new Date(billingMonth))
+    .where('billing_month', '=', castAsDate(billingMonth))
     .where('type', '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -686,7 +683,7 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
     .select(['id', 'gross_amount', 'deduction_pct'])
     .where('staff_id', '=', rate.staff_id)
     .where('rate_id', '=', rateId)
-    .where('billing_month', '=', new Date(billingMonth))
+    .where('billing_month', '=', castAsDate(billingMonth))
     .where('type', '=', 'CORRECTION')
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -747,10 +744,10 @@ export async function runFixedMonthlyAccruals(billingMonth: string): Promise<voi
     .selectFrom('staff_rates')
     .where('rate_type', '=', 'fixed_monthly')
     .where('rate_category', '=', 'auto')
-    .where('valid_from', '<=', billingObj)
+    .where('valid_from', '<=', castAsDate(billingMonth))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', billingObj),
+      eb('valid_to', '>', castAsDate(billingMonth)),
     ]))
     .selectAll()
     .execute()
@@ -761,7 +758,7 @@ export async function runFixedMonthlyAccruals(billingMonth: string): Promise<voi
       .select('id')
       .where('staff_id',    '=', rate.staff_id)
       .where('rate_id',     '=', rate.id)
-      .where('billing_month', '=', billingObj)
+      .where('billing_month', '=', castAsDate(billingMonth))
       .where('type',        '=', 'ACCRUAL')
       .where('is_deleted',  '=', false)
       .executeTakeFirst()
@@ -803,10 +800,10 @@ export async function runSmartStaffAccruals(billingMonth: string): Promise<void>
     .innerJoin('staff_smart_configs as sc', 'sc.rate_id', 'r.id')
     .where('r.rate_type', '=', 'smart')
     .where('r.rate_category', '=', 'auto')
-    .where('r.valid_from', '<=', new Date(billingMonth))
+    .where('r.valid_from', '<=', castAsDate(billingMonth))
     .where((eb) => eb.or([
       eb('r.valid_to', 'is', null),
-      eb('r.valid_to', '>=', new Date(billingMonth)),
+      eb('r.valid_to', '>=', castAsDate(billingMonth)),
     ]))
     .select(['r.id', 'r.staff_id', 'r.activity_id', 'r.rate_value', 'r.deduction_pct', 'sc.base_lessons'])
     .execute()
@@ -817,7 +814,7 @@ export async function runSmartStaffAccruals(billingMonth: string): Promise<void>
       .select('id')
       .where('staff_id', '=', rate.staff_id)
       .where('rate_id', '=', rate.id)
-      .where('billing_month', '=', new Date(billingMonth))
+      .where('billing_month', '=', castAsDate(billingMonth))
       .where('type', '=', 'ACCRUAL')
       .where('is_deleted', '=', false)
       .executeTakeFirst()
@@ -904,10 +901,10 @@ export async function recalcFixedMonthlyAccruals(staffId: string, billingMonth: 
     .where('staff_id', '=', staffId)
     .where('rate_type', '=', 'fixed_monthly')
     .where('rate_category', '=', 'auto')
-    .where('valid_from', '<=', billingObj)
+    .where('valid_from', '<=', castAsDate(billingMonth))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', billingObj),
+      eb('valid_to', '>', castAsDate(billingMonth)),
     ]))
     .selectAll()
     .execute()
@@ -918,7 +915,7 @@ export async function recalcFixedMonthlyAccruals(staffId: string, billingMonth: 
       .select(['id', 'gross_amount', 'deduction_pct'])
       .where('staff_id',    '=', rate.staff_id)
       .where('rate_id',     '=', rate.id)
-      .where('billing_month', '=', billingObj)
+      .where('billing_month', '=', castAsDate(billingMonth))
       .where('type',        '=', 'ACCRUAL')
       .where('is_deleted',  '=', false)
       .executeTakeFirst()

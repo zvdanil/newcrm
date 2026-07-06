@@ -6,6 +6,7 @@ import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
 import { getChildIndividualTariff, getEffectivePrice, countWorkingDays } from '../services/billingRunService.js'
+import { castAsDate } from '../services/dateUtils.js'
 
 function toDateStr(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -30,8 +31,8 @@ async function triggerRefund(
     db.selectFrom('tariffs')
       .select('base_fee')
       .where('activity_id', '=', activityId)
-      .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
+      .where('valid_from', '<=', castAsDate(date))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst(),
   ])
@@ -51,10 +52,10 @@ async function triggerRefund(
   let amount = R
   if (status === 'absent_excused_30') {
     const billingDate = new Date(date)
-    const ind = await getChildIndividualTariff(childId, activityId, billingDate)
+    const ind = await getChildIndividualTariff(childId, activityId, date)
     const P = ind
       ? Math.round(parseFloat(ind.price as string) * 100) / 100
-      : await getEffectivePrice(childId, activityId, billingDate)
+      : await getEffectivePrice(childId, activityId, date)
     if (P !== null && P > 0) {
       const year = billingDate.getUTCFullYear()
       const month = billingDate.getUTCMonth()
@@ -97,7 +98,7 @@ async function reverseRefund(enrollmentId: string, accountId: string, childId: s
     .select('id')
     .where('enrollment_id', '=', enrollmentId)
     .where('type', '=', 'REFUND')
-    .where('transaction_date', '=', new Date(date))
+    .where('transaction_date', '=', castAsDate(date))
     .where('is_deleted', '=', false)
     .execute()
 
@@ -140,8 +141,8 @@ async function triggerPerLessonAccrual(
       .selectFrom('tariffs')
       .select('base_fee')
       .where('activity_id', '=', activityId)
-      .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
+      .where('valid_from', '<=', castAsDate(date))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -153,8 +154,8 @@ async function triggerPerLessonAccrual(
       .select(['price', 'discount_pct'])
       .where('child_id', '=', childId)
       .where('activity_id', '=', activityId)
-      .where('valid_from', '<=', new Date(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', new Date(date))]))
+      .where('valid_from', '<=', castAsDate(date))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -198,7 +199,7 @@ async function reversePerLessonAccrual(
     .select('id')
     .where('enrollment_id', '=', enrollmentId)
     .where('type', '=', 'ACCRUAL')
-    .where('transaction_date', '=', new Date(date))
+    .where('transaction_date', '=', castAsDate(date))
     .where('billing_month', 'is', null)   // только per_lesson (billing_month не задан)
     .where('is_deleted', '=', false)
     .executeTakeFirst()
@@ -321,15 +322,15 @@ export async function journalsRoutes(app: FastifyInstance) {
         db.selectFrom('attendance_logs')
           .selectAll()
           .where('activity_id', '=', activity_id)
-          .where('date', '>=', new Date(from))
-          .where('date', '<=', new Date(to))
+          .where('date', '>=', castAsDate(from))
+          .where('date', '<=', castAsDate(to))
           .execute(),
 
         db.selectFrom('group_lesson_logs')
           .selectAll()
           .where('activity_id', '=', activity_id)
-          .where('date', '>=', new Date(from))
-          .where('date', '<=', new Date(to))
+          .where('date', '>=', castAsDate(from))
+          .where('date', '<=', castAsDate(to))
           .execute(),
 
         db.selectFrom('staff_rates as sr')
@@ -531,7 +532,7 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       // Финансовые триггеры (вне DB-транзакции, после записи лога)
       const activity = await db.selectFrom('activities').select('tariff_type').where('id', '=', enrollment.activity_id).executeTakeFirst()
-      const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, new Date(date))
+      const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, date)
       const effectiveTariffType = ind?.tariff_type ?? activity?.tariff_type
       const indPrice = ind ? Math.round(parseFloat(ind.price as string) * 100) / 100 : null
 
@@ -541,7 +542,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         const existingRefund = await db.selectFrom('transactions').select('id')
           .where('enrollment_id', '=', enrollment_id)
           .where('type', '=', 'REFUND')
-          .where('transaction_date', '=', new Date(date))
+          .where('transaction_date', '=', castAsDate(date))
           .where('is_deleted', '=', false)
           .executeTakeFirst()
         if (!existingRefund) {
@@ -550,7 +551,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             const leExistingRefund = await db.selectFrom('transactions').select('id')
               .where('enrollment_id', '=', le.id)
               .where('type', '=', 'REFUND')
-              .where('transaction_date', '=', new Date(date))
+              .where('transaction_date', '=', castAsDate(date))
               .where('is_deleted', '=', false)
               .executeTakeFirst()
             if (!leExistingRefund) {
@@ -649,7 +650,7 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       // Финансовые триггеры вне DB-транзакции
       const activityRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', existing.activity_id).executeTakeFirst()
-      const putInd = await getChildIndividualTariff(existing.child_id, existing.activity_id, new Date(dateStr))
+      const putInd = await getChildIndividualTariff(existing.child_id, existing.activity_id, dateStr)
       const putEffectiveType = putInd?.tariff_type ?? activityRow?.tariff_type
       const putIndPrice = putInd ? Math.round(parseFloat(putInd.price as string) * 100) / 100 : null
 
@@ -746,7 +747,7 @@ export async function journalsRoutes(app: FastifyInstance) {
       if (enrollment) {
         const dateStr = toDateStr(log.date as unknown as Date)
         const actRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', log.activity_id).executeTakeFirst()
-        const delInd = await getChildIndividualTariff(log.child_id, log.activity_id, new Date(dateStr))
+        const delInd = await getChildIndividualTariff(log.child_id, log.activity_id, dateStr)
         const delEffectiveType = delInd?.tariff_type ?? actRow?.tariff_type
 
         if (delEffectiveType === 'per_lesson') {
