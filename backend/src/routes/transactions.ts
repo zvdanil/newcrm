@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
 import { recalcBalance } from '../services/balanceService.js'
+import { castAsDate } from '../services/dateUtils.js'
 
 export async function transactionsRoutes(app: FastifyInstance) {
   // POST /api/transactions/:id/cancel
@@ -25,11 +26,11 @@ export async function transactionsRoutes(app: FastifyInstance) {
       if (!tx) return reply.status(404).send({ error: 'NotFound' })
       if (tx.is_deleted) return reply.status(409).send({ error: 'AlreadyCancelled' })
 
-      // Only owner can cancel non-PAYMENT transactions
-      if (tx.type !== 'PAYMENT' && request.user.role !== 'owner') {
+      // Only owner and admin can cancel non-PAYMENT transactions
+      if (tx.type !== 'PAYMENT' && request.user.role !== 'owner' && request.user.role !== 'admin') {
         return reply.status(403).send({
           error: 'Forbidden',
-          message: 'Скасування нарахувань та повернень доступне тільки Owner',
+          message: 'Скасування нарахувань та повернень доступне тільки Owner та Admin',
         })
       }
 
@@ -67,9 +68,12 @@ export async function transactionsRoutes(app: FastifyInstance) {
 
         if (tx.billing_month) {
           // Monthly / smart: delete all absent_excused marks in this billing month and their REFUNDs
-          const billingDate = new Date(tx.billing_month as unknown as string)
-          const nextMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1)
-          const monthLastDay = new Date(nextMonth.getTime() - 1).toISOString().slice(0, 10)
+          const billingDateStr = typeof tx.billing_month === 'string' ? tx.billing_month : new Date(tx.billing_month).toISOString().slice(0, 10)
+          const [yStr, mStr] = billingDateStr.slice(0, 7).split('-')
+          const y = Number(yStr)
+          const m = Number(mStr)
+          const monthLastDay = `${y}-${String(m).padStart(2, '0')}-${new Date(y, m, 0).getDate()}`
+          const billingMonthStart = `${y}-${String(m).padStart(2, '0')}-01`
 
           // Soft-delete all REFUNDs for this enrollment in this billing month (except smart_benefit)
           await db.updateTable('transactions')
@@ -77,15 +81,15 @@ export async function transactionsRoutes(app: FastifyInstance) {
             .where('enrollment_id', '=', tx.enrollment_id)
             .where('type', '=', 'REFUND')
             .where('is_deleted', '=', false)
-            .where('transaction_date', '>=', billingDate)
-            .where('transaction_date', '<=', new Date(monthLastDay))
+            .where('transaction_date', '>=', castAsDate(billingMonthStart))
+            .where('transaction_date', '<=', castAsDate(monthLastDay))
             .execute()
 
           // Soft-delete ADJUSTMENT transactions for same enrollment+billing_month
           await db.updateTable('transactions')
             .set(softDel)
             .where('enrollment_id', '=', tx.enrollment_id)
-            .where('billing_month', '=', billingDate)
+            .where('billing_month', '=', castAsDate(billingMonthStart))
             .where('type', '=', 'ADJUSTMENT')
             .where('is_deleted', '=', false)
             .execute()
@@ -94,8 +98,8 @@ export async function transactionsRoutes(app: FastifyInstance) {
           await db.deleteFrom('attendance_logs')
             .where('enrollment_id', '=', tx.enrollment_id)
             .where('status', 'in', ['absent_excused', 'absent_excused_30'])
-            .where('date', '>=', billingDate)
-            .where('date', '<=', new Date(monthLastDay))
+            .where('date', '>=', castAsDate(billingMonthStart))
+            .where('date', '<=', castAsDate(monthLastDay))
             .execute()
 
           // Cascade to linked activities (e.g. food linked to main activity)
@@ -122,15 +126,15 @@ export async function transactionsRoutes(app: FastifyInstance) {
                 .where('enrollment_id', '=', le.id)
                 .where('type', '=', 'REFUND')
                 .where('is_deleted', '=', false)
-                .where('transaction_date', '>=', billingDate)
-                .where('transaction_date', '<=', new Date(monthLastDay))
+                .where('transaction_date', '>=', castAsDate(billingMonthStart))
+                .where('transaction_date', '<=', castAsDate(monthLastDay))
                 .execute()
 
               await db.deleteFrom('attendance_logs')
                 .where('enrollment_id', '=', le.id)
                 .where('status', 'in', ['absent_excused', 'absent_excused_30'])
-                .where('date', '>=', billingDate)
-                .where('date', '<=', new Date(monthLastDay))
+                .where('date', '>=', castAsDate(billingMonthStart))
+                .where('date', '<=', castAsDate(monthLastDay))
                 .execute()
             }
           }
@@ -138,7 +142,7 @@ export async function transactionsRoutes(app: FastifyInstance) {
           // Per-lesson: delete the attendance mark (present/special) that generated this ACCRUAL
           await db.deleteFrom('attendance_logs')
             .where('enrollment_id', '=', tx.enrollment_id)
-            .where('date', '=', new Date(tx.transaction_date as unknown as string))
+            .where('date', '=', castAsDate(tx.transaction_date))
             .where('status', 'in', ['present', 'special'])
             .execute()
         }
