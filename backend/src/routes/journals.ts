@@ -6,10 +6,10 @@ import { createTransaction, recalcBalance } from '../services/balanceService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit } from '../services/salaryService.js'
 import { getChildIndividualTariff, getEffectivePrice, countWorkingDays } from '../services/billingRunService.js'
-import { castAsDate } from '../services/dateUtils.js'
+import { castAsDate, toDbDateStr } from '../services/dateUtils.js'
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return toDbDateStr(d)
 }
 
 /**

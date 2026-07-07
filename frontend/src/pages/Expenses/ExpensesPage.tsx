@@ -1212,11 +1212,23 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           {(expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
             <span className="text-[10px] bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
               з авансу{
-                Number(expense.pool_advance_amount) > 0
-                  ? ` (${Number(expense.pool_advance_amount).toFixed(2)} ₴)`
-                  : expense.utilized_advance_amount
-                    ? ` (${expense.utilized_advance_amount} ₴)`
-                    : ''
+                (() => {
+                  const usedAmount = Number(expense.pool_advance_amount) > 0
+                    ? Number(expense.pool_advance_amount)
+                    : expense.utilized_advance_amount
+                      ? Number(expense.utilized_advance_amount)
+                      : null
+                  
+                  const rem = expense.utilized_advance_remaining_balance !== null && expense.utilized_advance_remaining_balance !== undefined
+                    ? Number(expense.utilized_advance_remaining_balance)
+                    : null
+
+                  const parts = []
+                  if (usedAmount !== null) parts.push(`${usedAmount.toFixed(2)} ₴`)
+                  if (rem !== null) parts.push(`зал. ${rem.toFixed(2)} ₴`)
+                  
+                  return parts.length > 0 ? ` (${parts.join(' / ')})` : ''
+                })()
               }
             </span>
           )}
@@ -1340,11 +1352,23 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           {(expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
             <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
               з авансу{
-                Number(expense.pool_advance_amount) > 0
-                  ? ` (${Number(expense.pool_advance_amount).toFixed(2)} ₴)`
-                  : expense.utilized_advance_amount
-                    ? ` (${expense.utilized_advance_amount} ₴)`
-                    : ''
+                (() => {
+                  const usedAmount = Number(expense.pool_advance_amount) > 0
+                    ? Number(expense.pool_advance_amount)
+                    : expense.utilized_advance_amount
+                      ? Number(expense.utilized_advance_amount)
+                      : null
+                  
+                  const rem = expense.utilized_advance_remaining_balance !== null && expense.utilized_advance_remaining_balance !== undefined
+                    ? Number(expense.utilized_advance_remaining_balance)
+                    : null
+
+                  const parts = []
+                  if (usedAmount !== null) parts.push(`${usedAmount.toFixed(2)} ₴`)
+                  if (rem !== null) parts.push(`зал. ${rem.toFixed(2)} ₴`)
+                  
+                  return parts.length > 0 ? ` (${parts.join(' / ')})` : ''
+                })()
               }
             </span>
           )}

@@ -2,9 +2,10 @@ import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
+import { toDbDateStr } from '../services/dateUtils.js'
 
 function toDateStr(d: Date | string): string {
-  return d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10)
+  return toDbDateStr(d)
 }
 
 interface AttributedNote { role: string; name: string; text: string }

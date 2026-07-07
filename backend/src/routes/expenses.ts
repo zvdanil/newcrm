@@ -123,6 +123,22 @@ export async function expensesRoutes(app: FastifyInstance) {
         .select(
           sql<string>`COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u WHERE u.expense_id = e.id), 0)`.as('pool_advance_amount')
         )
+        .select(
+          sql<string | null>`(
+            SELECT SUM(
+              adv.amount 
+              - COALESCE((SELECT SUM(spent.utilized_advance_amount) FROM expenses spent WHERE spent.utilized_advance_id = adv.id AND spent.is_advance_return = false AND spent.is_deleted = false), 0)
+              - COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u INNER JOIN expenses ex ON ex.id = u.expense_id WHERE u.advance_id = adv.id AND ex.is_deleted = false), 0)
+              - COALESCE((SELECT SUM(ret.amount) FROM expenses ret WHERE ret.utilized_advance_id = adv.id AND ret.is_advance_return = true AND ret.is_deleted = false), 0)
+            )
+            FROM expenses adv
+            WHERE adv.id IN (
+              SELECT e.utilized_advance_id WHERE e.utilized_advance_id IS NOT NULL
+              UNION
+              SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id
+            )
+          )`.as('utilized_advance_remaining_balance')
+        )
         .where('e.is_deleted', '=', false)
 
       if (req.query.account_id)  q = q.where('e.account_id', '=', req.query.account_id)

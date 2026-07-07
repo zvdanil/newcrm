@@ -3,11 +3,12 @@ import rruleLib from 'rrule'
 const { RRule } = rruleLib as unknown as { RRule: typeof import('rrule').RRule }
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
+import { toDbDateStr } from '../services/dateUtils.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return toDbDateStr(d)
 }
 
 function parseLocalDate(s: string): Date {

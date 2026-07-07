@@ -31,6 +31,7 @@ export interface Expense {
   utilized_advance_amount: number | null
   advance_staff_id: string | null
   pool_advance_amount: string
+  utilized_advance_remaining_balance?: string | number | null
   withdrawal_transfer_id: string | null
   withdrawal_amount: string | null
   dividend_payout_id: string | null

@@ -168,7 +168,7 @@ async function billMonthlyEnrollment(
         activity_id: activityId,
         enrollment_id: enrollmentId,
         amount: delta,
-        transaction_date: new Date().toISOString().slice(0, 10),
+        transaction_date: toDbDateStr(new Date()),
         billing_month: billingMonthStr,
         note: isIncrease
           ? `Доначислення за ${billingMonthStr.slice(0, 7)} (тариф змінено)`
@@ -344,7 +344,7 @@ export async function recalcActivityAccruals(
     for (const monthStr of months) {
       const billingDate = new Date(monthStr)
       const nextMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1)
-      const monthLastDay = new Date(nextMonth.getTime() - 1).toISOString().slice(0, 10)
+      const monthLastDay = toDbDateStr(new Date(nextMonth.getTime() - 1))
 
       for (const e of enrollments) {
         const softDeleteSet = { is_deleted: true as const, deleted_at: new Date().toISOString(), deleted_by: triggeredBy }
@@ -502,9 +502,9 @@ export async function recalcActivityAccruals(
               activity_id: activityId,
               enrollment_id: e.enrollment_id,
               amount: refundAmount,
-              transaction_date: new Date(abs.date as Date).toISOString().slice(0, 10),
+              transaction_date: toDbDateStr(abs.date as Date),
               billing_month: monthStr,
-              note: `Повернення за відсутність ${new Date(abs.date as Date).toISOString().slice(0, 10)}`,
+              note: `Повернення за відсутність ${toDbDateStr(abs.date as Date)}`,
               metadata_json: { source: 'retro_recalc', attendance_log_id: abs.id },
               created_by: triggeredBy,
             })
@@ -572,7 +572,7 @@ export async function recalcActivityAccruals(
 
       if (price === null || price <= 0) continue  // no tariff or free lesson
 
-      const lessonDateStr = lessonDate.toISOString().slice(0, 10)
+      const lessonDateStr = toDbDateStr(lessonDate)
       await createTransaction({
         type: 'ACCRUAL',
         child_id: mark.child_id,
@@ -632,7 +632,7 @@ export async function recalcForIndividualTariff(
     const monthStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-01`
     const billingDate = new Date(monthStr)
     const nextMonth = new Date(billingDate.getFullYear(), billingDate.getMonth() + 1, 1)
-    const monthLastDay = new Date(nextMonth.getTime() - 1).toISOString().slice(0, 10)
+    const monthLastDay = toDbDateStr(new Date(nextMonth.getTime() - 1))
 
     const ind = await getChildIndividualTariff(childId, activityId, billingDate)
 
