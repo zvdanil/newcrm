@@ -124,50 +124,95 @@ export async function expensesRoutes(app: FastifyInstance) {
           sql<string>`COALESCE((SELECT SUM(u.amount) FROM expense_advance_usages u WHERE u.expense_id = e.id), 0)`.as('pool_advance_amount')
         )
         .select(
-          sql<string | null>`(
-            SELECT SUM(
-              adv.amount 
+          sql<string | null>`CASE WHEN EXISTS (
+            SELECT 1 WHERE e.utilized_advance_id IS NOT NULL
+            UNION
+            SELECT 1 FROM expense_advance_usages WHERE expense_id = e.id
+          ) THEN (
+            SELECT 
+              COALESCE(SUM(pool_adv.amount), 0)
               - COALESCE((
                   SELECT SUM(spent.utilized_advance_amount) 
                   FROM expenses spent 
-                  WHERE spent.utilized_advance_id = adv.id 
-                    AND spent.is_advance_return = false 
+                  WHERE spent.is_advance_return = false 
                     AND spent.is_deleted = false
                     AND (
                       spent.accrual_date < e.accrual_date 
                       OR (spent.accrual_date = e.accrual_date AND spent.created_at <= e.created_at)
+                    )
+                    AND spent.utilized_advance_id IN (
+                      SELECT id FROM expenses WHERE is_advance = true AND is_deleted = false
+                      AND (
+                        (staff_id IS NOT NULL AND staff_id = COALESCE(
+                          e.advance_staff_id, 
+                          (SELECT staff_id FROM expenses WHERE id = e.utilized_advance_id),
+                          (SELECT staff_id FROM expenses WHERE id = (SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id LIMIT 1))
+                        ))
+                        OR
+                        (staff_id IS NULL AND category_id = e.category_id)
+                      )
                     )
                 ), 0)
               - COALESCE((
                   SELECT SUM(u.amount) 
                   FROM expense_advance_usages u 
                   INNER JOIN expenses ex ON ex.id = u.expense_id 
-                  WHERE u.advance_id = adv.id 
-                    AND ex.is_deleted = false
+                  WHERE ex.is_deleted = false
                     AND (
                       ex.accrual_date < e.accrual_date 
                       OR (ex.accrual_date = e.accrual_date AND ex.created_at <= e.created_at)
+                    )
+                    AND u.advance_id IN (
+                      SELECT id FROM expenses WHERE is_advance = true AND is_deleted = false
+                      AND (
+                        (staff_id IS NOT NULL AND staff_id = COALESCE(
+                          e.advance_staff_id, 
+                          (SELECT staff_id FROM expenses WHERE id = e.utilized_advance_id),
+                          (SELECT staff_id FROM expenses WHERE id = (SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id LIMIT 1))
+                        ))
+                        OR
+                        (staff_id IS NULL AND category_id = e.category_id)
+                      )
                     )
                 ), 0)
               - COALESCE((
                   SELECT SUM(ret.amount) 
                   FROM expenses ret 
-                  WHERE ret.utilized_advance_id = adv.id 
-                    AND ret.is_advance_return = true 
+                  WHERE ret.is_advance_return = true 
                     AND ret.is_deleted = false
                     AND (
                       ret.accrual_date < e.accrual_date 
                       OR (ret.accrual_date = e.accrual_date AND ret.created_at <= e.created_at)
                     )
+                    AND ret.utilized_advance_id IN (
+                      SELECT id FROM expenses WHERE is_advance = true AND is_deleted = false
+                      AND (
+                        (staff_id IS NOT NULL AND staff_id = COALESCE(
+                          e.advance_staff_id, 
+                          (SELECT staff_id FROM expenses WHERE id = e.utilized_advance_id),
+                          (SELECT staff_id FROM expenses WHERE id = (SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id LIMIT 1))
+                        ))
+                        OR
+                        (staff_id IS NULL AND category_id = e.category_id)
+                      )
+                    )
                 ), 0)
-            )
-            FROM expenses adv
-            WHERE adv.id IN (
-              SELECT e.utilized_advance_id WHERE e.utilized_advance_id IS NOT NULL
-              UNION
-              SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id
-            )
-          )`.as('utilized_advance_remaining_balance')
+            FROM expenses pool_adv
+            WHERE pool_adv.is_advance = true AND pool_adv.is_deleted = false
+              AND (
+                (pool_adv.staff_id IS NOT NULL AND pool_adv.staff_id = COALESCE(
+                  e.advance_staff_id, 
+                  (SELECT staff_id FROM expenses WHERE id = e.utilized_advance_id),
+                  (SELECT staff_id FROM expenses WHERE id = (SELECT u.advance_id FROM expense_advance_usages u WHERE u.expense_id = e.id LIMIT 1))
+                ))
+                OR
+                (pool_adv.staff_id IS NULL AND pool_adv.category_id = e.category_id)
+              )
+              AND (
+                pool_adv.accrual_date < e.accrual_date 
+                OR (pool_adv.accrual_date = e.accrual_date AND pool_adv.created_at <= e.created_at)
+              )
+          ) ELSE NULL END`.as('utilized_advance_remaining_balance')
         )
         .where('e.is_deleted', '=', false)
 
