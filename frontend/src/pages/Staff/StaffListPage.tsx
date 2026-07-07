@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<StaffType, string> = {
 const RATE_TYPE_LABELS: Record<string, string> = {
   per_lesson:    'За заняття',
   per_child:     'За дитину',
+  individual_per_child: 'індивідуальна вартість з дитини',
   fixed_monthly: 'Фіксований оклад',
   hourly:        'Погодинна',
   smart:         'Смарт',

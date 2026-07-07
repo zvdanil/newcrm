@@ -339,7 +339,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('sr.activity_id', '=', activity_id)
           .where('sr.valid_to', 'is', null)
           .where('sr.rate_category', '=', 'auto')
-          .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'smart', 'smart_per_child'])
+          .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'individual_per_child', 'smart', 'smart_per_child'])
           .orderBy('s.full_name', 'asc')
           .execute(),
       ])

@@ -241,7 +241,7 @@ function AddRateForm({ staffId, activities, allRates, onDone }: {
     mutation.mutate()
   }
 
-  const needsActivity    = ['per_lesson', 'per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
+  const needsActivity    = ['per_lesson', 'per_child', 'individual_per_child', 'group_lesson', 'fixed_monthly', 'smart', 'smart_per_child'].includes(form.rate_type)
   const isSmartPC        = form.rate_type === 'smart_per_child'
   const isMonthlyByDay   = form.rate_type === 'monthly_by_day'
   const isVacation       = form.rate_type === 'vacation'
@@ -1210,6 +1210,7 @@ const QUANTITY_LABEL: Partial<Record<RateType, string>> = {
   hourly:       'Годин',
   per_lesson:   'Занять',
   per_child:    'Дітей',
+  individual_per_child: 'Дітей',
   group_lesson: 'Занять',
 }
 

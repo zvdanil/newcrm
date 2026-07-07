@@ -421,7 +421,8 @@ async function computeGross(
   activityId: string,
   dateObj: Date,
   presentCount: number,
-  groupLessonCount: number = 1
+  groupLessonCount: number = 1,
+  specialCount: number = 0
 ): Promise<{ gross: number; meta: Record<string, unknown> }> {
   const rv = Number(rate.rate_value)
 
@@ -436,6 +437,10 @@ async function computeGross(
   }
   if (rate.rate_type === 'group_lesson') {
     return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv } }
+  }
+  if (rate.rate_type === 'individual_per_child') {
+    const gross = Math.round(rv * specialCount * 100) / 100
+    return { gross, meta: { source: 'auto_individual_per_child', quantity: specialCount, rate_value: rv } }
   }
 
   // per_child
@@ -470,6 +475,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where((eb) => eb.or([
       eb('rate_type', '=', 'per_lesson'),
       eb('rate_type', '=', 'per_child'),
+      eb('rate_type', '=', 'individual_per_child'),
       eb('rate_type', '=', 'group_lesson'),
     ]))
     .where('valid_from', '<=', castAsDate(date))
@@ -503,6 +509,16 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .executeTakeFirst()
 
   const presentCount = Number(presentResult?.cnt ?? 0)
+
+  const specialResult = await db
+    .selectFrom('attendance_logs')
+    .select((eb) => eb.fn.countAll<number>().as('cnt'))
+    .where('activity_id', '=', activityId)
+    .where('date', '=', castAsDate(date))
+    .where('status', '=', 'special')
+    .executeTakeFirst()
+
+  const specialCount = Number(specialResult?.cnt ?? 0)
 
   const groupLog = await db
     .selectFrom('group_lesson_logs')
@@ -543,10 +559,12 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
     const existing = existingAccruals.find(a => a.rate_id === rate.id)
 
-    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount)
+    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount)
     let hasLesson = false
     if (rate.rate_type === 'group_lesson') {
       hasLesson = groupConducted || rate.value_mode === 'percent_of_revenue'
+    } else if (rate.rate_type === 'individual_per_child') {
+      hasLesson = specialCount > 0 || rate.value_mode === 'percent_of_revenue'
     } else {
       hasLesson = presentCount > 0 || rate.value_mode === 'percent_of_revenue'
     }

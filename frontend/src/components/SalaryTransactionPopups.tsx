@@ -7,6 +7,7 @@ export function fmt(v: string | number) { return Number(v).toFixed(2) }
 export const RATE_TYPE_LABELS: Record<RateType, string> = {
   per_lesson:      'За заняття',
   per_child:       'За дитину',
+  individual_per_child: 'індивідуальна вартість з дитини',
   group_lesson:    'За групу',
   fixed_monthly:   'Фіксований оклад',
   hourly:          'Погодинна',
@@ -62,6 +63,12 @@ export function metaDetail(tx: SalaryTransaction): string | null {
     const qty = typeof m.quantity === 'number' ? m.quantity : '?'
     const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
     return rv != null ? `${qty} дітей × ${fmt(rv)} грн` : `${qty} дітей`
+  }
+
+  if (src === 'auto_individual_per_child') {
+    const qty = typeof m.quantity === 'number' ? m.quantity : '?'
+    const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
+    return rv != null ? `${qty} дітей (спец) × ${fmt(rv)} грн` : `${qty} дітей (спец)`
   }
 
   if (src === 'auto_fixed_monthly') {
@@ -120,7 +127,7 @@ export function metaDetail(tx: SalaryTransaction): string | null {
   if (src === 'manual') {
     const rt = tx.rate_type
     if (typeof m.quantity === 'number' && typeof m.rate_value === 'number') {
-      const unitLabel = rt === 'hourly' ? 'год.' : rt === 'per_child' ? 'дітей' : 'од.'
+      const unitLabel = rt === 'hourly' ? 'год.' : (rt === 'per_child' || rt === 'individual_per_child') ? 'дітей' : 'од.'
       return `${m.quantity} ${unitLabel} × ${fmt(m.rate_value)} грн`
     }
     if (typeof m.revenue === 'number' && typeof m.rate_pct === 'number') {

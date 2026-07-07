@@ -38,6 +38,7 @@ function dayOfWeekShort(dateStr: string): string {
 const RATE_TYPE_SHORT: Record<string, string> = {
   per_lesson:     'Заняття',
   per_child:      'Дитина',
+  individual_per_child: 'Інд. дитина',
   group_lesson:   'Група',
   fixed_monthly:  'Оклад',
   hourly:         'Год.',
