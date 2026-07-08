@@ -50,6 +50,7 @@ export interface ActivityMonthlySummary {
   refund_total: number
   visit_count: number
   excused_count: number
+  expected_price: number
   transactions: MonthSummaryTransaction[]
 }
 

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate } from '../plugins/authenticate.js'
+import { getChildIndividualTariff, getEffectivePrice } from '../services/billingRunService.js'
 
 async function getParentId(userId: string): Promise<string | null> {
   const user = await db.selectFrom('users').select('parent_id').where('id', '=', userId).executeTakeFirst()
@@ -123,6 +124,7 @@ export async function parentRoutes(app: FastifyInstance) {
         .innerJoin('accounts as ac', 'ac.id', 'e.account_id')
         .select([
           'e.account_id', 'ac.name as account_name', 'ac.payment_details as account_payment_details', 'e.status as enrollment_status',
+          'e.start_date',
           'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
           'a.tariff_type as activity_tariff_type',
         ])
@@ -151,6 +153,32 @@ export async function parentRoutes(app: FastifyInstance) {
         .execute(),
     ])
 
+    // Calculate forecast/expected price for each enrollment using same logic as "прогноз нарахувань"
+    const billingDate = new Date(from)
+    const enrollmentsWithPrices = await Promise.all(enrollments.map(async (e) => {
+      let expectedPrice = 0
+
+      // Only forecast for active (not frozen) enrollments starting on/before the month start
+      if (e.enrollment_status !== 'frozen' && new Date(String(e.start_date)) <= billingDate) {
+        const ind = await getChildIndividualTariff(req.params.childId, e.activity_id, billingDate)
+        const effectiveType = ind ? ind.tariff_type : e.activity_tariff_type
+
+        if (effectiveType === 'monthly' || effectiveType === 'smart') {
+          const price = ind
+            ? Math.round(parseFloat(ind.price as string) * 100) / 100
+            : await getEffectivePrice(req.params.childId, e.activity_id, billingDate)
+          if (price && price > 0) {
+            expectedPrice = price
+          }
+        }
+      }
+
+      return {
+        ...e,
+        expected_price: expectedPrice
+      }
+    }))
+
     // Attendance map: activity_id → { visit_count, excused_count }
     const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
     for (const log of attendanceLogs) {
@@ -166,6 +194,7 @@ export async function parentRoutes(app: FastifyInstance) {
       activity_tariff_type: 'monthly' | 'per_lesson' | 'smart'
       enrollment_status: string | null  // null = has transactions but no active/frozen enrollment
       accrual_total: number; refund_total: number; visit_count: number; excused_count: number
+      expected_price: number
       transactions: TxRow[]
     }
     type AccountEntry = { account_id: string; account_name: string; account_payment_details: string | null; activities: Map<string, ActivityEntry> }
@@ -180,7 +209,8 @@ export async function parentRoutes(app: FastifyInstance) {
       activityName: string,
       activityIsActive: boolean,
       activityTariffType: 'monthly' | 'per_lesson' | 'smart',
-      enrollmentStatus: string | null
+      enrollmentStatus: string | null,
+      expectedPrice: number
     ): ActivityEntry {
       let acct = accountMap.get(accountId)
       if (!acct) {
@@ -193,7 +223,9 @@ export async function parentRoutes(app: FastifyInstance) {
           activity_id: activityId, activity_name: activityName,
           activity_is_active: activityIsActive, activity_tariff_type: activityTariffType,
           enrollment_status: enrollmentStatus,
-          accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0, transactions: [],
+          accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0,
+          expected_price: expectedPrice,
+          transactions: [],
         }
         acct.activities.set(activityId, entry)
       }
@@ -201,11 +233,12 @@ export async function parentRoutes(app: FastifyInstance) {
     }
 
     // Seed from active/frozen enrollments (guaranteed to show even if no transactions this month)
-    for (const e of enrollments) {
+    for (const e of enrollmentsWithPrices) {
       ensureActivity(
         e.account_id, e.account_name, e.account_payment_details,
         e.activity_id, e.activity_name, e.activity_is_active,
-        e.activity_tariff_type, e.enrollment_status
+        e.activity_tariff_type, e.enrollment_status,
+        e.expected_price
       )
     }
 
@@ -220,7 +253,8 @@ export async function parentRoutes(app: FastifyInstance) {
       const entry = ensureActivity(
         accountId, accountName, accountPaymentDetails,
         activityId, activityName, t.activity_is_active ?? false,
-        tariffType, null
+        tariffType, null,
+        0
       )
       entry.transactions.push(t)
       const amt = parseFloat(String(t.amount))
@@ -243,6 +277,19 @@ export async function parentRoutes(app: FastifyInstance) {
         account_payment_details: acct.account_payment_details,
         activities: Array.from(acct.activities.values())
           .filter(a => a.enrollment_status !== null || a.transactions.length > 0)
+          .map(a => ({
+            activity_id: a.activity_id,
+            activity_name: a.activity_name,
+            activity_is_active: a.activity_is_active,
+            activity_tariff_type: a.activity_tariff_type,
+            enrollment_status: a.enrollment_status,
+            accrual_total: a.accrual_total,
+            refund_total: a.refund_total,
+            visit_count: a.visit_count,
+            excused_count: a.excused_count,
+            expected_price: a.expected_price,
+            transactions: a.transactions,
+          }))
           .sort((a, b) => a.activity_name.localeCompare(b.activity_name, 'uk')),
       }))
       .filter(acct => acct.activities.length > 0)

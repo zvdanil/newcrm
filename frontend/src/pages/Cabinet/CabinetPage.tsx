@@ -389,7 +389,7 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
     account_name: string
     payment_details: string | null
     prevActivities: ActivityMonthlySummary[]
-    currSubscriptions: ActivityMonthlySummary[]
+    currSubscriptions: (ActivityMonthlySummary & { display_price: number })[]
   }>()
 
   // Process previous month (consumed services)
@@ -412,9 +412,17 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
   // Process current month (subscriptions/абонементи)
   for (const acct of currentSummary) {
     // Only display monthly or smart tariff activities for the current month
-    const subscriptions = acct.activities.filter(a =>
-      a.activity_tariff_type === 'monthly' || a.activity_tariff_type === 'smart'
-    )
+    // Determine the price: expected_price from forecast or actual accrual_total
+    const subscriptions = acct.activities
+      .map(a => {
+        const display_price = a.expected_price > 0 ? a.expected_price : a.accrual_total
+        return { ...a, display_price }
+      })
+      .filter(a =>
+        (a.activity_tariff_type === 'monthly' || a.activity_tariff_type === 'smart') &&
+        a.display_price > 0
+      )
+
     if (subscriptions.length > 0) {
       if (!accountMap.has(acct.account_id)) {
         accountMap.set(acct.account_id, {
@@ -482,8 +490,8 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
       {accounts.map((acct) => {
         // Calculate previous month consumed services sum
         const prevSum = acct.prevActivities.reduce((s, a) => s + (a.accrual_total - a.refund_total), 0)
-        // Calculate current month subscriptions sum (using June accruals)
-        const currSum = acct.currSubscriptions.reduce((s, a) => s + a.accrual_total, 0)
+        // Calculate current month subscriptions sum (using display_price)
+        const currSum = acct.currSubscriptions.reduce((s, a) => s + a.display_price, 0)
         // Total invoice sum
         const invoiceTotal = prevSum + currSum
 
@@ -555,7 +563,7 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
                         <div key={a.activity_id} className="flex justify-between items-center px-4 py-2.5 text-sm">
                           <p className="font-medium text-gray-800">{a.activity_name}</p>
                           <span className="font-semibold text-gray-700 font-mono">
-                            {a.accrual_total.toFixed(2)} ₴
+                            {a.display_price.toFixed(2)} ₴
                           </span>
                         </div>
                       )
