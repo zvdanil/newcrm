@@ -80,13 +80,14 @@ export interface ChildrenTable {
 }
 
 export interface AccountsTable {
-  id:         Generated<string>
-  name:       string
-  type:       'fop' | 'cash' | 'bank'
-  currency:   Generated<string>
-  is_active:  Generated<boolean>
-  note:       string | null
-  created_at: Generated<Date>
+  id:              Generated<string>
+  name:            string
+  type:            'fop' | 'cash' | 'bank'
+  currency:        Generated<string>
+  is_active:       Generated<boolean>
+  note:            string | null
+  payment_details: string | null
+  created_at:      Generated<Date>
 }
 
 export interface ActivitiesTable {

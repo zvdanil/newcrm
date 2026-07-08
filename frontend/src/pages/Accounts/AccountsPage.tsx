@@ -18,10 +18,10 @@ export function AccountsPage() {
   const canEdit = useCanAccess('owner', 'admin')
 
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', type: 'fop' as Account['type'], currency: 'UAH', note: '' })
+  const [editForm, setEditForm] = useState({ name: '', type: 'fop' as Account['type'], currency: 'UAH', note: '', payment_details: '' })
 
   const [addingNew, setAddingNew] = useState(false)
-  const [newForm, setNewForm] = useState({ name: '', type: 'fop' as Account['type'], currency: 'UAH', note: '' })
+  const [newForm, setNewForm] = useState({ name: '', type: 'fop' as Account['type'], currency: 'UAH', note: '', payment_details: '' })
   const [newError, setNewError] = useState<string | null>(null)
 
   const { data: accounts = [], isLoading } = useQuery({
@@ -39,7 +39,7 @@ export function AccountsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['accounts'] })
       setAddingNew(false)
-      setNewForm({ name: '', type: 'fop', currency: 'UAH', note: '' })
+      setNewForm({ name: '', type: 'fop', currency: 'UAH', note: '', payment_details: '' })
       setNewError(null)
     },
     onError: () => setNewError('Помилка при збереженні'),
@@ -52,12 +52,12 @@ export function AccountsPage() {
 
   const startEdit = (a: (typeof accounts)[0]) => {
     setEditingId(a.id)
-    setEditForm({ name: a.name, type: a.type, currency: a.currency, note: a.note ?? '' })
+    setEditForm({ name: a.name, type: a.type, currency: a.currency, note: a.note ?? '', payment_details: a.payment_details ?? '' })
   }
 
   const handleCreate = () => {
     if (!newForm.name.trim()) { setNewError('Назва є обовʼязковою'); return }
-    createMutation.mutate({ ...newForm, name: newForm.name.trim(), note: newForm.note || undefined })
+    createMutation.mutate({ ...newForm, name: newForm.name.trim(), note: newForm.note || undefined, payment_details: newForm.payment_details || undefined })
   }
 
   const totalBalance = accounts
@@ -112,35 +112,63 @@ export function AccountsPage() {
                 <tr key={account.id} className={`transition-colors ${account.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 opacity-60'}`}>
                   {editingId === account.id ? (
                     <>
-                      <td className="px-4 py-2">
-                        <input
-                          type="text" value={editForm.name} autoFocus
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <select
-                          value={editForm.type}
-                          onChange={(e) => setEditForm({ ...editForm, type: e.target.value as Account['type'] })}
-                          className="rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        >
-                          <option value="fop">ФОП</option>
-                          <option value="cash">Готівка</option>
-                          <option value="bank">Банк</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-2 hidden sm:table-cell">
-                        <input
-                          type="text" value={editForm.currency}
-                          onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-                          className="w-20 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        />
+                      <td className="px-4 py-2" colSpan={3}>
+                        <div className="space-y-2 py-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Назва *</label>
+                            <input
+                              type="text" value={editForm.name} autoFocus
+                              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                              className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-0.5">Тип</label>
+                              <select
+                                value={editForm.type}
+                                onChange={(e) => setEditForm({ ...editForm, type: e.target.value as Account['type'] })}
+                                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                              >
+                                <option value="fop">ФОП</option>
+                                <option value="cash">Готівка</option>
+                                <option value="bank">Банк</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-0.5">Валюта</label>
+                              <input
+                                type="text" value={editForm.currency}
+                                onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Примітка</label>
+                            <input
+                              type="text" value={editForm.note}
+                              onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                              placeholder="Необов'язково"
+                              className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-0.5">Реквізити для оплати (IBAN, ЄДРПОУ, тощо)</label>
+                            <textarea
+                              value={editForm.payment_details}
+                              onChange={(e) => setEditForm({ ...editForm, payment_details: e.target.value })}
+                              placeholder="Наприклад: ФОП ЗВЕРЄВА, IBAN: UA000000000000000000000000000..."
+                              rows={2}
+                              className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                            />
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-2" />
                       <td className="px-4 py-2" />
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2 justify-end">
+                      <td className="px-4 py-2 align-bottom">
+                        <div className="flex items-center gap-2 justify-end py-2">
                           <button
                             onClick={() => updateMutation.mutate({ id: account.id, ...editForm })}
                             disabled={updateMutation.isPending}
@@ -161,6 +189,11 @@ export function AccountsPage() {
                           {account.name}
                         </Link>
                         {account.note && <p className="text-xs text-gray-400 font-normal">{account.note}</p>}
+                        {account.payment_details && (
+                          <div className="mt-1 text-xs text-gray-400 bg-gray-50 p-1.5 rounded font-mono break-all max-w-[280px]">
+                            <strong>Реквізити:</strong> {account.payment_details}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-500">{TYPE_LABELS[account.type]}</td>
                       <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{account.currency}</td>
@@ -196,39 +229,64 @@ export function AccountsPage() {
 
               {addingNew && (
                 <tr className="bg-iris-50">
-                  <td className="px-4 py-2">
-                    <div className="space-y-1">
-                      <input
-                        type="text" value={newForm.name} placeholder="Назва рахунку" autoFocus
-                        onChange={(e) => { setNewForm({ ...newForm, name: e.target.value }); setNewError(null) }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setAddingNew(false) }}
-                        className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                      />
-                      {newError && <p className="text-xs text-red-600">{newError}</p>}
+                  <td className="px-4 py-2" colSpan={3}>
+                    <div className="space-y-2 py-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-0.5">Назва рахунку *</label>
+                        <input
+                          type="text" value={newForm.name} placeholder="Назва рахунку" autoFocus
+                          onChange={(e) => { setNewForm({ ...newForm, name: e.target.value }); setNewError(null) }}
+                          className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        />
+                        {newError && <p className="text-xs text-red-600">{newError}</p>}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-0.5">Тип</label>
+                          <select
+                            value={newForm.type}
+                            onChange={(e) => setNewForm({ ...newForm, type: e.target.value as Account['type'] })}
+                            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                          >
+                            <option value="fop">ФОП</option>
+                            <option value="cash">Готівка</option>
+                            <option value="bank">Банк</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-0.5">Валюта</label>
+                          <input
+                            type="text" value={newForm.currency}
+                            onChange={(e) => setNewForm({ ...newForm, currency: e.target.value })}
+                            className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-0.5">Примітка</label>
+                        <input
+                          type="text" value={newForm.note}
+                          onChange={(e) => setNewForm({ ...newForm, note: e.target.value })}
+                          placeholder="Примітка"
+                          className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-0.5">Реквізити для оплати (IBAN, ЄДРПОУ, тощо)</label>
+                        <textarea
+                          value={newForm.payment_details}
+                          onChange={(e) => setNewForm({ ...newForm, payment_details: e.target.value })}
+                          placeholder="Наприклад: ФОП ЗВЕРЄВА, IBAN: UA000000000000000000000000000..."
+                          rows={2}
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                        />
+                      </div>
                     </div>
                   </td>
-                  <td className="px-4 py-2">
-                    <select
-                      value={newForm.type}
-                      onChange={(e) => setNewForm({ ...newForm, type: e.target.value as Account['type'] })}
-                      className="rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                    >
-                      <option value="fop">ФОП</option>
-                      <option value="cash">Готівка</option>
-                      <option value="bank">Банк</option>
-                    </select>
-                  </td>
-                  <td className="px-4 py-2 hidden sm:table-cell">
-                    <input
-                      type="text" value={newForm.currency}
-                      onChange={(e) => setNewForm({ ...newForm, currency: e.target.value })}
-                      className="w-20 rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                    />
-                  </td>
                   <td className="px-4 py-2" />
                   <td className="px-4 py-2" />
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2 justify-end">
+                  <td className="px-4 py-2 align-bottom">
+                    <div className="flex items-center gap-2 justify-end py-2">
                       <button
                         onClick={handleCreate} disabled={createMutation.isPending}
                         className="text-xs px-3 py-1 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md transition-colors"

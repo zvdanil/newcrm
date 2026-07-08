@@ -44,6 +44,7 @@ export interface ActivityMonthlySummary {
   activity_id: string
   activity_name: string
   activity_is_active: boolean
+  activity_tariff_type: 'monthly' | 'per_lesson' | 'smart'
   enrollment_status: string | null  // null = archived enrollment (has transactions but no active enrollment)
   accrual_total: number
   refund_total: number
@@ -55,6 +56,7 @@ export interface ActivityMonthlySummary {
 export interface AccountMonthlySummary {
   account_id: string
   account_name: string
+  account_payment_details: string | null
   activities: ActivityMonthlySummary[]
 }
 

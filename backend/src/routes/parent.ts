@@ -111,7 +111,9 @@ export async function parentRoutes(app: FastifyInstance) {
       't.id', 't.type', 't.amount', 't.transaction_date', 't.billing_month', 't.note',
       't.account_id',
       'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+      'a.tariff_type as activity_tariff_type',
       'ac.name as account_name',
+      'ac.payment_details as account_payment_details',
     ] as const
 
     const [enrollments, transactions, attendanceLogs] = await Promise.all([
@@ -120,8 +122,9 @@ export async function parentRoutes(app: FastifyInstance) {
         .innerJoin('activities as a', 'a.id', 'e.activity_id')
         .innerJoin('accounts as ac', 'ac.id', 'e.account_id')
         .select([
-          'e.account_id', 'ac.name as account_name', 'e.status as enrollment_status',
+          'e.account_id', 'ac.name as account_name', 'ac.payment_details as account_payment_details', 'e.status as enrollment_status',
           'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+          'a.tariff_type as activity_tariff_type',
         ])
         .where('e.child_id', '=', req.params.childId)
         .where('e.status', 'in', ['active', 'frozen'])
@@ -160,25 +163,36 @@ export async function parentRoutes(app: FastifyInstance) {
     type TxRow = typeof transactions[number]
     type ActivityEntry = {
       activity_id: string; activity_name: string; activity_is_active: boolean
+      activity_tariff_type: 'monthly' | 'per_lesson' | 'smart'
       enrollment_status: string | null  // null = has transactions but no active/frozen enrollment
       accrual_total: number; refund_total: number; visit_count: number; excused_count: number
       transactions: TxRow[]
     }
-    type AccountEntry = { account_id: string; account_name: string; activities: Map<string, ActivityEntry> }
+    type AccountEntry = { account_id: string; account_name: string; account_payment_details: string | null; activities: Map<string, ActivityEntry> }
 
     const accountMap = new Map<string, AccountEntry>()
 
-    function ensureActivity(accountId: string, accountName: string, activityId: string, activityName: string, activityIsActive: boolean, enrollmentStatus: string | null): ActivityEntry {
+    function ensureActivity(
+      accountId: string,
+      accountName: string,
+      accountPaymentDetails: string | null,
+      activityId: string,
+      activityName: string,
+      activityIsActive: boolean,
+      activityTariffType: 'monthly' | 'per_lesson' | 'smart',
+      enrollmentStatus: string | null
+    ): ActivityEntry {
       let acct = accountMap.get(accountId)
       if (!acct) {
-        acct = { account_id: accountId, account_name: accountName, activities: new Map() }
+        acct = { account_id: accountId, account_name: accountName, account_payment_details: accountPaymentDetails, activities: new Map() }
         accountMap.set(accountId, acct)
       }
       let entry = acct.activities.get(activityId)
       if (!entry) {
         entry = {
           activity_id: activityId, activity_name: activityName,
-          activity_is_active: activityIsActive, enrollment_status: enrollmentStatus,
+          activity_is_active: activityIsActive, activity_tariff_type: activityTariffType,
+          enrollment_status: enrollmentStatus,
           accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0, transactions: [],
         }
         acct.activities.set(activityId, entry)
@@ -188,16 +202,26 @@ export async function parentRoutes(app: FastifyInstance) {
 
     // Seed from active/frozen enrollments (guaranteed to show even if no transactions this month)
     for (const e of enrollments) {
-      ensureActivity(e.account_id, e.account_name, e.activity_id, e.activity_name, e.activity_is_active, e.enrollment_status)
+      ensureActivity(
+        e.account_id, e.account_name, e.account_payment_details,
+        e.activity_id, e.activity_name, e.activity_is_active,
+        e.activity_tariff_type, e.enrollment_status
+      )
     }
 
     // Add transaction data (grouped by account_id + activity_id — fixes double-activity across accounts)
     for (const t of transactions) {
       const accountId = t.account_id ?? 'unknown'
       const accountName = t.account_name ?? 'Невідомий рахунок'
+      const accountPaymentDetails = t.account_payment_details ?? null
       const activityId = t.activity_id ?? 'unknown'
       const activityName = t.activity_name ?? 'Невідома активність'
-      const entry = ensureActivity(accountId, accountName, activityId, activityName, t.activity_is_active ?? false, null)
+      const tariffType = t.activity_tariff_type ?? 'monthly'
+      const entry = ensureActivity(
+        accountId, accountName, accountPaymentDetails,
+        activityId, activityName, t.activity_is_active ?? false,
+        tariffType, null
+      )
       entry.transactions.push(t)
       const amt = parseFloat(String(t.amount))
       if (t.type === 'ACCRUAL') entry.accrual_total += amt
@@ -216,6 +240,7 @@ export async function parentRoutes(app: FastifyInstance) {
       .map(acct => ({
         account_id: acct.account_id,
         account_name: acct.account_name,
+        account_payment_details: acct.account_payment_details,
         activities: Array.from(acct.activities.values())
           .filter(a => a.enrollment_status !== null || a.transactions.length > 0)
           .sort((a, b) => a.activity_name.localeCompare(b.activity_name, 'uk')),

@@ -91,6 +91,7 @@ export interface Account {
   currency: string
   is_active: boolean
   note: string | null
+  payment_details: string | null
   created_at: string
 }
 

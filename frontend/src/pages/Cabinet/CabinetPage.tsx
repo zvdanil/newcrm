@@ -364,15 +364,264 @@ function PaymentsTab({
 }
 
 // ────────────────────────────────────────────────────────────
+// TAB 4 — Рахунок на оплату (segmenting prev month consumed + current subscriptions)
+// ────────────────────────────────────────────────────────────
+
+function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
+  const prev = prevMonth(month)
+
+  const { data: currentSummary = [], isLoading: loadingCurrent } = useQuery<AccountMonthlySummary[]>({
+    queryKey: ['parent-month-summary', child.id, month],
+    queryFn: () => parentApi.getMonthSummary(child.id, month),
+  })
+
+  const { data: prevSummary = [], isLoading: loadingPrev } = useQuery<AccountMonthlySummary[]>({
+    queryKey: ['parent-month-summary', child.id, prev],
+    queryFn: () => parentApi.getMonthSummary(child.id, prev),
+  })
+
+  if (loadingCurrent || loadingPrev) {
+    return <div className="px-6 py-6 text-center text-sm text-gray-400">Завантаження...</div>
+  }
+
+  // Get all unique account ids across both current and previous summary
+  const accountMap = new Map<string, {
+    account_name: string
+    payment_details: string | null
+    prevActivities: ActivityMonthlySummary[]
+    currSubscriptions: ActivityMonthlySummary[]
+  }>()
+
+  // Process previous month (consumed services)
+  for (const acct of prevSummary) {
+    // Only display activities that had positive accruals (services consumed for payment)
+    const paidActivities = acct.activities.filter(a => a.accrual_total > 0)
+    if (paidActivities.length > 0) {
+      if (!accountMap.has(acct.account_id)) {
+        accountMap.set(acct.account_id, {
+          account_name: acct.account_name,
+          payment_details: acct.account_payment_details,
+          prevActivities: [],
+          currSubscriptions: []
+        })
+      }
+      accountMap.get(acct.account_id)!.prevActivities.push(...paidActivities)
+    }
+  }
+
+  // Process current month (subscriptions/абонементи)
+  for (const acct of currentSummary) {
+    // Only display monthly or smart tariff activities for the current month
+    const subscriptions = acct.activities.filter(a =>
+      a.activity_tariff_type === 'monthly' || a.activity_tariff_type === 'smart'
+    )
+    if (subscriptions.length > 0) {
+      if (!accountMap.has(acct.account_id)) {
+        accountMap.set(acct.account_id, {
+          account_name: acct.account_name,
+          payment_details: acct.account_payment_details,
+          prevActivities: [],
+          currSubscriptions: []
+        })
+      }
+      // Overwrite/set payment details if not set from previous month
+      if (acct.account_payment_details) {
+        accountMap.get(acct.account_id)!.payment_details = acct.account_payment_details
+      }
+      accountMap.get(acct.account_id)!.currSubscriptions.push(...subscriptions)
+    }
+  }
+
+  const accounts = Array.from(accountMap.entries()).map(([id, val]) => ({
+    account_id: id,
+    ...val
+  })).sort((a, b) => a.account_name.localeCompare(b.account_name, 'uk'))
+
+  if (accounts.length === 0) {
+    return <div className="px-6 py-6 text-center text-sm text-gray-400">Немає нарахувань чи абонементів для цього місяця</div>
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  return (
+    <div className="px-6 py-4 space-y-6 invoice-container">
+      {/* Print action */}
+      <div className="flex justify-end no-print">
+        <button
+          onClick={handlePrint}
+          className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors border border-gray-200"
+        >
+          🖨️ Друкувати рахунок (Зберегти в PDF)
+        </button>
+      </div>
+
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .invoice-container, .invoice-container * {
+            visibility: visible;
+          }
+          .invoice-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {accounts.map((acct) => {
+        // Calculate previous month consumed services sum
+        const prevSum = acct.prevActivities.reduce((s, a) => s + (a.accrual_total - a.refund_total), 0)
+        // Calculate current month subscriptions sum (using June accruals)
+        const currSum = acct.currSubscriptions.reduce((s, a) => s + a.accrual_total, 0)
+        // Total invoice sum
+        const invoiceTotal = prevSum + currSum
+
+        // Account balance from child's properties
+        const balObj = child.balances.find((b) => b.account_name === acct.account_name)
+        const currentBalance = balObj ? parseFloat(balObj.balance) : 0
+
+        // Recommended payment formula: Invoice Total - Current Balance
+        // Positive balance = advance/overpayment -> reduces what they must pay.
+        // Negative balance = debt -> increases what they must pay.
+        const recommendedPayment = Math.max(0, invoiceTotal - currentBalance)
+
+        return (
+          <div key={acct.account_id} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm print:border-none print:shadow-none">
+            {/* Header info */}
+            <div className="px-5 py-4 bg-gray-50 border-b border-gray-100 flex flex-wrap justify-between items-start gap-2 print:bg-white print:border-b-2">
+              <div>
+                <span className="text-xs uppercase tracking-wider text-gray-400 font-semibold print:text-gray-500">Рахунок на оплату</span>
+                <h3 className="text-base font-bold text-gray-800">{acct.account_name}</h3>
+                <p className="text-xs text-gray-500 font-medium mt-1">Дитина: {child.full_name}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-gray-400 print:text-gray-500">Період рахунку</span>
+                <p className="text-sm font-semibold text-gray-800">{monthLabel(month)}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Previous Month Consumed Services */}
+              {acct.prevActivities.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Спожиті послуги за {monthLabel(prev)}
+                  </h4>
+                  <div className="border border-gray-100 rounded-lg overflow-hidden divide-y divide-gray-50 print:border-gray-300 print:divide-gray-300">
+                    {acct.prevActivities.map((a) => {
+                      const net = a.accrual_total - a.refund_total
+                      return (
+                        <div key={a.activity_id} className="flex justify-between items-center px-4 py-2.5 text-sm">
+                          <div className="space-y-0.5">
+                            <p className="font-medium text-gray-800">{a.activity_name}</p>
+                            <p className="text-xs text-gray-400 print:text-gray-500">
+                              Відвідування: {a.visit_count} · Пропуски (поважні): {a.excused_count}
+                            </p>
+                          </div>
+                          <span className="font-semibold text-gray-700 font-mono">
+                            {net.toFixed(2)} ₴
+                          </span>
+                        </div>
+                      )
+                    })}
+                    <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50 text-xs font-medium text-gray-600 print:bg-white print:border-t-2">
+                      <span>Всього за спожиті послуги</span>
+                      <span className="font-mono">{prevSum.toFixed(2)} ₴</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Current Month Subscriptions */}
+              {acct.currSubscriptions.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Абонементи послуг на {monthLabel(month)}
+                  </h4>
+                  <div className="border border-gray-100 rounded-lg overflow-hidden divide-y divide-gray-50 print:border-gray-300 print:divide-gray-300">
+                    {acct.currSubscriptions.map((a) => {
+                      return (
+                        <div key={a.activity_id} className="flex justify-between items-center px-4 py-2.5 text-sm">
+                          <p className="font-medium text-gray-800">{a.activity_name}</p>
+                          <span className="font-semibold text-gray-700 font-mono">
+                            {a.accrual_total.toFixed(2)} ₴
+                          </span>
+                        </div>
+                      )
+                    })}
+                    <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50 text-xs font-medium text-gray-600 print:bg-white print:border-t-2">
+                      <span>Всього за абонементи</span>
+                      <span className="font-mono">{currSum.toFixed(2)} ₴</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Final Totals Table */}
+              <div className="pt-2 border-t border-gray-100 space-y-1.5 print:border-gray-300">
+                <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
+                  <span>Сума за послуги та абонементи:</span>
+                  <span className="font-medium font-mono">{invoiceTotal.toFixed(2)} ₴</span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
+                  <span>
+                    Поточний баланс рахунку:
+                    {currentBalance > 0 && <span className="ml-1.5 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-green-300 print:bg-white">аванс</span>}
+                    {currentBalance < 0 && <span className="ml-1.5 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-red-300 print:bg-white">борг</span>}
+                  </span>
+                  <span className={`font-medium font-mono ${currentBalance > 0 ? 'text-green-700' : currentBalance < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {currentBalance > 0 ? '+' : ''}{currentBalance.toFixed(2)} ₴
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 print:border-gray-300">
+                  <span className="text-base font-bold text-gray-800">Рекомендовано до сплати:</span>
+                  <span className="text-xl font-extrabold text-iris-600 tabular-nums font-mono print:text-black">
+                    {recommendedPayment.toFixed(2)} ₴
+                  </span>
+                </div>
+              </div>
+
+              {/* Requisites Block */}
+              {acct.payment_details && (
+                <div className="mt-4 p-4 bg-iris-50/30 rounded-xl border border-iris-100/50 space-y-1.5 print:bg-white print:border-gray-300">
+                  <h5 className="text-xs font-semibold text-iris-800 uppercase tracking-wide print:text-gray-800">
+                    Реквізити для оплати
+                  </h5>
+                  <p className="text-xs text-gray-600 font-mono whitespace-pre-wrap leading-relaxed print:text-black print:text-sm">
+                    {acct.payment_details}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────
 // Child panel — month nav shared across all tabs
 // ────────────────────────────────────────────────────────────
 
-type MainTab = 'attendance' | 'accruals' | 'payments'
+type MainTab = 'attendance' | 'accruals' | 'payments' | 'invoice'
 
 const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: 'attendance', label: 'Відвідування' },
   { id: 'accruals',   label: 'Нарахування' },
   { id: 'payments',   label: 'Оплати' },
+  { id: 'invoice',    label: 'Рахунок на оплату' },
 ]
 
 function ChildPanel({ child }: { child: ParentChild }) {
@@ -403,7 +652,7 @@ function ChildPanel({ child }: { child: ParentChild }) {
       </div>
 
       {/* Month navigation — shared for all tabs */}
-      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-100 bg-gray-50/60">
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-100 bg-gray-50/60 no-print">
         <button
           onClick={() => setMonth(prevMonth(month))}
           className="p-1 rounded hover:bg-gray-200 text-gray-500 text-lg leading-none"
@@ -429,6 +678,7 @@ function ChildPanel({ child }: { child: ParentChild }) {
       {tab === 'attendance' && <AttendanceTab childId={child.id} month={month} />}
       {tab === 'accruals'   && <AccrualsTab   childId={child.id} month={month} />}
       {tab === 'payments'   && <PaymentsTab   childId={child.id} month={month} balances={child.balances} />}
+      {tab === 'invoice'    && <InvoiceTab    child={child} month={month} />}
     </div>
   )
 }

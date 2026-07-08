@@ -453,16 +453,16 @@ export async function accountsRoutes(app: FastifyInstance) {
   )
 
   // ── POST /api/accounts ────────────────────────────────────────────────────
-  app.post<{ Body: { name: string; type: 'fop' | 'cash' | 'bank'; currency?: string; note?: string } }>(
+  app.post<{ Body: { name: string; type: 'fop' | 'cash' | 'bank'; currency?: string; note?: string; payment_details?: string | null } }>(
     '/',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { name, type, currency = 'UAH', note } = req.body
+      const { name, type, currency = 'UAH', note, payment_details } = req.body
       if (!name?.trim()) return reply.status(400).send({ error: 'BadRequest', message: 'name є обовʼязковим' })
       if (!['fop', 'cash', 'bank'].includes(type)) return reply.status(400).send({ error: 'BadRequest', message: 'type має бути fop, cash або bank' })
 
       const account = await db.insertInto('accounts')
-        .values({ name: name.trim(), type, currency, note: note || null })
+        .values({ name: name.trim(), type, currency, note: note || null, payment_details: payment_details || null })
         .returningAll()
         .executeTakeFirstOrThrow()
       return reply.status(201).send(account)
@@ -470,7 +470,7 @@ export async function accountsRoutes(app: FastifyInstance) {
   )
 
   // ── PUT /api/accounts/:id ─────────────────────────────────────────────────
-  app.put<{ Params: { id: string }; Body: { name?: string; type?: 'fop' | 'cash' | 'bank'; currency?: string; note?: string; is_active?: boolean } }>(
+  app.put<{ Params: { id: string }; Body: { name?: string; type?: 'fop' | 'cash' | 'bank'; currency?: string; note?: string; is_active?: boolean; payment_details?: string | null } }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
