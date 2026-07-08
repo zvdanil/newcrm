@@ -388,6 +388,7 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
   const accountMap = new Map<string, {
     account_name: string
     payment_details: string | null
+    balance_start: number
     prevActivities: ActivityMonthlySummary[]
     currSubscriptions: (ActivityMonthlySummary & { display_price: number })[]
   }>()
@@ -401,6 +402,7 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
         accountMap.set(acct.account_id, {
           account_name: acct.account_name,
           payment_details: acct.account_payment_details,
+          balance_start: 0, // Will be set or overwritten by current month summary
           prevActivities: [],
           currSubscriptions: []
         })
@@ -423,14 +425,18 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
         a.display_price > 0
       )
 
-    if (subscriptions.length > 0) {
+    if (subscriptions.length > 0 || accountMap.has(acct.account_id)) {
       if (!accountMap.has(acct.account_id)) {
         accountMap.set(acct.account_id, {
           account_name: acct.account_name,
           payment_details: acct.account_payment_details,
+          balance_start: acct.balance_start,
           prevActivities: [],
           currSubscriptions: []
         })
+      } else {
+        // Set the current month's starting balance
+        accountMap.get(acct.account_id)!.balance_start = acct.balance_start
       }
       // Overwrite/set payment details if not set from previous month
       if (acct.account_payment_details) {
@@ -495,14 +501,12 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
         // Total invoice sum
         const invoiceTotal = prevSum + currSum
 
-        // Account balance from child's properties
-        const balObj = child.balances.find((b) => b.account_name === acct.account_name)
-        const currentBalance = balObj ? parseFloat(balObj.balance) : 0
+        const balanceStart = acct.balance_start
 
-        // Recommended payment formula: Invoice Total - Current Balance
-        // Positive balance = advance/overpayment -> reduces what they must pay.
-        // Negative balance = debt -> increases what they must pay.
-        const recommendedPayment = Math.max(0, invoiceTotal - currentBalance)
+        // Recommended payment formula: Current subscriptions - Starting Balance of the month (which already includes prev month consumed)
+        // Positive balanceStart = advance/overpayment -> reduces recommended payment
+        // Negative balanceStart = debt -> increases recommended payment
+        const recommendedPayment = Math.max(0, currSum - balanceStart)
 
         return (
           <div key={acct.account_id} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm print:border-none print:shadow-none">
@@ -579,17 +583,17 @@ function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
               {/* Final Totals Table */}
               <div className="pt-2 border-t border-gray-100 space-y-1.5 print:border-gray-300">
                 <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
-                  <span>Сума за послуги та абонементи:</span>
-                  <span className="font-medium font-mono">{invoiceTotal.toFixed(2)} ₴</span>
+                  <span>Сума за абонементи:</span>
+                  <span className="font-medium font-mono">{currSum.toFixed(2)} ₴</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
                   <span>
-                    Поточний баланс рахунку:
-                    {currentBalance > 0 && <span className="ml-1.5 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-green-300 print:bg-white">аванс</span>}
-                    {currentBalance < 0 && <span className="ml-1.5 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-red-300 print:bg-white">борг</span>}
+                    Баланс на початок періоду ({monthLabel(month)}):
+                    {balanceStart > 0 && <span className="ml-1.5 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-green-300 print:bg-white">аванс</span>}
+                    {balanceStart < 0 && <span className="ml-1.5 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-red-300 print:bg-white">борг</span>}
                   </span>
-                  <span className={`font-medium font-mono ${currentBalance > 0 ? 'text-green-700' : currentBalance < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {currentBalance > 0 ? '+' : ''}{currentBalance.toFixed(2)} ₴
+                  <span className={`font-medium font-mono ${balanceStart > 0 ? 'text-green-700' : balanceStart < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {balanceStart > 0 ? '+' : ''}{balanceStart.toFixed(2)} ₴
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 print:border-gray-300">

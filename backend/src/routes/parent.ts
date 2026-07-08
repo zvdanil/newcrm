@@ -117,7 +117,7 @@ export async function parentRoutes(app: FastifyInstance) {
       'ac.payment_details as account_payment_details',
     ] as const
 
-    const [enrollments, transactions, attendanceLogs] = await Promise.all([
+    const [enrollments, transactions, attendanceLogs, initialBalances, txBefore] = await Promise.all([
       // Active/frozen enrollments with account info
       db.selectFrom('enrollments as e')
         .innerJoin('activities as a', 'a.id', 'e.activity_id')
@@ -151,6 +151,20 @@ export async function parentRoutes(app: FastifyInstance) {
         .where('al.date', '>=', new Date(from))
         .where('al.date', '<=', new Date(to))
         .execute(),
+
+      // Initial balances
+      db.selectFrom('initial_balances')
+        .select(['account_id', 'amount'])
+        .where('child_id', '=', req.params.childId)
+        .execute(),
+
+      // All transactions before billing Date (month start)
+      db.selectFrom('transactions')
+        .select(['type', 'amount', 'account_id'])
+        .where('child_id', '=', req.params.childId)
+        .where('is_deleted', '=', false)
+        .where('transaction_date', '<', new Date(from))
+        .execute(),
     ])
 
     // Calculate forecast/expected price for each enrollment using same logic as "прогноз нарахувань"
@@ -178,6 +192,26 @@ export async function parentRoutes(app: FastifyInstance) {
         expected_price: expectedPrice
       }
     }))
+
+    const initBalMap = new Map<string, number>()
+    for (const ib of initialBalances) {
+      initBalMap.set(ib.account_id, parseFloat(String(ib.amount)))
+    }
+
+    const balanceAtStartMap = new Map<string, number>()
+    for (const tx of txBefore) {
+      const accountId = tx.account_id ?? 'unknown'
+      const cur = balanceAtStartMap.get(accountId) ?? 0
+      const amt = parseFloat(String(tx.amount))
+      if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+        balanceAtStartMap.set(accountId, cur + amt)
+      } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+        balanceAtStartMap.set(accountId, cur - amt)
+      }
+    }
+    for (const [accId, initAmt] of initBalMap) {
+      balanceAtStartMap.set(accId, (balanceAtStartMap.get(accId) ?? 0) + initAmt)
+    }
 
     // Attendance map: activity_id → { visit_count, excused_count }
     const attendanceMap: Record<string, { visit_count: number; excused_count: number }> = {}
@@ -275,6 +309,7 @@ export async function parentRoutes(app: FastifyInstance) {
         account_id: acct.account_id,
         account_name: acct.account_name,
         account_payment_details: acct.account_payment_details,
+        balance_start: balanceAtStartMap.get(acct.account_id) ?? 0,
         activities: Array.from(acct.activities.values())
           .filter(a => a.enrollment_status !== null || a.transactions.length > 0)
           .map(a => ({
