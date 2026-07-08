@@ -2,6 +2,7 @@ import { BankPayersBlock } from './BankPayersBlock'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { InvoiceTab } from '../Cabinet/CabinetPage'
 import { childrenApi } from '../../api/children.api'
 import type { IndividualTariff, IndTariffType, OpenAccrual, ChildMonthStats } from '../../api/children.api'
 import type { ChildParent, Child } from '../../types'
@@ -235,6 +236,9 @@ export function ChildCardPage() {
       {/* Billing forecast */}
       {id && <BillingForecastBlock childId={id} />}
 
+      {/* Invoice payment */}
+      {id && <ChildInvoiceBlock child={{ id, full_name: child.full_name }} />}
+
       {/* Enrollments (includes individual tariff management) */}
       {id && <EnrollmentsBlock childId={id} canEdit={canEdit} canEditTariffs={isOwner} viewedYm={ym} />}
     </div>
@@ -378,6 +382,73 @@ function BillingForecastBlock({ childId }: { childId: string }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Child Invoice Block ───────────────────────────────────────────────────
+
+const INVOICE_MONTHS = [
+  'Січень', 'Лютий', 'Березень', 'Квітень',
+  'Травень', 'Червень', 'Липень', 'Серпень',
+  'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+]
+
+function ChildInvoiceBlock({ child }: { child: { id: string; full_name: string } }) {
+  const [open, setOpen] = useState(false)
+  const [invoiceYm, setInvoiceYm] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+
+  const [y, m] = invoiceYm.split('-').map(Number)
+  const monthLabelText = `${INVOICE_MONTHS[m - 1]} ${y}`
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <button
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left no-print"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-900">Рахунок на оплату</span>
+          <span className="text-xs text-gray-400 font-normal">· {monthLabelText}</span>
+        </div>
+        <span className="text-gray-400 text-sm select-none">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-5 pb-5 space-y-4 border-t border-gray-100 print:border-none print:px-0 print:pb-0">
+          {/* Month navigation */}
+          <div className="flex items-center gap-3 pt-3 no-print">
+            <button
+              onClick={() => {
+                const [curY, curM] = invoiceYm.split('-').map(Number)
+                const d = new Date(curY, curM - 2, 1)
+                setInvoiceYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+              }}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors text-sm"
+            >
+              ‹
+            </button>
+            <span className="text-sm font-medium text-gray-700 min-w-[90px] text-center">{monthLabelText}</span>
+            <button
+              onClick={() => {
+                const [curY, curM] = invoiceYm.split('-').map(Number)
+                const d = new Date(curY, curM, 1)
+                setInvoiceYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+              }}
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors text-sm"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="pt-2">
+            <InvoiceTab child={child} month={invoiceYm} />
+          </div>
         </div>
       )}
     </div>

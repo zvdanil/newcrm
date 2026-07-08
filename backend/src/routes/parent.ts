@@ -21,7 +21,8 @@ export async function parentRoutes(app: FastifyInstance) {
   // All routes require authenticated parent
   app.addHook('preHandler', authenticate)
   app.addHook('preHandler', async (req, reply) => {
-    if ((req as { user?: { role?: string } }).user?.role !== 'parent') {
+    const role = (req as { user?: { role?: string } }).user?.role
+    if (role !== 'parent' && role !== 'admin' && role !== 'owner' && role !== 'manager') {
       return reply.status(403).send({ error: 'Forbidden' })
     }
   })
@@ -95,12 +96,16 @@ export async function parentRoutes(app: FastifyInstance) {
     Params: { childId: string }
     Querystring: { month?: string }
   }>('/children/:childId/month-summary', async (req, reply) => {
-    const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
-    const parentId = await getParentId(userId)
-    if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
+    const role = (req as any).user?.role
+    const isAdmin = role === 'admin' || role === 'owner' || role === 'manager'
+    if (!isAdmin) {
+      const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
+      const parentId = await getParentId(userId)
+      if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
 
-    const hasAccess = await assertChildAccess(parentId, req.params.childId)
-    if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+      const hasAccess = await assertChildAccess(parentId, req.params.childId)
+      if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+    }
 
     const month = req.query.month ?? new Date().toISOString().slice(0, 7)
     const [y, m] = month.split('-').map(Number)

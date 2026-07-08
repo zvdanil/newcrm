@@ -367,7 +367,7 @@ function PaymentsTab({
 // TAB 4 — Рахунок на оплату (segmenting prev month consumed + current subscriptions)
 // ────────────────────────────────────────────────────────────
 
-function InvoiceTab({ child, month }: { child: ParentChild; month: string }) {
+export function InvoiceTab({ child, month }: { child: { id: string; full_name: string }; month: string }) {
   const prev = prevMonth(month)
 
   const { data: currentSummary = [], isLoading: loadingCurrent } = useQuery<AccountMonthlySummary[]>({
