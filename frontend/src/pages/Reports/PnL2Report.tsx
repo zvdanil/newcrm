@@ -27,9 +27,9 @@ function monthLabel(isoDate: string) {
 
 export function PnL2Report() {
   const [fromMonth, setFromMonth] = useState(sixMonthsAgo())
-  const [toMonth, setToMonth]     = useState(currentYM())
+  const [toMonth, setToMonth] = useState(currentYM())
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null)
-  const [expanded, setExpanded]   = useState<Record<string, boolean>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const tableRef = useRef<HTMLDivElement>(null)
 
   const { data, isFetching, isError } = useQuery({
@@ -98,36 +98,14 @@ export function PnL2Report() {
   }
 
   const getCategoryTransactions = (categoryId: string) => {
-    const map: Record<string, {
-      id: string
-      date: string
-      note: string
-      accruals: Record<string, number>
-      payments: Record<string, number>
-    }> = {}
-
+    const list: Array<{ id: string; date: string; amount: number; note: string; type: 'accrued' | 'paid'; month: string }> = []
     rows.forEach(r => {
       const cat = r.expenses.details.find(d => d.category_id === categoryId)
       cat?.transactions.forEach(t => {
-        if (!map[t.id]) {
-          map[t.id] = {
-            id: t.id,
-            date: t.date,
-            note: t.note,
-            accruals: {},
-            payments: {}
-          }
-        }
-        if (t.type === 'accrued') {
-          map[t.id].date = t.date
-          map[t.id].accruals[r.month] = (map[t.id].accruals[r.month] || 0) + t.amount
-        } else if (t.type === 'paid') {
-          map[t.id].payments[r.month] = (map[t.id].payments[r.month] || 0) + t.amount
-        }
+        list.push({ ...t, month: r.month })
       })
     })
-
-    return Object.values(map).sort((x, y) => x.date.localeCompare(y.date))
+    return list.sort((x, y) => x.date.localeCompare(y.date))
   }
 
   const getWithdrawalTransactions = () => {
@@ -225,7 +203,7 @@ export function PnL2Report() {
         return { accrued: detail?.accrued ?? 0, paid: detail?.paid ?? 0 }
       })
     })
-    
+
     // Total expenses
     addRow('Всього операційних витрат', r => {
       const accrued = r.salary.accrued + r.expenses.accrued
@@ -259,8 +237,8 @@ export function PnL2Report() {
 
     const csv = csvData.map(row => row.map(v => `"${v}"`).join(';')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
     a.href = url; a.download = `pnl2-${fromMonth}-${toMonth}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
@@ -620,15 +598,14 @@ export function PnL2Report() {
                                     {tx.note || '(без примітки)'}
                                   </td>
                                   {rows.map(r => {
-                                    const accruedVal = tx.accruals[r.month]
-                                    const paidVal = tx.payments[r.month]
+                                    const isCurrentMonth = r.month === tx.month
                                     return (
                                       <React.Fragment key={r.month}>
                                         <td className="px-2 py-1 text-right font-mono border-r border-gray-100 text-gray-400">
-                                          {accruedVal ? fmtMoney(accruedVal) : '—'}
+                                          {isCurrentMonth && tx.type === 'accrued' ? fmtMoney(tx.amount) : '—'}
                                         </td>
                                         <td className="px-2 py-1 text-right font-mono border-r border-gray-200 text-gray-400">
-                                          {paidVal ? fmtMoney(paidVal) : '—'}
+                                          {isCurrentMonth && tx.type === 'paid' ? fmtMoney(tx.amount) : '—'}
                                         </td>
                                       </React.Fragment>
                                     )

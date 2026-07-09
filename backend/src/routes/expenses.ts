@@ -97,16 +97,16 @@ export async function expensesRoutes(app: FastifyInstance) {
     '/',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
-      const limit  = Math.min(Number(req.query.limit  ?? 500), 500)
+      const limit = Math.min(Number(req.query.limit ?? 500), 500)
       const offset = Number(req.query.offset ?? 0)
 
       let q = db
         .selectFrom('expenses as e')
-        .leftJoin('expense_categories as c',  'c.id', 'e.category_id')
+        .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
         .leftJoin('expense_categories as cp', 'cp.id', 'c.parent_id')
-        .leftJoin('accounts as a',            'a.id',  'e.account_id')
-        .leftJoin('users as u',               'u.id',  'e.created_by')
-        .leftJoin('staff as s',               's.id',  'e.staff_id')
+        .leftJoin('accounts as a', 'a.id', 'e.account_id')
+        .leftJoin('users as u', 'u.id', 'e.created_by')
+        .leftJoin('staff as s', 's.id', 'e.staff_id')
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
           'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
@@ -216,18 +216,18 @@ export async function expensesRoutes(app: FastifyInstance) {
         )
         .where('e.is_deleted', '=', false)
 
-      if (req.query.account_id)  q = q.where('e.account_id', '=', req.query.account_id)
+      if (req.query.account_id) q = q.where('e.account_id', '=', req.query.account_id)
       if (req.query.category_id) {
         // match category OR its children
         q = q.where((eb) => eb.or([
           eb('e.category_id', '=', req.query.category_id!),
-          eb('c.parent_id',   '=', req.query.category_id!),
+          eb('c.parent_id', '=', req.query.category_id!),
         ]))
       }
-      if (req.query.status)      q = q.where('e.status', '=', req.query.status as 'pending' | 'paid')
-      if (req.query.from)        q = q.where('e.accrual_date', '>=', new Date(req.query.from))
-      if (req.query.to)          q = q.where('e.accrual_date', '<=', new Date(req.query.to))
-      if (req.query.is_dividend === 'true')  q = q.where('e.is_dividend', '=', true)
+      if (req.query.status) q = q.where('e.status', '=', req.query.status as 'pending' | 'paid')
+      if (req.query.from) q = q.where('e.accrual_date', '>=', new Date(req.query.from))
+      if (req.query.to) q = q.where('e.accrual_date', '<=', new Date(req.query.to))
+      if (req.query.is_dividend === 'true') q = q.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') q = q.where('e.is_dividend', '=', false)
 
       // Total for the filter (without limit/offset)
@@ -241,17 +241,17 @@ export async function expensesRoutes(app: FastifyInstance) {
         .where('e.is_deleted', '=', false)
       // apply same filters
       let totalQFiltered = totalQ
-      if (req.query.account_id)  totalQFiltered = totalQFiltered.where('e.account_id', '=', req.query.account_id)
+      if (req.query.account_id) totalQFiltered = totalQFiltered.where('e.account_id', '=', req.query.account_id)
       if (req.query.category_id) {
         totalQFiltered = totalQFiltered.where((eb) => eb.or([
           eb('e.category_id', '=', req.query.category_id!),
-          eb('c.parent_id',   '=', req.query.category_id!),
+          eb('c.parent_id', '=', req.query.category_id!),
         ]))
       }
-      if (req.query.status)      totalQFiltered = totalQFiltered.where('e.status', '=', req.query.status as 'pending' | 'paid')
-      if (req.query.from)        totalQFiltered = totalQFiltered.where('e.accrual_date', '>=', new Date(req.query.from))
-      if (req.query.to)          totalQFiltered = totalQFiltered.where('e.accrual_date', '<=', new Date(req.query.to))
-      if (req.query.is_dividend === 'true')  totalQFiltered = totalQFiltered.where('e.is_dividend', '=', true)
+      if (req.query.status) totalQFiltered = totalQFiltered.where('e.status', '=', req.query.status as 'pending' | 'paid')
+      if (req.query.from) totalQFiltered = totalQFiltered.where('e.accrual_date', '>=', new Date(req.query.from))
+      if (req.query.to) totalQFiltered = totalQFiltered.where('e.accrual_date', '<=', new Date(req.query.to))
+      if (req.query.is_dividend === 'true') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', false)
 
       const [data, totals] = await Promise.all([
@@ -302,7 +302,7 @@ export async function expensesRoutes(app: FastifyInstance) {
 
       const today = new Date().toISOString().slice(0, 10)
       const status = is_instant ? 'paid' : 'pending'
-      const paidDate = is_instant ? (payment_date ?? today) : (payment_date ?? null)
+      const paidDate = is_instant ? (payment_date ?? accrual_date ?? today) : (payment_date ?? null)
 
       const row = await db.transaction().execute(async (trx) => {
         const expense = await trx.insertInto('expenses')
@@ -445,11 +445,11 @@ export async function expensesRoutes(app: FastifyInstance) {
         await db.insertInto('expense_edits')
           .values(tracked.map(t => ({
             expense_id: req.params.id,
-            edited_by:  editedBy,
+            edited_by: editedBy,
             field_name: t.field_name,
-            old_value:  t.old_value,
-            new_value:  t.new_value,
-            edit_note:  edit_note ?? null,
+            old_value: t.old_value,
+            new_value: t.new_value,
+            edit_note: edit_note ?? null,
           })))
           .execute()
       }
@@ -586,7 +586,7 @@ export async function expensesRoutes(app: FastifyInstance) {
       const { id } = req.params
       const { amount, account_id, date, note } = req.body
       if (!account_id || !amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Неправильні дані' })
-      
+
       const advance = await db.selectFrom('expenses').select('category_id').where('id', '=', id).executeTakeFirst()
       if (!advance) return reply.status(404).send({ error: 'NotFound' })
 
@@ -596,7 +596,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         status: 'paid', is_instant: true, is_advance_return: true, utilized_advance_id: id,
         note: note || 'Повернення невикористаного залишку авансу', created_by: req.user.sub
       }).returningAll().executeTakeFirstOrThrow()
-      
+
       return reply.status(201).send(row)
     }
   )
@@ -737,10 +737,10 @@ export async function expensesRoutes(app: FastifyInstance) {
       const transfer = await db.insertInto('account_transfers')
         .values({
           from_account_id: expense.account_id,
-          to_account_id:   target_account_id,
-          amount:          withdrawalAmount,
-          commission:      0,
-          transfer_date:   dateStr,
+          to_account_id: target_account_id,
+          amount: withdrawalAmount,
+          commission: 0,
+          transfer_date: dateStr,
           note: `Обналичування: ${expense.note ?? expense.id}`,
           created_by: req.user.sub,
         })
@@ -751,16 +751,16 @@ export async function expensesRoutes(app: FastifyInstance) {
       if (roundedCommission > 0) {
         commissionExpense = await db.insertInto('expenses')
           .values({
-            account_id:   target_account_id,
-            category_id:  categoryId,
-            amount:       roundedCommission,
+            account_id: target_account_id,
+            category_id: categoryId,
+            amount: roundedCommission,
             accrual_date: dateStr,
             payment_date: dateStr,
-            status:       'paid',
-            is_instant:   true,
-            is_dividend:  false,
+            status: 'paid',
+            is_instant: true,
+            is_dividend: false,
             note: `% за вывод ${expense.note ?? expense.id}`,
-            created_by:   req.user.sub,
+            created_by: req.user.sub,
           })
           .returningAll()
           .executeTakeFirstOrThrow()
@@ -840,17 +840,17 @@ export async function expensesRoutes(app: FastifyInstance) {
         .select([
           't.id', 't.amount', 't.commission', 't.transfer_date', 't.note', 't.created_at',
           't.from_account_id', 'fa.name as from_account_name',
-          't.to_account_id',   'ta.name as to_account_name',
+          't.to_account_id', 'ta.name as to_account_name',
         ])
 
       if (req.query.account_id) {
         q = q.where((eb) => eb.or([
           eb('t.from_account_id', '=', req.query.account_id!),
-          eb('t.to_account_id',   '=', req.query.account_id!),
+          eb('t.to_account_id', '=', req.query.account_id!),
         ]))
       }
       if (req.query.from) q = q.where('t.transfer_date', '>=', new Date(req.query.from))
-      if (req.query.to)   q = q.where('t.transfer_date', '<=', new Date(req.query.to))
+      if (req.query.to) q = q.where('t.transfer_date', '<=', new Date(req.query.to))
 
       return q.orderBy('t.transfer_date', 'desc').orderBy('t.created_at', 'desc').limit(500).execute()
     }
