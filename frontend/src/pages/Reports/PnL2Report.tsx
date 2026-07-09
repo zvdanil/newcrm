@@ -98,14 +98,36 @@ export function PnL2Report() {
   }
 
   const getCategoryTransactions = (categoryId: string) => {
-    const list: Array<{ id: string; date: string; amount: number; note: string; type: 'accrued' | 'paid'; month: string }> = []
+    const map: Record<string, {
+      id: string
+      date: string
+      note: string
+      accruals: Record<string, number>
+      payments: Record<string, number>
+    }> = {}
+
     rows.forEach(r => {
       const cat = r.expenses.details.find(d => d.category_id === categoryId)
       cat?.transactions.forEach(t => {
-        list.push({ ...t, month: r.month })
+        if (!map[t.id]) {
+          map[t.id] = {
+            id: t.id,
+            date: t.date,
+            note: t.note,
+            accruals: {},
+            payments: {}
+          }
+        }
+        if (t.type === 'accrued') {
+          map[t.id].date = t.date
+          map[t.id].accruals[r.month] = (map[t.id].accruals[r.month] || 0) + t.amount
+        } else if (t.type === 'paid') {
+          map[t.id].payments[r.month] = (map[t.id].payments[r.month] || 0) + t.amount
+        }
       })
     })
-    return list.sort((x, y) => x.date.localeCompare(y.date))
+
+    return Object.values(map).sort((x, y) => x.date.localeCompare(y.date))
   }
 
   const getWithdrawalTransactions = () => {
@@ -598,14 +620,15 @@ export function PnL2Report() {
                                     {tx.note || '(без примітки)'}
                                   </td>
                                   {rows.map(r => {
-                                    const isCurrentMonth = r.month === tx.month
+                                    const accruedVal = tx.accruals[r.month]
+                                    const paidVal = tx.payments[r.month]
                                     return (
                                       <React.Fragment key={r.month}>
                                         <td className="px-2 py-1 text-right font-mono border-r border-gray-100 text-gray-400">
-                                          {isCurrentMonth && tx.type === 'accrued' ? fmtMoney(tx.amount) : '—'}
+                                          {accruedVal ? fmtMoney(accruedVal) : '—'}
                                         </td>
                                         <td className="px-2 py-1 text-right font-mono border-r border-gray-200 text-gray-400">
-                                          {isCurrentMonth && tx.type === 'paid' ? fmtMoney(tx.amount) : '—'}
+                                          {paidVal ? fmtMoney(paidVal) : '—'}
                                         </td>
                                       </React.Fragment>
                                     )

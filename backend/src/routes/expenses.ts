@@ -225,8 +225,17 @@ export async function expensesRoutes(app: FastifyInstance) {
         ]))
       }
       if (req.query.status) q = q.where('e.status', '=', req.query.status as 'pending' | 'paid')
-      if (req.query.from) q = q.where('e.accrual_date', '>=', new Date(req.query.from))
-      if (req.query.to) q = q.where('e.accrual_date', '<=', new Date(req.query.to))
+      if (req.query.from && req.query.to) {
+        const fromDate = new Date(req.query.from)
+        const toDate = new Date(req.query.to)
+        q = q.where((eb) => eb.or([
+          eb.and([eb('e.accrual_date', '>=', fromDate), eb('e.accrual_date', '<=', toDate)]),
+          eb.and([eb('e.payment_date', '>=', fromDate), eb('e.payment_date', '<=', toDate)])
+        ]))
+      } else {
+        if (req.query.from) q = q.where((eb) => eb.or([eb('e.accrual_date', '>=', new Date(req.query.from!)), eb('e.payment_date', '>=', new Date(req.query.from!))]))
+        if (req.query.to) q = q.where((eb) => eb.or([eb('e.accrual_date', '<=', new Date(req.query.to!)), eb('e.payment_date', '<=', new Date(req.query.to!))]))
+      }
       if (req.query.is_dividend === 'true') q = q.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') q = q.where('e.is_dividend', '=', false)
 
@@ -249,8 +258,17 @@ export async function expensesRoutes(app: FastifyInstance) {
         ]))
       }
       if (req.query.status) totalQFiltered = totalQFiltered.where('e.status', '=', req.query.status as 'pending' | 'paid')
-      if (req.query.from) totalQFiltered = totalQFiltered.where('e.accrual_date', '>=', new Date(req.query.from))
-      if (req.query.to) totalQFiltered = totalQFiltered.where('e.accrual_date', '<=', new Date(req.query.to))
+      if (req.query.from && req.query.to) {
+        const fromDate = new Date(req.query.from)
+        const toDate = new Date(req.query.to)
+        totalQFiltered = totalQFiltered.where((eb) => eb.or([
+          eb.and([eb('e.accrual_date', '>=', fromDate), eb('e.accrual_date', '<=', toDate)]),
+          eb.and([eb('e.payment_date', '>=', fromDate), eb('e.payment_date', '<=', toDate)])
+        ]))
+      } else {
+        if (req.query.from) totalQFiltered = totalQFiltered.where((eb) => eb.or([eb('e.accrual_date', '>=', new Date(req.query.from!)), eb('e.payment_date', '>=', new Date(req.query.from!))]))
+        if (req.query.to) totalQFiltered = totalQFiltered.where((eb) => eb.or([eb('e.accrual_date', '<=', new Date(req.query.to!)), eb('e.payment_date', '<=', new Date(req.query.to!))]))
+      }
       if (req.query.is_dividend === 'true') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', false)
 
@@ -404,7 +422,7 @@ export async function expensesRoutes(app: FastifyInstance) {
   // PUT /api/expenses/:id  — edit any expense (including paid), record audit diff
   app.put<{
     Params: { id: string }
-    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; note?: string | null; edit_note?: string }
+    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; payment_date?: string | null; note?: string | null; edit_note?: string }
   }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'accountant') },

@@ -498,8 +498,6 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
         const prevSum = acct.prevActivities.reduce((s, a) => s + (a.accrual_total - a.refund_total), 0)
         // Calculate current month subscriptions sum (using display_price)
         const currSum = acct.currSubscriptions.reduce((s, a) => s + a.display_price, 0)
-        // Total invoice sum
-        const invoiceTotal = prevSum + currSum
 
         const balanceStart = acct.balance_start
 

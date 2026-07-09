@@ -152,6 +152,7 @@ export const expensesApi = {
     category_id?: string | null
     amount?: number
     accrual_date?: string
+    payment_date?: string | null
     note?: string | null
     edit_note?: string
   }) => {

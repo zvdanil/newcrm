@@ -440,6 +440,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     category_id:      initial?.category_id ?? '',
     amount:           initial ? fmt(initial.amount ?? 0) : '',
     accrual_date:     initial?.accrual_date?.slice(0, 10) ?? today,
+    payment_date:     initial?.payment_date?.slice(0, 10) ?? '',
     is_instant:       initial?.is_instant ?? true,
     is_dividend:      initial?.is_dividend ?? false,
     note:             initial?.note ?? '',
@@ -514,6 +515,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         category_id:  form.category_id || null,
         amount,
         accrual_date: form.accrual_date,
+        payment_date: form.payment_date || null,
         note:      form.note || null,
         edit_note: editNote.trim() || undefined,
       })
@@ -524,6 +526,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         category_id:      form.category_id || undefined,
         amount:           totalBill,
         accrual_date:     form.accrual_date,
+        payment_date:     form.payment_date || undefined,
         is_instant:       form.is_instant,
         is_dividend:      form.is_dividend,
         note:             form.note || undefined,
@@ -609,20 +612,52 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
-          <input type="date" value={form.accrual_date}
-            onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value }))}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
-          <input type="text" placeholder="Опис витрати" value={form.note}
-            onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-        </div>
-      </div>
+      {(() => {
+        const showPaymentDate = form.is_instant || (isEdit && initial?.status === 'paid')
+        if (showPaymentDate) {
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
+                  <input type="date" value={form.accrual_date}
+                    onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Дата сплати</label>
+                  <input type="date" value={form.payment_date}
+                    onChange={e => setForm(f => ({ ...f, payment_date: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
+                <input type="text" placeholder="Опис витрати" value={form.note}
+                  onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+            </>
+          )
+        } else {
+          return (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
+                <input type="date" value={form.accrual_date}
+                  onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
+                <input type="text" placeholder="Опис витрати" value={form.note}
+                  onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+              </div>
+            </div>
+          )
+        }
+      })()}
 
       {isEdit ? (
         <div>
