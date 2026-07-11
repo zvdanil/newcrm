@@ -195,6 +195,7 @@ export interface PnL2DividendTxDetail {
 export interface PnL2Row {
   month: string
   accounts: PnL2Account[]
+  refunds: { accrued: number; paid: number; details: PnL2Account[] }
   salary: { accrued: number; paid: number; details: PnL2StaffDetail[] }
   expenses: { accrued: number; paid: number; details: PnL2CategoryDetail[] }
   withdrawals: { paid: number; transactions: PnL2WithdrawalTxDetail[] }

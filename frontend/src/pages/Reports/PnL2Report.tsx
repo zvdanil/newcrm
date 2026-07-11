@@ -97,6 +97,29 @@ export function PnL2Report() {
     return Object.entries(union).map(([id, name]) => ({ id, name }))
   }
 
+  const getUniqueActivitiesForRefundAccount = (accountId: string) => {
+    const union: Record<string, string> = {}
+    rows.forEach(r => {
+      const acc = r.refunds?.details?.find(ac => ac.account_id === accountId)
+      acc?.details.forEach(d => {
+        union[d.activity_id] = d.activity_name
+      })
+    })
+    return Object.entries(union).map(([id, name]) => ({ id, name }))
+  }
+
+  const getUniqueChildrenForRefundActivity = (accountId: string, activityId: string) => {
+    const union: Record<string, string> = {}
+    rows.forEach(r => {
+      const acc = r.refunds?.details?.find(ac => ac.account_id === accountId)
+      const act = acc?.details.find(d => d.activity_id === activityId)
+      act?.children.forEach(c => {
+        union[c.child_id] = c.child_name
+      })
+    })
+    return Object.entries(union).map(([id, name]) => ({ id, name }))
+  }
+
   const getCategoryTransactions = (categoryId: string) => {
     const map: Record<string, {
       id: string
@@ -226,10 +249,38 @@ export function PnL2Report() {
       })
     })
 
+    // Refunds breakdown
+    addRow('Витрати: Повернення за пропуски', r => ({ accrued: r.refunds?.accrued ?? 0, paid: r.refunds?.paid ?? 0 }))
+    accounts.forEach(a => {
+      const uniqueRefundActs = getUniqueActivitiesForRefundAccount(a.id)
+      if (uniqueRefundActs.length > 0) {
+        addRow(`  └ Рахунок: ${a.name}`, r => {
+          const val = r.refunds?.details?.find(ac => ac.account_id === a.id)
+          return { accrued: val?.accrued ?? 0, paid: val?.paid ?? 0 }
+        })
+        uniqueRefundActs.forEach(act => {
+          addRow(`    └ Активність: ${act.name}`, r => {
+            const acc = r.refunds?.details?.find(ac => ac.account_id === a.id)
+            const detail = acc?.details.find(d => d.activity_id === act.id)
+            return { accrued: detail?.accrued ?? 0, paid: detail?.paid ?? 0 }
+          })
+          const uniqueKids = getUniqueChildrenForRefundActivity(a.id, act.id)
+          uniqueKids.forEach(kid => {
+            addRow(`      └ Клієнт: ${kid.name}`, r => {
+              const acc = r.refunds?.details?.find(ac => ac.account_id === a.id)
+              const detail = acc?.details.find(d => d.activity_id === act.id)
+              const kidDetail = detail?.children.find(c => c.child_id === kid.id)
+              return { accrued: kidDetail?.accrued ?? 0, paid: kidDetail?.paid ?? 0 }
+            })
+          })
+        })
+      }
+    })
+
     // Total expenses
     addRow('Всього операційних витрат', r => {
-      const accrued = r.salary.accrued + r.expenses.accrued
-      const paid = r.salary.paid + r.expenses.paid
+      const accrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
+      const paid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
       return { accrued, paid }
     })
 
@@ -237,8 +288,8 @@ export function PnL2Report() {
     addRow('Операційний прибуток (Баланс)', r => {
       const revAccrued = r.accounts.reduce((s, ac) => s + ac.accrued, 0)
       const revPaid = r.accounts.reduce((s, ac) => s + ac.paid, 0)
-      const expAccrued = r.salary.accrued + r.expenses.accrued
-      const expPaid = r.salary.paid + r.expenses.paid
+      const expAccrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
+      const expPaid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
       return { accrued: revAccrued - expAccrued, paid: revPaid - expPaid }
     })
 
@@ -250,8 +301,8 @@ export function PnL2Report() {
     addRow('Чистий грошовий потік', r => {
       const revAccrued = r.accounts.reduce((s, ac) => s + ac.accrued, 0)
       const revPaid = r.accounts.reduce((s, ac) => s + ac.paid, 0)
-      const expAccrued = r.salary.accrued + r.expenses.accrued
-      const expPaid = r.salary.paid + r.expenses.paid
+      const expAccrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
+      const expPaid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
       const opProfitAccrued = revAccrued - expAccrued
       const netPaidFlow = revPaid - expPaid - r.withdrawals.paid - r.dividends.paid
       return { accrued: opProfitAccrued, paid: netPaidFlow }
@@ -642,14 +693,145 @@ export function PnL2Report() {
                     )
                   })()}
 
+                  {/* Refunds row */}
+                  {(() => {
+                    const refKey = 'refunds'
+                    const isRefExpanded = !!expanded[refKey]
+
+                    return (
+                      <React.Fragment>
+                        <tr className="bg-white">
+                          <td className="sticky left-0 z-10 bg-white px-4 py-2 border-r border-gray-200 font-medium text-gray-700 flex items-center gap-1.5">
+                            <button
+                              onClick={() => toggleExpand(refKey)}
+                              className="text-gray-400 hover:text-gray-600 focus:outline-none text-[10px]"
+                            >
+                              {isRefExpanded ? '▼' : '▶'}
+                            </button>
+                            Повернення за пропуски
+                          </td>
+                          {rows.map(r => (
+                            <React.Fragment key={r.month}>
+                              <td className="px-2 py-2 text-right font-mono text-gray-600 border-r border-gray-100">
+                                {fmtMoney(r.refunds?.accrued ?? 0)}
+                              </td>
+                              <td className="px-2 py-2 text-right font-mono text-gray-600 border-r border-gray-200">
+                                {fmtMoney(r.refunds?.paid ?? 0)}
+                              </td>
+                            </React.Fragment>
+                          ))}
+                        </tr>
+
+                        {/* Refunds Account Drilldown */}
+                        {isRefExpanded && accounts.map(a => {
+                          const refAccKey = `refund-account::${a.id}`
+                          const isRefAccExpanded = !!expanded[refAccKey]
+                          const uniqueRefundActs = getUniqueActivitiesForRefundAccount(a.id)
+
+                          if (uniqueRefundActs.length === 0) return null
+
+                          return (
+                            <React.Fragment key={a.id}>
+                              <tr className="bg-gray-50/20 text-xs text-gray-600 font-medium">
+                                <td className="pl-8 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 flex items-center gap-1">
+                                  <button
+                                    onClick={() => toggleExpand(refAccKey)}
+                                    className="text-gray-400 hover:text-gray-500 focus:outline-none text-[8px]"
+                                  >
+                                    {isRefAccExpanded ? '▼' : '▶'}
+                                  </button>
+                                  Рахунок: {a.name}
+                                </td>
+                                {rows.map(r => {
+                                  const val = r.refunds?.details?.find(ac => ac.account_id === a.id)
+                                  return (
+                                    <React.Fragment key={r.month}>
+                                      <td className="px-2 py-1.5 text-right font-mono border-r border-gray-100 text-gray-500">
+                                        {fmtMoney(val?.accrued ?? 0)}
+                                      </td>
+                                      <td className="px-2 py-1.5 text-right font-mono border-r border-gray-200 text-gray-500">
+                                        {fmtMoney(val?.paid ?? 0)}
+                                      </td>
+                                    </React.Fragment>
+                                  )
+                                })}
+                              </tr>
+
+                              {/* Refunds Activities Drilldown */}
+                              {isRefAccExpanded && uniqueRefundActs.map(act => {
+                                const refActKey = `refund-activity::${a.id}::${act.id}`
+                                const isRefActExpanded = !!expanded[refActKey]
+                                const uniqueRefundKids = getUniqueChildrenForRefundActivity(a.id, act.id)
+
+                                return (
+                                  <React.Fragment key={act.id}>
+                                    <tr className="bg-gray-50/10 text-xs text-gray-500">
+                                      <td className="pl-14 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 flex items-center gap-1">
+                                        <button
+                                          onClick={() => toggleExpand(refActKey)}
+                                          className="text-gray-400 hover:text-gray-500 focus:outline-none text-[8px]"
+                                        >
+                                          {isRefActExpanded ? '▼' : '▶'}
+                                        </button>
+                                        {act.name}
+                                      </td>
+                                      {rows.map(r => {
+                                        const acc = r.refunds?.details?.find(ac => ac.account_id === a.id)
+                                        const detail = acc?.details.find(d => d.activity_id === act.id)
+                                        return (
+                                          <React.Fragment key={r.month}>
+                                            <td className="px-2 py-1.5 text-right font-mono border-r border-gray-100 text-gray-400">
+                                              {fmtMoney(detail?.accrued ?? 0)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right font-mono border-r border-gray-200 text-gray-400">
+                                              {fmtMoney(detail?.paid ?? 0)}
+                                            </td>
+                                          </React.Fragment>
+                                        )
+                                      })}
+                                    </tr>
+
+                                    {/* Refunds Children details */}
+                                    {isRefActExpanded && uniqueRefundKids.map(kid => (
+                                      <tr key={kid.id} className="bg-gray-50/5 text-[11px] text-gray-400">
+                                        <td className="pl-20 sticky left-0 z-10 bg-gray-50 border-r border-gray-200 whitespace-normal break-words max-w-[320px]">
+                                          {kid.name}
+                                        </td>
+                                        {rows.map(r => {
+                                          const acc = r.refunds?.details?.find(ac => ac.account_id === a.id)
+                                          const detail = acc?.details.find(d => d.activity_id === act.id)
+                                          const kidVal = detail?.children.find(c => c.child_id === kid.id)
+                                          return (
+                                            <React.Fragment key={r.month}>
+                                              <td className="px-2 py-1 text-right font-mono border-r border-gray-100 text-gray-400">
+                                                {fmtMoney(kidVal?.accrued ?? 0)}
+                                              </td>
+                                              <td className="px-2 py-1 text-right font-mono border-r border-gray-200 text-gray-400">
+                                                {fmtMoney(kidVal?.paid ?? 0)}
+                                              </td>
+                                            </React.Fragment>
+                                          )
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </React.Fragment>
+                                )
+                              })}
+                            </React.Fragment>
+                          )
+                        })}
+                      </React.Fragment>
+                    )
+                  })()}
+
                   {/* Total operating expenses */}
                   <tr className="bg-amber-50 font-semibold text-amber-950 border-t border-b border-amber-100">
                     <td className="sticky left-0 z-10 bg-amber-50 px-4 py-2.5 border-r border-gray-200">
                       Всього операційних витрат
                     </td>
                     {rows.map(r => {
-                      const totalAccrued = r.salary.accrued + r.expenses.accrued
-                      const totalPaid = r.salary.paid + r.expenses.paid
+                      const totalAccrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
+                      const totalPaid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
                       return (
                         <React.Fragment key={r.month}>
                           <td className="px-2 py-2.5 text-right font-mono border-r border-amber-100 text-amber-900">
@@ -671,8 +853,8 @@ export function PnL2Report() {
                     {rows.map(r => {
                       const totalIncomeAccrued = r.accounts.reduce((s, ac) => s + ac.accrued, 0)
                       const totalIncomePaid = r.accounts.reduce((s, ac) => s + ac.paid, 0)
-                      const totalExpenseAccrued = r.salary.accrued + r.expenses.accrued
-                      const totalExpensePaid = r.salary.paid + r.expenses.paid
+                      const totalExpenseAccrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
+                      const totalExpensePaid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
 
                       const diffAccrued = totalIncomeAccrued - totalExpenseAccrued
                       const diffPaid = totalIncomePaid - totalExpensePaid
@@ -823,11 +1005,11 @@ export function PnL2Report() {
                     </td>
                     {rows.map(r => {
                       const totalIncomeAccrued = r.accounts.reduce((s, ac) => s + ac.accrued, 0)
-                      const totalExpenseAccrued = r.salary.accrued + r.expenses.accrued
+                      const totalExpenseAccrued = r.salary.accrued + r.expenses.accrued + (r.refunds?.accrued ?? 0)
                       const opProfitAccrued = totalIncomeAccrued - totalExpenseAccrued
 
                       const totalIncomePaid = r.accounts.reduce((s, ac) => s + ac.paid, 0)
-                      const totalExpensePaid = r.salary.paid + r.expenses.paid
+                      const totalExpensePaid = r.salary.paid + r.expenses.paid + (r.refunds?.paid ?? 0)
                       const netPaidFlow = totalIncomePaid - totalExpensePaid - r.withdrawals.paid - r.dividends.paid
 
                       return (

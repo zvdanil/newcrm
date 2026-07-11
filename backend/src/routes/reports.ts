@@ -700,6 +700,7 @@ export async function reportsRoutes(app: FastifyInstance) {
 
       // 4. Post-process Revenue Details
       const revDetailsMap: Record<string, Record<string, Record<string, { activity_name: string; accrued: number; paid: number; children: Record<string, { child_name: string; accrued: number; paid: number }> }>>> = {}
+      const refundDetailsMap: Record<string, Record<string, Record<string, { activity_name: string; accrued: number; paid: number; children: Record<string, { child_name: string; accrued: number; paid: number }> }>>> = {}
 
       for (const tx of clientTxDetails) {
         const actId = tx.activity_id ?? 'manual'
@@ -730,6 +731,17 @@ export async function reportsRoutes(app: FastifyInstance) {
           actObj.paid += total
           if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
           actObj.children[chId].paid += total
+        } else if (tx.type === 'REFUND') {
+          const m = tx.month_accrual
+          if (!refundDetailsMap[m]) refundDetailsMap[m] = {}
+          if (!refundDetailsMap[m][tx.account_id]) refundDetailsMap[m][tx.account_id] = {}
+          if (!refundDetailsMap[m][tx.account_id][actId]) {
+            refundDetailsMap[m][tx.account_id][actId] = { activity_name: actName, accrued: 0, paid: 0, children: {} }
+          }
+          const actObj = refundDetailsMap[m][tx.account_id][actId]
+          actObj.accrued += total
+          if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
+          actObj.children[chId].accrued += total
         }
       }
 
@@ -905,6 +917,48 @@ export async function reportsRoutes(app: FastifyInstance) {
           }
         })
 
+        // Refunds list
+        const monthRefunds = accounts.map(a => {
+          let accrued = 0
+          let paid = 0
+
+          const monthMap = refundDetailsMap[month]
+          const accMap = monthMap?.[a.id]
+
+          const detailsList = []
+          if (accMap) {
+            for (const [actId, actObj] of Object.entries(accMap)) {
+              accrued += actObj.accrued
+              paid += actObj.paid
+
+              const childrenList = Object.entries(actObj.children).map(([childId, chObj]) => ({
+                child_id: childId,
+                child_name: chObj.child_name,
+                accrued: chObj.accrued,
+                paid: chObj.paid,
+              })).sort((x, y) => y.accrued - x.accrued)
+
+              detailsList.push({
+                activity_id: actId,
+                activity_name: actObj.activity_name,
+                accrued: actObj.accrued,
+                paid: actObj.paid,
+                children: childrenList,
+              })
+            }
+          }
+
+          detailsList.sort((x, y) => y.accrued - x.accrued)
+
+          return {
+            account_id: a.id,
+            name: a.name,
+            accrued,
+            paid,
+            details: detailsList,
+          }
+        })
+
         // Salary
         const monthSalaryDetails = []
         const salMap = salaryDetailsMap[month]
@@ -983,6 +1037,11 @@ export async function reportsRoutes(app: FastifyInstance) {
         return {
           month,
           accounts: monthAccounts,
+          refunds: {
+            accrued: monthRefunds.reduce((s, r) => s + r.accrued, 0),
+            paid: 0,
+            details: monthRefunds,
+          },
           salary: { accrued: salary_accrued, paid: salary_paid, details: monthSalaryDetails },
           expenses: { accrued: expenses_accrued, paid: expenses_paid, details: monthExpDetails },
           withdrawals: { paid: withdrawal_paid, transactions: monthWithdrawals },
