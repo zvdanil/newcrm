@@ -54,7 +54,7 @@ export function ChildrenListPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Пошук за іменем..."
+          placeholder="Пошук за ім'ям дитини, батьків або телефоном..."
           className="flex-1 min-w-48 rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
         />
 

@@ -81,6 +81,17 @@ export async function childrenRoutes(app: FastifyInstance) {
           eb('c.full_name', 'ilike', `%${search}%`),
           eb('c.note',      'ilike', `%${search}%`),
           eb('f.name',      'ilike', `%${search}%`),
+          eb.exists(
+            eb.selectFrom('child_parents as cp')
+              .innerJoin('parents as p', 'p.id', 'cp.parent_id')
+              .select('p.id')
+              .whereRef('cp.child_id', '=', 'c.id')
+              .where((eb2) => eb2.or([
+                eb2('p.full_name', 'ilike', `%${search}%`),
+                eb2('p.phone',     'ilike', `%${search}%`),
+                eb2('p.email',     'ilike', `%${search}%`),
+              ]))
+          )
         ]))
       }
 
