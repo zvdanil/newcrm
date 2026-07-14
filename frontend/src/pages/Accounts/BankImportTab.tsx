@@ -601,7 +601,41 @@ export function BankImportTab({ accountId }: Props) {
                       <span className="text-xs text-gray-400 line-through">
                         {row.matched_family_name ? `Вже внесено для: ${row.matched_family_name}` : 'вже імпортовано'}
                       </span>
-                    ) : row.status === 'matched' && !override ? (
+                    ) : familySearch.has(row.row_index) ? (
+                      <div className="space-y-1">
+                        <TargetCombobox
+                          families={allFamilies ?? []}
+                          children={allChildren ?? []}
+                          search={familySearch.get(row.row_index) ?? ''}
+                          onSearchChange={(s) => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, s); return n })}
+                          onSelect={(target) => {
+                            setOverride(row.row_index, target)
+                            setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
+                          }}
+                        />
+                        {(row.status === 'partial' || row.status === 'matched') && (
+                          <button
+                            type="button"
+                            onClick={() => setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })}
+                            className="text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            {row.status === 'partial' ? '← До списку схожих' : '← Скасувати'}
+                          </button>
+                        )}
+                      </div>
+                    ) : override ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-iris-700">{override.display_name}</span>
+                        <button
+                          onClick={() => {
+                            setFamilyOverride((p) => { const n = new Map(p); n.delete(row.row_index); return n })
+                            setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })
+                          }}
+                          className="text-xs text-gray-400 hover:text-gray-600"
+                          title="Змінити сімʼю"
+                        >✎</button>
+                      </div>
+                    ) : row.status === 'matched' ? (
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-gray-700">{row.matched_family_name}</span>
                         <button
@@ -609,72 +643,59 @@ export function BankImportTab({ accountId }: Props) {
                           className="text-xs text-gray-400 hover:text-gray-600" title="Змінити сімʼю"
                         >✎</button>
                       </div>
-                    ) : row.status === 'partial' && !override ? (
-                      familySearch.has(row.row_index) ? (
-                        <div className="space-y-1">
-                          <TargetCombobox
-                            families={allFamilies ?? []}
-                            children={allChildren ?? []}
-                            search={familySearch.get(row.row_index) ?? ''}
-                            onSearchChange={(s) => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, s); return n })}
-                            onSelect={(target) => {
-                              setOverride(row.row_index, target)
-                              setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })}
-                            className="text-xs text-gray-400 hover:text-gray-600"
-                          >
-                            ← До списку схожих
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <select
-                            value=""
-                            onChange={(e) => {
-                              const i = parseInt(e.target.value)
-                              if (!isNaN(i)) {
-                                const f = row.candidate_families[i]
-                                if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
-                              }
-                            }}
-                            className="text-xs border border-orange-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
-                          >
-                            <option value="">Оберіть зі схожих...</option>
-                            {row.candidate_families.map((f, i) => (
-                              <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })}
-                            className="text-xs text-iris-600 hover:text-iris-800 underline underline-offset-2"
-                          >
-                            Обрати вручну
-                          </button>
-                        </div>
-                      )
-                    ) : row.status === 'conflict' && !override ? (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const i = parseInt(e.target.value)
-                          if (!isNaN(i)) {
-                            const f = row.candidate_families[i]
-                            if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
-                          }
-                        }}
-                        className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
-                      >
-                        <option value="">Оберіть...</option>
-                        {row.candidate_families.map((f, i) => (
-                          <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
-                        ))}
-                      </select>
-                    ) : familySearch.has(row.row_index) || (row.status === 'unmatched' && !override) ? (
+                    ) : row.status === 'partial' ? (
+                      <div className="space-y-1">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const i = parseInt(e.target.value)
+                            if (!isNaN(i)) {
+                              const f = row.candidate_families[i]
+                              if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
+                            }
+                          }}
+                          className="text-xs border border-orange-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
+                        >
+                          <option value="">Оберіть зі схожих...</option>
+                          {row.candidate_families.map((f, i) => (
+                            <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })}
+                          className="text-xs text-iris-600 hover:text-iris-800 underline underline-offset-2"
+                        >
+                          Обрати вручну
+                        </button>
+                      </div>
+                    ) : row.status === 'conflict' ? (
+                      <div className="space-y-1">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const i = parseInt(e.target.value)
+                            if (!isNaN(i)) {
+                              const f = row.candidate_families[i]
+                              if (f) setOverride(row.row_index, { family_id: f.family_id, child_id: f.child_id, display_name: f.family_name })
+                            }
+                          }}
+                          className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:border-iris-500 focus:ring-iris-500 w-full"
+                        >
+                          <option value="">Оберіть...</option>
+                          {row.candidate_families.map((f, i) => (
+                            <option key={f.family_id ?? f.child_id} value={i}>{f.family_name} ({f.parent_name})</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })}
+                          className="text-xs text-iris-600 hover:text-iris-800 underline underline-offset-2"
+                        >
+                          Обрати вручну
+                        </button>
+                      </div>
+                    ) : row.status === 'unmatched' ? (
                       <TargetCombobox
                         families={allFamilies ?? []}
                         children={allChildren ?? []}
@@ -685,17 +706,6 @@ export function BankImportTab({ accountId }: Props) {
                           setFamilySearch((p) => { const n = new Map(p); n.delete(row.row_index); return n })
                         }}
                       />
-                    ) : override ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-iris-700">{override.display_name}</span>
-                        <button
-                          onClick={() => {
-                            setFamilyOverride((p) => { const n = new Map(p); n.delete(row.row_index); return n })
-                            setFamilySearch((p) => { const n = new Map(p); n.set(row.row_index, ''); return n })
-                          }}
-                          className="text-xs text-gray-400 hover:text-gray-600"
-                        >✎</button>
-                      </div>
                     ) : null}
                   </td>
                 </tr>
