@@ -198,11 +198,13 @@ export async function reportsRoutes(app: FastifyInstance) {
         db.selectFrom('expenses')
           .select([
             sql<string>`to_char(date_trunc('month', payment_date), 'YYYY-MM-01')`.as('month'),
-            sql<string>`COALESCE(SUM(CASE WHEN is_advance_return THEN -amount ELSE amount - COALESCE(utilized_advance_amount, 0) END), 0)`.as('total'),
-            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN (CASE WHEN is_advance_return THEN -amount ELSE amount - COALESCE(utilized_advance_amount, 0) END) ELSE 0 END), 0)`.as('total_no_div'),
+            sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
+            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN amount ELSE 0 END), 0)`.as('total_no_div'),
           ])
           .where('status', '=', 'paid')
           .where('is_deleted', '=', false)
+          .where('is_advance', '=', false)
+          .where('is_advance_return', '=', false)
           .where('payment_date', 'is not', null)
           .groupBy(sql`date_trunc('month', payment_date)`)
           .execute(),
@@ -831,12 +833,10 @@ export async function reportsRoutes(app: FastifyInstance) {
           })
         }
 
-        if (e.status === 'paid' && e.payment_date) {
+        if (e.status === 'paid' && e.payment_date && !e.is_advance && !e.is_advance_return) {
           const m = fmtMonth(new Date(e.payment_date))
           const paidDateStr = new Date(e.payment_date).toISOString().slice(0, 10)
-          const paidAmount = e.is_advance_return
-            ? -amount
-            : (amount - Number(e.utilized_advance_amount ?? 0))
+          const paidAmount = amount
 
           if (e.is_dividend) {
             dividendExpensesList.push({
