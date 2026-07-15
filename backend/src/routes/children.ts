@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
+import { toDbDateStr, castAsDate } from '../services/dateUtils.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
 import { recalcActivityAccruals, recalcForIndividualTariff, getChildIndividualTariff, getEffectivePrice } from '../services/billingRunService.js'
@@ -317,6 +318,89 @@ export async function childrenRoutes(app: FastifyInstance) {
       if (from) query = query.where('t.transaction_date', '>=', new Date(from))
       if (to)   query = query.where('t.transaction_date', '<=', new Date(to))
 
+      const past_debts: Record<string, number> = {}
+      if (from) {
+        const fromDateStr = toDbDateStr(from)
+
+        // Get all child transactions (non-deleted)
+        const allTxs = await db
+          .selectFrom('transactions')
+          .select(['account_id', 'type', 'amount', 'billing_month', 'transaction_date'])
+          .where('child_id', '=', id)
+          .where('is_deleted', '=', false)
+          .orderBy('transaction_date', 'asc')
+          .orderBy('created_at', 'asc')
+          .execute()
+
+        // Get all initial balances
+        const allInits = await db
+          .selectFrom('initial_balances')
+          .select(['account_id', 'amount'])
+          .where('child_id', '=', id)
+          .execute()
+
+        // Group by account
+        const txsByAccount: Record<string, typeof allTxs> = {}
+        for (const tx of allTxs) {
+          txsByAccount[tx.account_id] ??= []
+          txsByAccount[tx.account_id].push(tx)
+        }
+
+        const initsByAccount: Record<string, number> = {}
+        for (const init of allInits) {
+          initsByAccount[init.account_id] = parseFloat(init.amount as string)
+        }
+
+        // Calculate for each account
+        const accountIds = new Set([...Object.keys(txsByAccount), ...Object.keys(initsByAccount)])
+        for (const accId of accountIds) {
+          const txs = txsByAccount[accId] ?? []
+          const initAmt = initsByAccount[accId] ?? 0
+
+          // Total credits: payments, refunds, positive initial balance
+          let pool = txs
+            .filter((t) => t.type === 'PAYMENT' || t.type === 'REFUND' || t.type === 'REVERSAL')
+            .reduce((sum, t) => sum + parseFloat(t.amount as string), 0)
+
+          if (initAmt > 0) pool += initAmt
+
+          // Debits list: negative initial balance + ACCRUAL/ADJUSTMENT txs
+          const debits: { amount: number; dateStr: string }[] = []
+          if (initAmt < 0) {
+            debits.push({ amount: Math.abs(initAmt), dateStr: '1970-01-01' }) // far past
+          }
+
+          for (const t of txs) {
+            if (t.type === 'ACCRUAL' || t.type === 'ADJUSTMENT') {
+              const dateVal = t.billing_month ? t.billing_month : t.transaction_date
+              debits.push({ amount: parseFloat(t.amount as string), dateStr: toDbDateStr(dateVal) })
+            }
+          }
+
+          // Sort debits by date (FIFO order)
+          debits.sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+
+          // Allocate pool to debits
+          let pastDebt = 0
+          for (const deb of debits) {
+            const isPast = deb.dateStr < fromDateStr
+            if (pool >= deb.amount) {
+              pool -= deb.amount
+            } else {
+              const remaining = deb.amount - pool
+              pool = 0
+              if (isPast) {
+                pastDebt += remaining
+              }
+            }
+          }
+
+          if (pastDebt > 0) {
+            past_debts[accId] = pastDebt
+          }
+        }
+      }
+
       const [data, totalRow] = await Promise.all([
         query.orderBy('t.transaction_date', 'desc').orderBy('t.created_at', 'desc').limit(limit).offset(offset).execute(),
         query
@@ -326,7 +410,7 @@ export async function childrenRoutes(app: FastifyInstance) {
           .executeTakeFirst(),
       ])
 
-      return { data, total: Number(totalRow?.count ?? 0), limit, offset }
+      return { data, total: Number(totalRow?.count ?? 0), limit, offset, past_debts }
     }
   )
 
@@ -1224,7 +1308,7 @@ export async function childrenRoutes(app: FastifyInstance) {
         .select(['type', 'amount', 'account_id'])
         .where('child_id', '=', childId)
         .where('is_deleted', '=', false)
-        .where('transaction_date', '<', billingDate)
+        .where('transaction_date', '<', castAsDate(monthStr))
         .execute()
 
       const balanceAtStart = new Map<string, number>()

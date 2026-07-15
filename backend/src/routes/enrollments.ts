@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
-import { recalcActivityAccruals } from '../services/billingRunService.js'
+import { recalcActivityAccruals, countWorkingDays } from '../services/billingRunService.js'
 import { recalcBalance } from '../services/balanceService.js'
 
 export async function enrollmentsRoutes(app: FastifyInstance) {
@@ -158,7 +158,7 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
   // POST /api/enrollments/:id/archive
   app.post<{
     Params: { id: string }
-    Body: { end_date?: string; cancel_month_accruals?: boolean }
+    Body: { end_date?: string; cancel_month_accruals?: boolean; recalculate_subscription?: boolean }
   }>(
     '/enrollments/:id/archive',
     { preHandler: requireRole('owner', 'admin') },
@@ -212,16 +212,81 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
         const deletedBy = (req as { user?: { sub?: string } }).user?.sub ?? null
         const softDel = { is_deleted: true as const, deleted_at: new Date().toISOString(), deleted_by: deletedBy }
 
-        // Monthly/smart: cancel by billing_month
-        await db.updateTable('transactions')
-          .set(softDel)
-          .where('enrollment_id', '=', updated.id)
-          .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
-          .where('is_deleted', '=', false)
-          .where('billing_month', '>=', new Date(firstOfEndMonth))
-          .execute()
+        if (req.body?.recalculate_subscription && (activity?.tariff_type === 'monthly' || activity?.tariff_type === 'smart')) {
+          // Prorate current month subscription:
+          // 1. Find existing active accrual for current month
+          const currentAccrual = await db
+            .selectFrom('transactions')
+            .selectAll()
+            .where('enrollment_id', '=', updated.id)
+            .where('type', '=', 'ACCRUAL')
+            .where('billing_month', '=', new Date(firstOfEndMonth))
+            .where('is_deleted', '=', false)
+            .executeTakeFirst()
 
-        // Per_lesson (billing_month IS NULL): cancel by transaction_date
+          if (currentAccrual) {
+            const enrollmentStartDate = new Date(String(updated.start_date))
+            const monthStart = new Date(firstOfEndMonth)
+            const periodStart = enrollmentStartDate > monthStart ? enrollmentStartDate : monthStart
+            const nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1)
+            const monthLastDay = new Date(nextMonth.getTime() - 1)
+
+            const wdInMonth = countWorkingDays(monthStart, monthLastDay)
+            const wdActive = countWorkingDays(periodStart, new Date(endDate))
+
+            const fullPrice = parseFloat(currentAccrual.amount as string)
+            let proratedAmount = 0
+            if (wdInMonth > 0 && wdActive > 0) {
+              proratedAmount = Math.round((fullPrice / wdInMonth) * wdActive)
+            }
+
+            if (proratedAmount > 0) {
+              const note = `Нарахування за ${firstOfEndMonth.slice(0, 7)} (про-рата ${wdActive}/${wdInMonth} роб. дн. - відписка ${endDate})`
+              await db.updateTable('transactions')
+                .set({
+                  amount: proratedAmount,
+                  note,
+                  metadata_json: {
+                    ...(currentAccrual.metadata_json as Record<string, unknown> || {}),
+                    pro_rata: true,
+                    working_days_active: wdActive,
+                    working_days_in_month: wdInMonth,
+                    full_price: fullPrice,
+                    unenrollment_date: endDate,
+                  }
+                })
+                .where('id', '=', currentAccrual.id)
+                .execute()
+            } else {
+              // If active days is 0, soft-delete the transaction
+              await db.updateTable('transactions')
+                .set(softDel)
+                .where('id', '=', currentAccrual.id)
+                .execute()
+            }
+          }
+
+          // Soft-delete future ACCRUAL/ADJUSTMENTs (strictly > current month)
+          await db.updateTable('transactions')
+            .set(softDel)
+            .where('enrollment_id', '=', updated.id)
+            .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+            .where('is_deleted', '=', false)
+            .where('billing_month', '>', new Date(firstOfEndMonth))
+            .execute()
+
+        } else {
+          // Standard delete all from firstOfEndMonth (>=)
+          await db.updateTable('transactions')
+            .set(softDel)
+            .where('enrollment_id', '=', updated.id)
+            .where('type', 'in', ['ACCRUAL', 'ADJUSTMENT'])
+            .where('is_deleted', '=', false)
+            .where('billing_month', '>=', new Date(firstOfEndMonth))
+            .execute()
+        }
+
+        // Per_lesson (billing_month IS NULL): cancel by transaction_date > endDate
         await db.updateTable('transactions')
           .set(softDel)
           .where('enrollment_id', '=', updated.id)
@@ -231,10 +296,101 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
           .where('transaction_date', '>', new Date(endDate))
           .execute()
 
+        // Delete any REFUNDs (absences) for this enrollment after the unenrollment date
+        await db.updateTable('transactions')
+          .set(softDel)
+          .where('enrollment_id', '=', updated.id)
+          .where('type', '=', 'REFUND')
+          .where('is_deleted', '=', false)
+          .where('transaction_date', '>', new Date(endDate))
+          .execute()
+
         await recalcBalance(updated.child_id, updated.account_id)
       }
 
       return updated
+    }
+  )
+
+  // POST /api/enrollments/:id/restore
+  app.post<{
+    Params: { id: string }
+  }>(
+    '/enrollments/:id/restore',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { id } = req.params
+
+      const enrollment = await db
+        .selectFrom('enrollments')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()
+
+      if (!enrollment) return reply.status(404).send({ error: 'NotFound', message: 'Підписку не знайдено' })
+      if (enrollment.status !== 'archived') {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Підписка не в архіві' })
+      }
+
+      // Check if there is already an active/frozen enrollment for this child and activity
+      const activeEnrollment = await db
+        .selectFrom('enrollments')
+        .select('id')
+        .where('child_id', '=', enrollment.child_id)
+        .where('activity_id', '=', enrollment.activity_id)
+        .where('status', 'in', ['active', 'frozen'])
+        .executeTakeFirst()
+
+      if (activeEnrollment) {
+        return reply.status(409).send({
+          error: 'Conflict',
+          message: 'У дитини вже є активна або заморожена підписка на цю активність',
+        })
+      }
+
+      const originalEndDate = enrollment.end_date
+
+      // Update enrollment status to active
+      const restored = await db
+        .updateTable('enrollments')
+        .set({ status: 'active', end_date: null })
+        .where('id', '=', id)
+        .returningAll()
+        .executeTakeFirst()
+
+      if (!restored) return reply.status(500).send({ error: 'InternalServerError', message: 'Не вдалося оновити підписку' })
+
+      // Re-open individual prices and tariffs closed on the archive date
+      if (originalEndDate) {
+        const { toDbDateStr, castAsDate } = await import('../services/dateUtils.js')
+        const origEndDateStr = toDbDateStr(originalEndDate)
+
+        await db.updateTable('child_prices')
+          .set({ valid_to: null })
+          .where('child_id', '=', restored.child_id)
+          .where('activity_id', '=', restored.activity_id)
+          .where('valid_to', '=', castAsDate(origEndDateStr))
+          .execute()
+
+        await db.updateTable('child_individual_tariffs')
+          .set({ valid_to: null })
+          .where('child_id', '=', restored.child_id)
+          .where('activity_id', '=', restored.activity_id)
+          .where('valid_to', '=', castAsDate(origEndDateStr))
+          .execute()
+      }
+
+      // Restore transactions soft-deleted during/after archive
+      await db.updateTable('transactions')
+        .set({ is_deleted: false, deleted_at: null, deleted_by: null })
+        .where('enrollment_id', '=', id)
+        .where('is_deleted', '=', true)
+        .execute()
+
+      // Recalculate balance
+      await recalcBalance(restored.child_id, restored.account_id)
+
+      return restored
     }
   )
 

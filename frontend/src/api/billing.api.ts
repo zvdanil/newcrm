@@ -34,6 +34,7 @@ export interface LedgerResponse {
   total: number
   limit: number
   offset: number
+  past_debts?: Record<string, number>
 }
 
 export interface ChildPrice {

@@ -34,8 +34,13 @@ export const enrollmentsApi = {
     return data
   },
 
-  archive: async (id: string, payload: { end_date?: string; cancel_month_accruals?: boolean } = {}) => {
+  archive: async (id: string, payload: { end_date?: string; cancel_month_accruals?: boolean; recalculate_subscription?: boolean } = {}) => {
     const { data } = await apiClient.post<Enrollment>(`/enrollments/${id}/archive`, payload)
+    return data
+  },
+
+  restore: async (id: string) => {
+    const { data } = await apiClient.post<Enrollment>(`/enrollments/${id}/restore`, {})
     return data
   },
 

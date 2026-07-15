@@ -497,7 +497,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const [discountError, setDiscountError]   = useState<string | null>(null)
   const [enrollForm, setEnrollForm]   = useState({ activity_id: '', account_id: '', start_date: TODAY, note: '' })
   const [enrollError, setEnrollError] = useState<string | null>(null)
-  const [archiveState, setArchiveState] = useState<{ enrollmentId: string; date: string; cancelAccruals: boolean } | null>(null)
+  const [archiveState, setArchiveState] = useState<{ enrollmentId: string; date: string; cancelAccruals: boolean; recalculateSubscription: boolean } | null>(null)
   const EMPTY_REBIND = { new_account_id: '', from_month: TODAY.slice(0, 7), to_month: '', update_future: false }
   const [rebindId, setRebindId]       = useState<string | null>(null)
   const [rebindForm, setRebindForm]   = useState(EMPTY_REBIND)
@@ -575,14 +575,27 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
     onSuccess:  () => qc.invalidateQueries({ queryKey: ['enrollments', childId] }),
   })
   const archiveMutation = useMutation({
-    mutationFn: ({ id, endDate, cancelAccruals }: { id: string; endDate: string; cancelAccruals: boolean }) =>
-      enrollmentsApi.archive(id, { end_date: endDate, cancel_month_accruals: cancelAccruals }),
+    mutationFn: ({ id, endDate, cancelAccruals, recalculateSubscription }: { id: string; endDate: string; cancelAccruals: boolean; recalculateSubscription: boolean }) =>
+      enrollmentsApi.archive(id, { end_date: endDate, cancel_month_accruals: cancelAccruals, recalculate_subscription: recalculateSubscription }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['enrollments', childId] })
       qc.invalidateQueries({ queryKey: ['balance', childId] })
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
       setArchiveState(null)
     },
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: enrollmentsApi.restore,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['enrollments', childId] })
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      qc.invalidateQueries({ queryKey: ['individual-tariffs', childId] })
+    },
+    onError: (err: unknown) => {
+      alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Помилка при відновленні')
+    }
   })
 
   const rebindMutation = useMutation({
@@ -1089,12 +1102,30 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                                   <input
                                     type="checkbox"
                                     checked={archiveState.cancelAccruals}
-                                    onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked })}
+                                    onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked, recalculateSubscription: ev.target.checked ? archiveState.recalculateSubscription : false })}
                                   />
                                   скасувати нарахування
                                 </label>
+                                {(e.tariff_type === 'monthly' || e.tariff_type === 'smart') && archiveState.cancelAccruals && (
+                                  <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={archiveState.recalculateSubscription}
+                                      onChange={(ev) => setArchiveState({ ...archiveState, recalculateSubscription: ev.target.checked })}
+                                    />
+                                    перерахувати абонплату
+                                  </label>
+                                )}
+                                <label style={{ display: 'none' }}>
+                                  dummy
+                                </label>
                                 <button
-                                  onClick={() => archiveMutation.mutate({ id: e.id, endDate: archiveState.date, cancelAccruals: archiveState.cancelAccruals })}
+                                  onClick={() => archiveMutation.mutate({
+                                    id: e.id,
+                                    endDate: archiveState.date,
+                                    cancelAccruals: archiveState.cancelAccruals,
+                                    recalculateSubscription: archiveState.recalculateSubscription
+                                  })}
                                   disabled={archiveMutation.isPending}
                                   className="text-red-600 hover:text-red-800 font-medium transition-colors">
                                   підтвердити
@@ -1103,7 +1134,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                               </span>
                             ) : (
                               <button
-                                onClick={() => setArchiveState({ enrollmentId: e.id, date: TODAY, cancelAccruals: false })}
+                                onClick={() => setArchiveState({ enrollmentId: e.id, date: TODAY, cancelAccruals: false, recalculateSubscription: false })}
                                 className="hover:text-red-600 transition-colors">архів</button>
                             )}
                           </>
@@ -1208,6 +1239,17 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                             ? `відписка ${new Date(e.end_date).toLocaleDateString('uk-UA')}`
                             : 'архів'}
                         </span>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Ви впевнені, що хочете відновити активність "${e.activity_name}" з архіву?`)) {
+                              restoreMutation.mutate(e.id)
+                            }
+                          }}
+                          disabled={restoreMutation.isPending}
+                          className="text-xs text-iris-600 hover:text-iris-800 disabled:opacity-50 transition-colors font-medium"
+                        >
+                          відновити
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2004,12 +2046,13 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
 
             {activeAccounts.map((bal) => {
               const group = groupedByAccount[bal.account_id]
+              const pastDebt = ledger?.past_debts?.[bal.account_id] ?? 0
               // monthStats == null means still loading — don't skip while loading
               const hasEnrolledActivities = monthStats == null || monthStats.enrollments.some(e =>
                 e.account_id === bal.account_id &&
                 (e.enrollment_status === 'active' || e.enrollment_status === 'frozen')
               )
-              if (!group && !hasEnrolledActivities) return null
+              if (!group && !hasEnrolledActivities && pastDebt <= 0) return null
 
               const totalAccruals  = (group?.accruals  ?? []).reduce((s, t) => s + Number(t.amount), 0)
               const totalPayments  = (group?.payments  ?? []).reduce((s, t) => s + Number(t.amount), 0)
@@ -2059,6 +2102,12 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                       .filter((e, i, arr) => arr.findIndex(x => x.activity_id === e.activity_id) === i)
                     return (
                   <div className="px-4 py-3 space-y-2 text-xs">
+                    {pastDebt > 0 && (
+                      <div className="flex items-center justify-between py-1.5 px-2.5 rounded bg-red-50 border border-red-100 text-red-700 font-semibold mb-1.5">
+                        <span>Борг минулих періодів:</span>
+                        <span className="font-mono">{pastDebt.toFixed(2)} грн</span>
+                      </div>
+                    )}
                     {/* Accruals grouped by activity — with before→after for adjusted ones */}
                     {(enriched.length > 0 || zeroActivities.length > 0) && (
                       <div>
