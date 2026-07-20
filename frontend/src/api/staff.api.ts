@@ -77,6 +77,7 @@ export interface SalarySummary {
   net:                   number
   paid:                  number
   balance:               number
+  totalBalance?:         number
   debtPreviousPeriods:   number
   paidPreviousPeriod:    number
 }

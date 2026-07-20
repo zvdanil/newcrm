@@ -79,10 +79,17 @@ export function SalaryJournalPage() {
       net:                 acc.net                 + r.summary.net,
       paid:                acc.paid                + r.summary.paid,
       balance:             acc.balance             + r.summary.balance,
+      totalBalance:        acc.totalBalance        + (r.summary.totalBalance ?? 0),
       debtPreviousPeriods: acc.debtPreviousPeriods + r.summary.debtPreviousPeriods,
     }),
-    { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0 }
+    { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, totalBalance: 0, debtPreviousPeriods: 0 }
   )
+
+  const renderBalance = (val: number, isTotal = false) => {
+    if (val > 0) return <span className={`text-red-600 ${isTotal ? 'font-bold' : 'font-medium'}`}>{fmt(val)}</span>
+    if (val < 0) return <span className={`text-green-700 ${isTotal ? 'font-bold' : 'font-medium'}`}>{fmt(Math.abs(val))}</span>
+    return <span className="text-gray-400">0,00</span>
+  }
 
   return (
     <div className="space-y-6">
@@ -212,10 +219,12 @@ export function SalaryJournalPage() {
                       <span className="font-mono text-green-700">{fmt(r.summary.paid)}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Залишок: </span>
-                      <span className={`font-mono ${r.summary.balance < 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                        {r.summary.balance < 0 ? `−${fmt(Math.abs(r.summary.balance))}` : fmt(r.summary.balance)}
-                      </span>
+                      <span className="text-gray-500">Баланс міс.: </span>
+                      <span className="font-mono">{renderBalance(r.summary.balance)}</span>
+                    </div>
+                    <div className="col-span-2 pt-1 border-t border-gray-200 flex justify-between">
+                      <span className="text-gray-500">Загальний баланс: </span>
+                      <span className="font-mono font-semibold">{renderBalance(r.summary.totalBalance ?? 0, true)}</span>
                     </div>
                   </div>
 
@@ -239,7 +248,8 @@ export function SalaryJournalPage() {
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Утримання</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">До виплати (net)</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Виплачено</th>
-                  <th className="text-right px-4 py-3 font-medium text-gray-600">Залишок</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Баланс поточного місяця</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Загальний баланс</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -273,9 +283,10 @@ export function SalaryJournalPage() {
                     <td className="px-4 py-3 text-right font-medium text-gray-900">{fmt(r.summary.net)}</td>
                     <td className="px-4 py-3 text-right text-green-700">{fmt(r.summary.paid)}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={r.summary.balance < 0 ? 'text-red-600 font-medium' : 'text-gray-500'}>
-                        {r.summary.balance < 0 ? `−${fmt(Math.abs(r.summary.balance))}` : fmt(r.summary.balance)}
-                      </span>
+                      {renderBalance(r.summary.balance)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">
+                      {renderBalance(r.summary.totalBalance ?? 0, true)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -303,9 +314,10 @@ export function SalaryJournalPage() {
                   <td className="px-4 py-3 text-right font-semibold text-gray-900">{fmt(totals.net)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-green-700">{fmt(totals.paid)}</td>
                   <td className="px-4 py-3 text-right font-semibold">
-                    <span className={totals.balance < 0 ? 'text-red-600' : 'text-gray-700'}>
-                      {totals.balance < 0 ? `−${fmt(Math.abs(totals.balance))}` : fmt(totals.balance)}
-                    </span>
+                    {renderBalance(totals.balance)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold">
+                    {renderBalance(totals.totalBalance, true)}
                   </td>
                   <td className="px-4 py-3"></td>
                 </tr>

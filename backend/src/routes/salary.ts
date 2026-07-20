@@ -530,43 +530,68 @@ export async function salaryRoutes(app: FastifyInstance) {
 
       const staff = await db.selectFrom('staff').where('is_active', '=', true).orderBy('full_name', 'asc').selectAll().execute()
 
-      const txs = await db
+      const allTxs = await db
         .selectFrom('salary_transactions')
-        .where('transaction_date', '>=', billingStart)
-        .where('transaction_date', '<', billingEnd)
         .where('is_deleted', '=', false)
-        .select(['staff_id', 'type', 'gross_amount', 'deduction_pct'])
+        .select(['staff_id', 'type', 'gross_amount', 'deduction_pct', 'transaction_date'])
         .execute()
 
-      const map = new Map<string, { gross: number; deduction: number; net: number; paid: number; balance: number; debtPreviousPeriods: number; paidPreviousPeriod: number }>()
+      const map = new Map<string, {
+        gross: number; deduction: number; net: number; paid: number; balance: number;
+        totalGross: number; totalDeduction: number; totalNet: number; totalPaid: number; totalBalance: number;
+        debtPreviousPeriods: number; paidPreviousPeriod: number
+      }>()
 
       for (const s of staff) {
-        map.set(s.id, { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0, paidPreviousPeriod: 0 })
+        map.set(s.id, {
+          gross: 0, deduction: 0, net: 0, paid: 0, balance: 0,
+          totalGross: 0, totalDeduction: 0, totalNet: 0, totalPaid: 0, totalBalance: 0,
+          debtPreviousPeriods: 0, paidPreviousPeriod: 0
+        })
       }
 
-      for (const tx of txs) {
+      for (const tx of allTxs) {
         const entry = map.get(tx.staff_id)
         if (!entry) continue
         const gross = Number(tx.gross_amount)
         const ded   = Math.round(gross * Number(tx.deduction_pct) / 100 * 100) / 100
+
         if (tx.type === 'PAYMENT') {
-          entry.paid += gross
+          entry.totalPaid += gross
         } else {
-          entry.gross      += gross
-          entry.deduction  += ded
+          entry.totalGross     += gross
+          entry.totalDeduction += ded
+        }
+
+        const txDate = new Date(tx.transaction_date)
+        if (txDate >= billingStart && txDate < billingEnd) {
+          if (tx.type === 'PAYMENT') {
+            entry.paid += gross
+          } else {
+            entry.gross     += gross
+            entry.deduction += ded
+          }
         }
       }
 
       for (const entry of map.values()) {
-        entry.net     = Math.round((entry.gross - entry.deduction) * 100) / 100
-        entry.balance = Math.round((entry.net - entry.paid) * 100) / 100
+        entry.net          = Math.round((entry.gross - entry.deduction) * 100) / 100
+        entry.balance      = Math.round((entry.net - entry.paid) * 100) / 100
+        entry.totalNet     = Math.round((entry.totalGross - entry.totalDeduction) * 100) / 100
+        entry.totalBalance = Math.round((entry.totalNet - entry.totalPaid) * 100) / 100
+      }
+
+      const emptySummary = {
+        gross: 0, deduction: 0, net: 0, paid: 0, balance: 0,
+        totalGross: 0, totalDeduction: 0, totalNet: 0, totalPaid: 0, totalBalance: 0,
+        debtPreviousPeriods: 0, paidPreviousPeriod: 0
       }
 
       return {
         month,
         rows: staff.map(s => ({
           ...s,
-          summary: map.get(s.id) ?? { gross: 0, deduction: 0, net: 0, paid: 0, balance: 0, debtPreviousPeriods: 0, paidPreviousPeriod: 0 },
+          summary: map.get(s.id) ?? emptySummary,
         })),
       }
     }
