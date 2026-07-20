@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { parentApi } from '../../api/parent.api'
+import { localMonthStr, shiftMonth, formatDateStr } from '../../utils/dateStr'
 import type { ParentChild, ParentLedgerRow, ParentAttendanceRow, AccountMonthlySummary, ActivityMonthlySummary } from '../../api/parent.api'
 
 // ────────────────────────────────────────────────────────────
@@ -8,24 +9,19 @@ import type { ParentChild, ParentLedgerRow, ParentAttendanceRow, AccountMonthlyS
 // ────────────────────────────────────────────────────────────
 
 function formatDate(iso: string | null) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('uk-UA')
+  return formatDateStr(iso)
 }
 
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7)
+  return localMonthStr()
 }
 
 function prevMonth(month: string) {
-  const [y, m] = month.split('-').map(Number)
-  const d = new Date(y, m - 2, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return shiftMonth(month, -1)
 }
 
 function nextMonth(month: string) {
-  const [y, m] = month.split('-').map(Number)
-  const d = new Date(y, m, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return shiftMonth(month, 1)
 }
 
 function monthDateRange(month: string): { from: string; to: string } {

@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../api/attendance.api'
 import { childrenApi } from '../../api/children.api'
 import { useAuthStore } from '../../store/auth.store'
+import { today as getTodayStr } from '../../utils/dateStr'
 import type { AttendanceStatus, JournalRow, AttendanceLog, AttributedNote } from '../../types'
 
 type Mode = 'day' | 'week' | 'month'
@@ -307,7 +308,7 @@ function EnrollModal({ activityId, accountId, onClose }: { activityId: string, a
 
   const enrollMutation = useMutation({
     mutationFn: async (childId: string) => {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = getTodayStr()
       await childrenApi.createEnrollment(childId, {
         activity_id: activityId,
         account_id: accountId,

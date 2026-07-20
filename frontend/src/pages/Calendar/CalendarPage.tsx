@@ -11,6 +11,8 @@ import { staffApi } from '../../api/staff.api'
 import { activitiesApi } from '../../api/activities.api'
 import { mergedJournalsApi } from '../../api/mergedJournals.api'
 
+import { localDateStr, today } from '../../utils/dateStr'
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const STATUS_DOT_COLOR: Record<string, string> = {
@@ -28,10 +30,10 @@ const ALL_DAYS = [1, 2, 3, 4, 5, 6, 0]
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return localDateStr(d)
 }
 
-function todayStr() { return toDateStr(new Date()) }
+function todayStr() { return today() }
 
 function parseRRuleDays(rrule: string): number[] {
   const dayCodeMap: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 }
@@ -639,10 +641,12 @@ export function CalendarPage() {
   // FullCalendar events
   const fcEvents: EventInput[] = events.map(ev => {
     const [h, m] = ev.startTime.split(':').map(Number)
-    const startDt = `${ev.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`
-    const endMs   = new Date(startDt).getTime() + ev.durationMin * 60_000
-    const endDt   = new Date(endMs).toISOString().slice(0, 19)
-    const bgColor = ev.color ?? '#6b7280'
+    const startDt  = `${ev.date}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00`
+    const endTotal = h * 60 + m + (ev.durationMin || 0)
+    const endH     = String(Math.floor(endTotal / 60) % 24).padStart(2, '0')
+    const endM     = String(endTotal % 60).padStart(2, '0')
+    const endDt    = `${ev.date}T${endH}:${endM}:00`
+    const bgColor  = ev.color ?? '#6b7280'
     return { id: ev.id, title: ev.scheduleName || ev.activityName, start: startDt, end: endDt, backgroundColor: bgColor, borderColor: bgColor, textColor: '#fff', extendedProps: ev }
   })
 

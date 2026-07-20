@@ -36,3 +36,26 @@ export function shiftMonth(ym: string, delta: 1 | -1): string {
   if (nm > 12) { nm = 1;  ny += 1 }
   return `${ny}-${String(nm).padStart(2, '0')}`
 }
+
+/**
+ * Safely formats a YYYY-MM-DD or ISO string to DD.MM.YYYY for UI display
+ * without parsing into UTC Date (preventing off-by-one day shifts in western/eastern timezones).
+ */
+export function formatDateStr(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const clean = String(iso).slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const [y, m, d] = clean.split('-')
+    return `${d}.${m}.${y}`
+  }
+  return new Date(iso).toLocaleDateString('uk-UA')
+}
+
+/**
+ * Safely parses a YYYY-MM-DD string into a local Date object.
+ */
+export function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number)
+  return new Date(y, (m || 1) - 1, d || 1)
+}
+

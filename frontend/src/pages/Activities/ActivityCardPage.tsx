@@ -6,12 +6,12 @@ import { accountsApi } from '../../api/accounts.api'
 import { staffApi } from '../../api/staff.api'
 import { calendarApi } from '../../api/calendar.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
-import { today } from '../../utils/dateStr'
+import { today, formatDateStr } from '../../utils/dateStr'
 
 import type { Activity } from '../../types'
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('uk-UA')
+  return formatDateStr(iso)
 }
 
 // ─── Linked Activities Block ─────────────────────────────────────────────────

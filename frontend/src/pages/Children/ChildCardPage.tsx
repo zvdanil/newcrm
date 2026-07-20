@@ -16,11 +16,10 @@ import type { ParentAccessRow } from '../../api/children.api'
 import { billingApi } from '../../api/billing.api'
 import type { LedgerEntry, GlobalDiscount, BillingForecastAccount } from '../../api/billing.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
-import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
+import { today as todayStr, firstOfMonth, formatDateStr } from '../../utils/dateStr'
 
 function formatDate(iso: string | null) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('uk-UA')
+  return formatDateStr(iso)
 }
 
 function toDateInputValue(iso: string | null) {

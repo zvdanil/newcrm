@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { accountsApi } from '../../api/accounts.api'
 import { expensesApi, salaryPaymentsApi } from '../../api/expenses.api'
-import { useEffect } from 'react'
+import { today } from '../../utils/dateStr'
 
 export function CreatePayoutModal({
   onClose,
@@ -76,7 +76,7 @@ export function CreatePayoutModal({
 
   // ── State ───────────────────────────────────────────────────────────────
   const [participantId, setParticipantId] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(today())
   const [type, setType] = useState<'cash' | 'cashless'>(prefillPayoutType ?? 'cash')
   const [taxPct, setTaxPct] = useState(prefillTaxPct ?? String(settings?.default_tax_pct || 0))
   const [note, setNote] = useState('')
