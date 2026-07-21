@@ -754,6 +754,236 @@ export async function salaryRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/salary/payments/:txId/withdrawal — fetch current withdrawal info
+  app.get<{ Params: { txId: string } }>(
+    '/salary/payments/:txId/withdrawal',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req, reply) => {
+      const tx = await db.selectFrom('salary_transactions')
+        .innerJoin('staff as s', 's.id', 'salary_transactions.staff_id')
+        .select([
+          'salary_transactions.id', 'salary_transactions.withdrawal_transfer_id',
+          'salary_transactions.gross_amount', 'salary_transactions.note',
+          's.full_name as staff_name'
+        ])
+        .where('salary_transactions.id', '=', req.params.txId)
+        .where('salary_transactions.type', '=', 'PAYMENT')
+        .where('salary_transactions.is_deleted', '=', false)
+        .executeTakeFirst()
+
+      if (!tx || !tx.withdrawal_transfer_id) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Обналичування не знайдено' })
+      }
+
+      const transfer = await db.selectFrom('account_transfers')
+        .select(['id', 'from_account_id', 'to_account_id', 'amount', 'transfer_date'])
+        .where('id', '=', tx.withdrawal_transfer_id)
+        .executeTakeFirst()
+
+      if (!transfer) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Переказ не знайдено' })
+      }
+
+      const withdrawalCategory = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+
+      let commissionExpense = null
+      if (withdrawalCategory) {
+        commissionExpense = await db.selectFrom('expenses')
+          .select(['id', 'amount'])
+          .where('account_id', '=', transfer.to_account_id)
+          .where('category_id', '=', withdrawalCategory.id)
+          .where('accrual_date', '=', transfer.transfer_date)
+          .where('note', 'like', `% за вывод %`)
+          .where('is_deleted', '=', false)
+          .executeTakeFirst()
+      }
+
+      const withdrawalAmount = Number(transfer.amount)
+      const commissionAmount = commissionExpense ? Number(commissionExpense.amount) : 0
+      const commissionPct = withdrawalAmount > 0 ? Math.round((commissionAmount / withdrawalAmount) * 10000) / 100 : 0
+
+      return reply.send({
+        target_account_id: transfer.to_account_id,
+        withdrawal_amount: withdrawalAmount,
+        commission: commissionPct,
+        commission_amount: commissionAmount,
+        transfer_date: String(transfer.transfer_date).slice(0, 10),
+      })
+    }
+  )
+
+  // PUT /api/salary/payments/:txId/withdraw — edit an existing cash-out for salary payment
+  app.put<{
+    Params: { txId: string }
+    Body: { target_account_id: string; commission: number; transfer_date?: string }
+  }>(
+    '/salary/payments/:txId/withdraw',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const { target_account_id, commission, transfer_date } = req.body
+
+      if (!target_account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'target_account_id є обовʼязковим' })
+      }
+      const commissionPct = Number(commission)
+      if (!Number.isFinite(commissionPct) || commissionPct < 0 || commissionPct > 100) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія має бути від 0 до 100 %' })
+      }
+
+      const tx = await db.selectFrom('salary_transactions')
+        .innerJoin('staff as s', 's.id', 'salary_transactions.staff_id')
+        .select([
+          'salary_transactions.id', 'salary_transactions.account_id',
+          'salary_transactions.gross_amount', 'salary_transactions.note',
+          'salary_transactions.is_deleted', 'salary_transactions.withdrawal_transfer_id',
+          's.full_name as staff_name',
+        ])
+        .where('salary_transactions.id', '=', req.params.txId)
+        .where('salary_transactions.type', '=', 'PAYMENT')
+        .executeTakeFirst()
+
+      if (!tx || tx.is_deleted) return reply.status(404).send({ error: 'NotFound' })
+      if (!tx.withdrawal_transfer_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Обналичування ще не створено' })
+      }
+      if (!tx.account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Виплата не прив\'язана до рахунку' })
+      }
+
+      const amount = Number(tx.gross_amount)
+      const roundedCommission = Math.round(amount * commissionPct * 100) / 10000
+      if (roundedCommission >= amount) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму транзакції' })
+      }
+
+      const dateStr = transfer_date ?? new Date().toISOString().slice(0, 10)
+      const label   = tx.note ?? tx.staff_name ?? tx.id
+
+      const withdrawalCategory = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+      const categoryId = withdrawalCategory ? withdrawalCategory.id : null
+
+      await db.transaction().execute(async (trx) => {
+        const transfer = await trx.selectFrom('account_transfers')
+          .select(['id', 'to_account_id', 'transfer_date'])
+          .where('id', '=', tx.withdrawal_transfer_id!)
+          .executeTakeFirst()
+
+        if (transfer) {
+          await trx.updateTable('account_transfers')
+            .set({
+              from_account_id: tx.account_id!,
+              to_account_id: target_account_id,
+              amount: amount,
+              transfer_date: dateStr,
+              note: `Обналичування ЗП: ${label}`,
+            })
+            .where('id', '=', transfer.id)
+            .execute()
+
+          let existingCommission = null
+          if (categoryId) {
+            existingCommission = await trx.selectFrom('expenses')
+              .select(['id'])
+              .where('account_id', '=', transfer.to_account_id)
+              .where('category_id', '=', categoryId)
+              .where('accrual_date', '=', transfer.transfer_date)
+              .where('note', 'like', `% за вывод %`)
+              .where('is_deleted', '=', false)
+              .executeTakeFirst()
+          }
+
+          if (roundedCommission > 0) {
+            if (existingCommission) {
+              await trx.updateTable('expenses')
+                .set({
+                  account_id: target_account_id,
+                  amount: roundedCommission,
+                  accrual_date: dateStr,
+                  payment_date: dateStr,
+                  note: `% за вывод ${label}`,
+                })
+                .where('id', '=', existingCommission.id)
+                .execute()
+            } else {
+              await trx.insertInto('expenses')
+                .values({
+                  account_id: target_account_id,
+                  category_id: categoryId,
+                  amount: roundedCommission,
+                  accrual_date: dateStr,
+                  payment_date: dateStr,
+                  status: 'paid',
+                  is_instant: true,
+                  is_dividend: false,
+                  note: `% за вывод ${label}`,
+                  created_by: req.user.sub,
+                })
+                .execute()
+            }
+          } else if (existingCommission) {
+            await trx.updateTable('expenses')
+              .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+              .where('id', '=', existingCommission.id)
+              .execute()
+          }
+        }
+      })
+
+      return reply.send({ ok: true })
+    }
+  )
+
+  // DELETE /api/salary/payments/:txId/withdraw — cancel/delete cash-out for salary payment
+  app.delete<{ Params: { txId: string } }>(
+    '/salary/payments/:txId/withdraw',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const tx = await db.selectFrom('salary_transactions')
+        .select(['id', 'withdrawal_transfer_id'])
+        .where('id', '=', req.params.txId)
+        .where('is_deleted', '=', false)
+        .executeTakeFirst()
+
+      if (!tx || !tx.withdrawal_transfer_id) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Обналичування не знайдено' })
+      }
+
+      await db.transaction().execute(async (trx) => {
+        const transfer = await trx.selectFrom('account_transfers')
+          .select(['id', 'to_account_id', 'transfer_date'])
+          .where('id', '=', tx.withdrawal_transfer_id!)
+          .executeTakeFirst()
+
+        if (transfer) {
+          await trx.updateTable('expenses')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+            .where('account_id', '=', transfer.to_account_id)
+            .where('accrual_date', '=', transfer.transfer_date)
+            .where('note', 'like', `% за вывод %`)
+            .where('is_deleted', '=', false)
+            .execute()
+
+          await trx.deleteFrom('account_transfers')
+            .where('id', '=', transfer.id)
+            .execute()
+        }
+
+        await trx.updateTable('salary_transactions')
+          .set({ withdrawal_transfer_id: null })
+          .where('id', '=', tx.id)
+          .execute()
+      })
+
+      return reply.send({ ok: true })
+    }
+  )
+
   // GET /api/staff/:id/salary/total — cumulative all-time salary summary
   app.get<{ Params: { id: string } }>(
     '/staff/:id/salary/total',

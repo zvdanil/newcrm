@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type StaffAdvancePool, type SalaryPayment } from '../../api/expenses.api'
@@ -830,6 +830,13 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
   const qc = useQueryClient()
   const amount = Number(expense.amount)
   const today  = todayStr()
+  const isEditing = !!expense.withdrawal_transfer_id
+
+  const { data: existingData, isLoading } = useQuery({
+    queryKey: ['expense-withdrawal', expense.id],
+    queryFn: () => expensesApi.getWithdrawal(expense.id),
+    enabled: isEditing,
+  })
 
   const [form, setForm] = useState({
     target_account_id: '',
@@ -839,18 +846,36 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
   })
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (existingData) {
+      setForm({
+        target_account_id: existingData.target_account_id,
+        withdrawal_amount: String(existingData.withdrawal_amount),
+        commission: String(existingData.commission),
+        transfer_date: existingData.transfer_date,
+      })
+    }
+  }, [existingData])
+
   const withdrawalAmount = parseFloat(form.withdrawal_amount) || 0
   const commissionPct      = parseFloat(form.commission) || 0
   const commissionUah    = Math.round(withdrawalAmount * commissionPct * 100) / 10000
   const returnAmount     = Math.round((withdrawalAmount - commissionUah) * 100) / 100
 
   const mutation = useMutation({
-    mutationFn: () => expensesApi.withdraw(expense.id, {
-      target_account_id: form.target_account_id,
-      withdrawal_amount: withdrawalAmount,
-      commission: commissionPct,
-      transfer_date: form.transfer_date,
-    }),
+    mutationFn: () => isEditing
+      ? expensesApi.updateWithdrawal(expense.id, {
+          target_account_id: form.target_account_id,
+          withdrawal_amount: withdrawalAmount,
+          commission: commissionPct,
+          transfer_date: form.transfer_date,
+        })
+      : expensesApi.withdraw(expense.id, {
+          target_account_id: form.target_account_id,
+          withdrawal_amount: withdrawalAmount,
+          commission: commissionPct,
+          transfer_date: form.transfer_date,
+        }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['transfers'] })
@@ -861,6 +886,21 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setError(e.response?.data?.message ?? 'Помилка виконання')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => expensesApi.deleteWithdrawal(expense.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['account-ledger'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      onSuccess()
+      onClose()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка вилучення обналичування')
     },
   })
 
@@ -880,116 +920,138 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Обналичування</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            {isEditing ? 'Редагування обналичування' : 'Обналичування'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
 
-        {/* Source info */}
-        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Рахунок списання</span>
-            <span className="font-medium">{expense.account_name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Сума витрати</span>
-            <span className="font-mono font-medium">{fmt(expense.amount)}</span>
-          </div>
-          {expense.note && (
-            <div className="flex justify-between gap-4">
-              <span className="text-gray-500 shrink-0">Опис</span>
-              <span className="text-gray-700 text-right">{fmtNote(expense.note)}</span>
-            </div>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Рахунок зарахування (куди повертаються кошти) *
-            </label>
-            <select
-              value={form.target_account_id}
-              onChange={e => setForm(f => ({ ...f, target_account_id: e.target.value }))}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-            >
-              <option value="">— оберіть рахунок —</option>
-              {accounts
-                .filter(a => a.id !== expense.account_id)
-                .map(a => <option key={a.id} value={a.id}>{a.name}</option>)
-              }
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Сума виводу на інший рахунок, ₴ *
-            </label>
-            <input
-              type="number" min="0.01" step="0.01" max={amount}
-              value={form.withdrawal_amount}
-              onChange={e => setForm(f => ({ ...f, withdrawal_amount: e.target.value }))}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-            />
-            <p className="text-xs text-gray-400 mt-0.5">Максимум — повна сума витрати ({amount.toFixed(2)} ₴)</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
-              <input
-                type="number" min="0" max="100" step="0.01" placeholder="0"
-                value={form.commission}
-                onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Дата</label>
-              <input
-                type="date" value={form.transfer_date}
-                onChange={e => setForm(f => ({ ...f, transfer_date: e.target.value }))}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-              />
-            </div>
-          </div>
-
-          {/* Summary */}
-          <div className="bg-iris-50 rounded-xl p-3 text-sm space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Переказ на рахунок</span>
-              <span className="font-mono font-medium">+{withdrawalAmount.toFixed(2)} ₴</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Буде зараховано (після комісії)</span>
-              <span className="font-mono font-semibold text-green-700">+{returnAmount.toFixed(2)} ₴</span>
-            </div>
-            {commissionUah > 0 && (
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-gray-400">Завантаження даних обналичування...</div>
+        ) : (
+          <>
+            {/* Source info */}
+            <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
               <div className="flex justify-between">
-                <span className="text-gray-600">Окремий витрат «Комісія» ({commissionPct}%)</span>
-                <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
+                <span className="text-gray-500">Рахунок списання</span>
+                <span className="font-medium">{expense.account_name}</span>
               </div>
-            )}
-          </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Сума витрати</span>
+                <span className="font-mono font-medium">{fmt(expense.amount)}</span>
+              </div>
+              {expense.note && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-500 shrink-0">Опис</span>
+                  <span className="text-gray-700 text-right">{fmtNote(expense.note)}</span>
+                </div>
+              )}
+            </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Рахунок зарахування (куди повертаються кошти) *
+                </label>
+                <select
+                  value={form.target_account_id}
+                  onChange={e => setForm(f => ({ ...f, target_account_id: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                >
+                  <option value="">— оберіть рахунок —</option>
+                  {accounts
+                    .filter(a => a.id !== expense.account_id)
+                    .map(a => <option key={a.id} value={a.id}>{a.name}</option>)
+                  }
+                </select>
+              </div>
 
-          <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-lg hover:bg-iris-700 disabled:opacity-50 transition-colors"
-            >
-              {mutation.isPending ? 'Виконання...' : 'Підтвердити'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              Скасувати
-            </button>
-          </div>
-        </form>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Сума виводу на інший рахунок, ₴ *
+                </label>
+                <input
+                  type="number" min="0.01" step="0.01" max={amount}
+                  value={form.withdrawal_amount}
+                  onChange={e => setForm(f => ({ ...f, withdrawal_amount: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                />
+                <p className="text-xs text-gray-400 mt-0.5">Максимум — повна сума витрати ({amount.toFixed(2)} ₴)</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
+                  <input
+                    type="number" min="0" max="100" step="0.01" placeholder="0"
+                    value={form.commission}
+                    onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Дата</label>
+                  <input
+                    type="date" value={form.transfer_date}
+                    onChange={e => setForm(f => ({ ...f, transfer_date: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                  />
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-iris-50 rounded-xl p-3 text-sm space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Переказ на рахунок</span>
+                  <span className="font-mono font-medium">+{withdrawalAmount.toFixed(2)} ₴</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Буде зараховано (після комісії)</span>
+                  <span className="font-mono font-semibold text-green-700">+{returnAmount.toFixed(2)} ₴</span>
+                </div>
+                {commissionUah > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Окремий витрат «Комісія» ({commissionPct}%)</span>
+                    <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-sm text-red-600">{error}</p>}
+
+              <div className="flex gap-2 pt-1">
+                {isEditing && (
+                  <button
+                    type="button"
+                    disabled={deleteMutation.isPending || mutation.isPending}
+                    onClick={() => {
+                      if (window.confirm('Скасувати (видалити) обналичування?')) {
+                        deleteMutation.mutate()
+                      }
+                    }}
+                    className="px-3 py-2 text-xs text-red-600 border border-red-200 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    {deleteMutation.isPending ? '...' : 'Скасувати обнал'}
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={mutation.isPending || deleteMutation.isPending}
+                  className="flex-1 py-2 bg-iris-600 text-white text-sm rounded-lg hover:bg-iris-700 disabled:opacity-50 transition-colors"
+                >
+                  {mutation.isPending ? 'Збереження...' : isEditing ? 'Зберегти' : 'Підтвердити'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  Скасувати
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )
@@ -1291,6 +1353,28 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
           {isSalary ? (
             <>
+              {isOwner && (
+                expense.withdrawal_transfer_id ? (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    className="text-xs text-amber-700 font-medium border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors"
+                    title="Редагувати обналичування"
+                  >
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''} ✏️
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    disabled={!expense.account_id}
+                    className="text-xs text-gray-500 border border-gray-200 hover:text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors disabled:opacity-30"
+                    title={expense.account_id ? 'Обналичування' : 'Рахунок не вказано'}
+                  >
+                    ↗
+                  </button>
+                )
+              )}
               {expense.staff_id && (
                 <button onClick={() => navigate(`/staff/${expense.staff_id}`)}
                   className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors">
@@ -1339,9 +1423,14 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               )}
               {isOwner && (
                 expense.withdrawal_transfer_id ? (
-                  <span className="text-xs text-amber-700 font-medium border border-amber-100 bg-amber-50 px-2 py-1 rounded">
-                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)}` : ''}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    className="text-xs text-amber-700 font-medium border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors"
+                    title="Редагувати обналичування"
+                  >
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''} ✏️
+                  </button>
                 ) : (
                   <button onClick={() => setWithdrawing(true)}
                     className="text-xs text-gray-500 border border-gray-200 hover:text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
@@ -1370,6 +1459,27 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
         {!isSalary && withdrawing && (
           <WithdrawalDialog
             expense={expense}
+            accounts={accounts}
+            onClose={() => setWithdrawing(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+        {isSalary && withdrawing && (
+          <SalaryWithdrawalDialog
+            payment={{
+              id: expense.id.replace('salary:', ''),
+              staff_id: expense.staff_id ?? '',
+              staff_name: expense.staff_name ?? '',
+              account_id: expense.account_id,
+              account_name: expense.account_name,
+              gross_amount: expense.amount,
+              transaction_date: expense.accrual_date,
+              billing_month: null,
+              note: expense.note,
+              is_dividend: expense.is_dividend,
+              withdrawal_transfer_id: expense.withdrawal_transfer_id,
+              created_at: expense.created_at,
+            }}
             accounts={accounts}
             onClose={() => setWithdrawing(false)}
             onSuccess={onRefresh}
@@ -1475,6 +1585,28 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
         <div className="flex items-center gap-2 justify-end">
           {isSalary ? (
             <>
+              {isOwner && (
+                expense.withdrawal_transfer_id ? (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    className="text-xs text-amber-700 font-medium hover:bg-amber-100 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 transition-colors"
+                    title="Редагувати обналичування"
+                  >
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''} ✏️
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    disabled={!expense.account_id}
+                    className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 px-1.5 py-1 rounded transition-colors disabled:opacity-30"
+                    title={expense.account_id ? 'Обналичування' : 'Рахунок не вказано'}
+                  >
+                    ↗
+                  </button>
+                )
+              )}
               {expense.staff_id && (
                 <button onClick={() => navigate(`/staff/${expense.staff_id}`)}
                   className="text-xs text-blue-500 hover:text-blue-700 transition-colors" title="Картка співробітника">
@@ -1530,9 +1662,14 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               )}
               {isOwner && (
                 expense.withdrawal_transfer_id ? (
-                  <span className="text-xs text-amber-700 font-medium" title="Обналичено">
-                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawing(true)}
+                    className="text-xs text-amber-700 font-medium hover:bg-amber-100 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 transition-colors"
+                    title="Редагувати обналичування"
+                  >
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''} ✏️
+                  </button>
                 ) : (
                   <button
                     onClick={() => setWithdrawing(true)}
@@ -1569,10 +1706,24 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             onSuccess={onRefresh}
           />
         )}
-        {!isSalary && markingDividend && (
-          <DividendMarkDialog
-            expense={expense}
-            onClose={() => setMarkingDividend(false)}
+        {isSalary && withdrawing && (
+          <SalaryWithdrawalDialog
+            payment={{
+              id: expense.id.replace('salary:', ''),
+              staff_id: expense.staff_id ?? '',
+              staff_name: expense.staff_name ?? '',
+              account_id: expense.account_id,
+              account_name: expense.account_name,
+              gross_amount: expense.amount,
+              transaction_date: expense.accrual_date,
+              billing_month: null,
+              note: expense.note,
+              is_dividend: expense.is_dividend,
+              withdrawal_transfer_id: expense.withdrawal_transfer_id,
+              created_at: expense.created_at,
+            }}
+            accounts={accounts}
+            onClose={() => setWithdrawing(false)}
             onSuccess={onRefresh}
           />
         )}
@@ -1655,6 +1806,13 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
   const qc = useQueryClient()
   const amount = Number(payment.gross_amount)
   const today  = todayStr()
+  const isEditing = !!payment.withdrawal_transfer_id
+
+  const { data: existingData, isLoading } = useQuery({
+    queryKey: ['salary-withdrawal', payment.id],
+    queryFn: () => salaryPaymentsApi.getWithdrawal(payment.id),
+    enabled: isEditing,
+  })
 
   const [form, setForm] = useState({
     target_account_id: '',
@@ -1663,24 +1821,59 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
   })
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (existingData) {
+      setForm({
+        target_account_id: existingData.target_account_id,
+        commission: String(existingData.commission),
+        transfer_date: existingData.transfer_date,
+      })
+    }
+  }, [existingData])
+
   const commissionPct   = parseFloat(form.commission) || 0
   const commissionUah   = Math.round(amount * commissionPct * 100) / 10000
   const returnAmount    = Math.round((amount - commissionUah) * 100) / 100
 
   const mutation = useMutation({
-    mutationFn: () => salaryPaymentsApi.withdraw(payment.id, {
-      target_account_id: form.target_account_id,
-      commission: commissionPct,
-      transfer_date: form.transfer_date,
-    }),
+    mutationFn: () => isEditing
+      ? salaryPaymentsApi.updateWithdrawal(payment.id, {
+          target_account_id: form.target_account_id,
+          commission: commissionPct,
+          transfer_date: form.transfer_date,
+        })
+      : salaryPaymentsApi.withdraw(payment.id, {
+          target_account_id: form.target_account_id,
+          commission: commissionPct,
+          transfer_date: form.transfer_date,
+        }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['salary-payments'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['account-ledger'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
       onSuccess()
       onClose()
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setError(e.response?.data?.message ?? 'Помилка виконання')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => salaryPaymentsApi.deleteWithdrawal(payment.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['salary-payments'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['account-ledger'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      onSuccess()
+      onClose()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка вилучення обналичування')
     },
   })
 
@@ -1698,94 +1891,116 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Обналичування</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            {isEditing ? 'Редагування обналичування' : 'Обналичування'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Співробітник</span>
-            <span className="font-medium">{payment.staff_name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Рахунок списання</span>
-            <span className="font-medium">{payment.account_name ?? '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-500">Сума</span>
-            <span className="font-mono font-medium">{fmt(payment.gross_amount)}</span>
-          </div>
-          {payment.note && (
-            <div className="flex justify-between">
-              <span className="text-gray-500">Опис</span>
-              <span className="text-gray-700">{payment.note}</span>
-            </div>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Рахунок зарахування (куди повертаються кошти) *
-            </label>
-            <select
-              value={form.target_account_id}
-              onChange={e => setForm(f => ({ ...f, target_account_id: e.target.value }))}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-            >
-              <option value="">— оберіть рахунок —</option>
-              {accounts
-                .filter(a => a.id !== payment.account_id)
-                .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
-            <input
-              type="number" min="0" max="100" step="0.01"
-              value={form.commission}
-              onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Дата переказу</label>
-            <input
-              type="date"
-              value={form.transfer_date}
-              onChange={e => setForm(f => ({ ...f, transfer_date: e.target.value }))}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
-            />
-          </div>
-
-          <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Буде зараховано на рахунок</span>
-              <span className="font-mono font-medium text-green-700">{returnAmount.toFixed(2)} ₴</span>
-            </div>
-            {commissionUah > 0 && (
+        {isLoading ? (
+          <div className="py-8 text-center text-sm text-gray-400">Завантаження даних обналичування...</div>
+        ) : (
+          <>
+            <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
               <div className="flex justify-between">
-                <span className="text-gray-500">Окремий витрат «Комісія» ({commissionPct}%)</span>
-                <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
+                <span className="text-gray-500">Співробітник</span>
+                <span className="font-medium">{payment.staff_name}</span>
               </div>
-            )}
-          </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Рахунок списання</span>
+                <span className="font-medium">{payment.account_name ?? '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Сума</span>
+                <span className="font-mono font-medium">{fmt(payment.gross_amount)}</span>
+              </div>
+              {payment.note && (
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Опис</span>
+                  <span className="text-gray-700">{payment.note}</span>
+                </div>
+              )}
+            </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Рахунок зарахування (куди повертаються кошти) *
+                </label>
+                <select
+                  value={form.target_account_id}
+                  onChange={e => setForm(f => ({ ...f, target_account_id: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                >
+                  <option value="">— оберіть рахунок —</option>
+                  {accounts
+                    .filter(a => a.id !== payment.account_id)
+                    .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
 
-          <div className="flex gap-2 pt-1">
-            <button type="submit" disabled={mutation.isPending}
-              className="flex-1 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
-              {mutation.isPending ? '...' : 'Обналичити'}
-            </button>
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
-              Скасувати
-            </button>
-          </div>
-        </form>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Комісія, %</label>
+                <input
+                  type="number" min="0" max="100" step="0.01"
+                  value={form.commission}
+                  onChange={e => setForm(f => ({ ...f, commission: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Дата переказу</label>
+                <input
+                  type="date"
+                  value={form.transfer_date}
+                  onChange={e => setForm(f => ({ ...f, transfer_date: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500"
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Буде зараховано на рахунок</span>
+                  <span className="font-mono font-medium text-green-700">{returnAmount.toFixed(2)} ₴</span>
+                </div>
+                {commissionUah > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Окремий витрат «Комісія» ({commissionPct}%)</span>
+                    <span className="font-mono text-red-600">−{commissionUah.toFixed(2)} ₴</span>
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="text-xs text-red-600">{error}</p>}
+
+              <div className="flex gap-2 pt-1">
+                {isEditing && (
+                  <button
+                    type="button"
+                    disabled={deleteMutation.isPending || mutation.isPending}
+                    onClick={() => {
+                      if (window.confirm('Скасувати (видалити) обналичування?')) {
+                        deleteMutation.mutate()
+                      }
+                    }}
+                    className="px-3 py-2 text-xs text-red-600 border border-red-200 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    {deleteMutation.isPending ? '...' : 'Скасувати обнал'}
+                  </button>
+                )}
+                <button type="submit" disabled={mutation.isPending || deleteMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                  {mutation.isPending ? 'Збереження...' : isEditing ? 'Зберегти' : 'Обналичити'}
+                </button>
+                <button type="button" onClick={onClose}
+                  className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                  Скасувати
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )
@@ -1857,9 +2072,14 @@ function SalaryPaymentRow({ payment, isOwner, accounts, onRefresh, view = 'row' 
           )}
           {isOwner && (
             payment.withdrawal_transfer_id ? (
-              <span className="text-xs text-green-700 font-medium border border-green-100 bg-green-50 px-2 py-1 rounded" title="Обналичено">
-                ↗ обнал.
-              </span>
+              <button
+                type="button"
+                onClick={() => setWithdrawing(true)}
+                className="text-xs text-amber-700 font-medium border border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded transition-colors"
+                title="Редагувати обналичування"
+              >
+                ↗ обнал. ✏️
+              </button>
             ) : (
               <button
                 onClick={() => setWithdrawing(true)}
@@ -1917,7 +2137,14 @@ function SalaryPaymentRow({ payment, isOwner, accounts, onRefresh, view = 'row' 
           )}
           {isOwner && (
             payment.withdrawal_transfer_id ? (
-              <span className="text-xs text-green-600 font-medium" title="Обналичено">↗ обнал.</span>
+              <button
+                type="button"
+                onClick={() => setWithdrawing(true)}
+                className="text-xs text-amber-700 font-medium hover:bg-amber-100 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 transition-colors"
+                title="Редагувати обналичування"
+              >
+                ↗ обнал. ✏️
+              </button>
             ) : (
               <button
                 onClick={() => setWithdrawing(true)}

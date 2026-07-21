@@ -190,6 +190,17 @@ export const expensesApi = {
     return data
   },
 
+  getWithdrawal: async (id: string) => {
+    const { data } = await apiClient.get<{
+      target_account_id: string
+      withdrawal_amount: number
+      commission: number
+      commission_amount: number
+      transfer_date: string
+    }>(`/expenses/${id}/withdrawal`)
+    return data
+  },
+
   withdraw: async (id: string, payload: {
     target_account_id: string
     withdrawal_amount?: number
@@ -197,6 +208,21 @@ export const expensesApi = {
     transfer_date?: string
   }) => {
     const { data } = await apiClient.post(`/expenses/${id}/withdraw`, payload)
+    return data
+  },
+
+  updateWithdrawal: async (id: string, payload: {
+    target_account_id: string
+    withdrawal_amount?: number
+    commission: number
+    transfer_date?: string
+  }) => {
+    const { data } = await apiClient.put(`/expenses/${id}/withdraw`, payload)
+    return data
+  },
+
+  deleteWithdrawal: async (id: string) => {
+    const { data } = await apiClient.delete(`/expenses/${id}/withdraw`)
     return data
   },
 
@@ -288,12 +314,37 @@ export const salaryPaymentsApi = {
     return data
   },
 
+  getWithdrawal: async (id: string) => {
+    const { data } = await apiClient.get<{
+      target_account_id: string
+      withdrawal_amount: number
+      commission: number
+      commission_amount: number
+      transfer_date: string
+    }>(`/salary/payments/${id}/withdrawal`)
+    return data
+  },
+
   withdraw: async (id: string, payload: {
     target_account_id: string
     commission: number
     transfer_date?: string
   }) => {
     const { data } = await apiClient.post(`/salary/payments/${id}/withdraw`, payload)
+    return data
+  },
+
+  updateWithdrawal: async (id: string, payload: {
+    target_account_id: string
+    commission: number
+    transfer_date?: string
+  }) => {
+    const { data } = await apiClient.put(`/salary/payments/${id}/withdraw`, payload)
+    return data
+  },
+
+  deleteWithdrawal: async (id: string) => {
+    const { data } = await apiClient.delete(`/salary/payments/${id}/withdraw`)
     return data
   },
 }
