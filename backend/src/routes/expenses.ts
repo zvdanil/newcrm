@@ -3,6 +3,28 @@ import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 
+function formatYmd(d: any): string {
+  if (!d) return new Date().toISOString().slice(0, 10)
+  if (d instanceof Date) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  const str = String(d).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10)
+  }
+  const dateObj = new Date(d)
+  if (!isNaN(dateObj.getTime())) {
+    const y = dateObj.getFullYear()
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const day = String(dateObj.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return new Date().toISOString().slice(0, 10)
+}
+
 export async function expensesRoutes(app: FastifyInstance) {
 
   // ── Categories ─────────────────────────────────────────────────────────────
@@ -955,7 +977,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         withdrawal_amount: withdrawalAmount,
         commission: commissionPct,
         commission_amount: commissionAmount,
-        transfer_date: String(transfer.transfer_date).slice(0, 10),
+        transfer_date: formatYmd(transfer.transfer_date),
       })
     }
   )

@@ -11,6 +11,28 @@ import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
 function fmt(v: string | number) { return Number(v).toFixed(2) }
 
+function toYmd(d: any): string {
+  if (!d) return ''
+  if (d instanceof Date) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  const str = String(d).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10)
+  }
+  const dateObj = new Date(d)
+  if (!isNaN(dateObj.getTime())) {
+    const y = dateObj.getFullYear()
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+    const day = String(dateObj.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  return ''
+}
+
 function fmtNote(note: string | null | undefined): string {
   if (!note) return ''
   if (note.startsWith('bank_ref:')) {
@@ -852,7 +874,7 @@ function WithdrawalDialog({ expense, accounts, onClose, onSuccess }: {
         target_account_id: existingData.target_account_id,
         withdrawal_amount: String(existingData.withdrawal_amount),
         commission: String(existingData.commission),
-        transfer_date: existingData.transfer_date,
+        transfer_date: toYmd(existingData.transfer_date),
       })
     }
   }, [existingData])
@@ -1826,7 +1848,7 @@ function SalaryWithdrawalDialog({ payment, accounts, onClose, onSuccess }: {
       setForm({
         target_account_id: existingData.target_account_id,
         commission: String(existingData.commission),
-        transfer_date: existingData.transfer_date,
+        transfer_date: toYmd(existingData.transfer_date),
       })
     }
   }, [existingData])
