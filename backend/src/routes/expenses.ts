@@ -81,7 +81,7 @@ export async function expensesRoutes(app: FastifyInstance) {
 
   // ── Expenses ───────────────────────────────────────────────────────────────
 
-  // GET /api/expenses?account_id=&category_id=&status=&from=&to=&is_dividend=&limit=&offset=
+  // GET /api/expenses?account_id=&category_id=&status=&from=&to=&is_dividend=&include_salary=&limit=&offset=
   app.get<{
     Querystring: {
       account_id?: string
@@ -90,6 +90,7 @@ export async function expensesRoutes(app: FastifyInstance) {
       from?: string
       to?: string
       is_dividend?: string
+      include_salary?: string
       limit?: string
       offset?: string
     }
@@ -99,6 +100,7 @@ export async function expensesRoutes(app: FastifyInstance) {
     async (req) => {
       const limit = Math.min(Number(req.query.limit ?? 500), 500)
       const offset = Number(req.query.offset ?? 0)
+      const includeSalary = req.query.include_salary === 'true'
 
       let q = db
         .selectFrom('expenses as e')
@@ -277,10 +279,111 @@ export async function expensesRoutes(app: FastifyInstance) {
         totalQFiltered.executeTakeFirst(),
       ])
 
+      // ── Merge salary_transactions when include_salary=true ──────────────
+      let mergedData = data as any[]
+      let salaryCount = 0
+      let salaryAmount = 0
+
+      if (includeSalary) {
+        // Check if filtering by a specific category
+        const filterCatId = req.query.category_id
+        let shouldIncludeSalary = true
+
+        if (filterCatId) {
+          // Only include salary records when filtering by the "Зарплата" category
+          const salaryCat = await db.selectFrom('expense_categories')
+            .select(['id', 'parent_id'])
+            .where('name', '=', 'Зарплата')
+            .executeTakeFirst()
+          // Include if filterCatId matches the salary category or its parent
+          shouldIncludeSalary = !!(salaryCat && (
+            salaryCat.id === filterCatId ||
+            salaryCat.parent_id === filterCatId
+          ))
+        }
+
+        // Don't include salary when filtering for status=pending (salary is always paid)
+        if (req.query.status === 'pending') shouldIncludeSalary = false
+
+        if (shouldIncludeSalary) {
+          // Look up the "Зарплата" category
+          const salaryCat = await db.selectFrom('expense_categories')
+            .select('id')
+            .where('name', '=', 'Зарплата')
+            .executeTakeFirst()
+
+          let sq = db
+            .selectFrom('salary_transactions as st')
+            .innerJoin('staff as s', 's.id', 'st.staff_id')
+            .leftJoin('accounts as ac', 'ac.id', 'st.account_id')
+            .where('st.type', '=', 'PAYMENT')
+            .where('st.is_deleted', '=', false)
+            .select([
+              'st.id', 'st.staff_id', 's.full_name as staff_name',
+              'st.account_id', 'ac.name as account_name',
+              'st.gross_amount', 'st.transaction_date',
+              'st.note', 'st.is_dividend', 'st.created_at',
+            ])
+
+          if (req.query.account_id) sq = sq.where('st.account_id', '=', req.query.account_id)
+          if (req.query.from) sq = sq.where('st.transaction_date', '>=', new Date(req.query.from))
+          if (req.query.to) sq = sq.where('st.transaction_date', '<=', new Date(req.query.to))
+          if (req.query.is_dividend === 'true') sq = sq.where('st.is_dividend', '=', true)
+          if (req.query.is_dividend === 'false') sq = sq.where('st.is_dividend', '=', false)
+
+          const salaryRows = await sq.orderBy('st.transaction_date', 'desc').execute()
+
+          // Map salary rows to Expense-like shape
+          const mappedSalary = salaryRows.map(sr => ({
+            id:                      `salary:${sr.id}`,
+            account_id:              sr.account_id,
+            account_name:            sr.account_name ?? '—',
+            category_id:             salaryCat?.id ?? null,
+            category_name:           'Зарплата',
+            parent_id:               null,
+            parent_category_name:    null,
+            amount:                  sr.gross_amount,
+            accrual_date:            sr.transaction_date,
+            payment_date:            sr.transaction_date,
+            status:                  'paid' as const,
+            is_instant:              true,
+            is_dividend:             sr.is_dividend,
+            note:                    sr.note ?? `Зарплата: ${sr.staff_name}`,
+            created_at:              sr.created_at,
+            withdrawal_transfer_id:  null,
+            withdrawal_amount:       null,
+            dividend_payout_id:      null,
+            dividend_amount:         null,
+            created_by_email:        null,
+            is_advance:              false,
+            is_advance_return:       false,
+            staff_id:                sr.staff_id,
+            staff_name:              sr.staff_name,
+            utilized_advance_id:     null,
+            utilized_advance_amount: null,
+            advance_staff_id:        null,
+            pool_advance_amount:     '0',
+            utilized_advance_remaining_balance: null,
+            _is_salary:              true,
+          }))
+
+          salaryCount = mappedSalary.length
+          salaryAmount = mappedSalary.reduce((s, r) => s + Number(r.amount), 0)
+
+          // Merge and sort by date desc
+          mergedData = [...data, ...mappedSalary].sort((a: any, b: any) => {
+            const dateA = new Date(a.accrual_date).getTime()
+            const dateB = new Date(b.accrual_date).getTime()
+            if (dateA !== dateB) return dateB - dateA
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          })
+        }
+      }
+
       return {
-        data,
-        total: Number(totals?.count ?? 0),
-        total_amount: Number(totals?.total_amount ?? 0),
+        data: mergedData,
+        total: Number(totals?.count ?? 0) + salaryCount,
+        total_amount: Number(totals?.total_amount ?? 0) + salaryAmount,
         limit,
         offset,
       }

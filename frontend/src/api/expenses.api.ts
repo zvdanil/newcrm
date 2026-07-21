@@ -39,6 +39,7 @@ export interface Expense {
   note: string | null
   created_by_email: string | null
   created_at: string
+  _is_salary?: boolean
 }
 
 export interface ExpenseAdvanceItem {
@@ -112,6 +113,7 @@ export const expensesApi = {
     from?: string
     to?: string
     is_dividend?: boolean
+    include_salary?: boolean
     limit?: number
     offset?: number
   } = {}): Promise<ExpensesResponse> => {
@@ -122,6 +124,7 @@ export const expensesApi = {
     if (params.from)                   q.set('from', params.from)
     if (params.to)                     q.set('to', params.to)
     if (params.is_dividend !== undefined) q.set('is_dividend', String(params.is_dividend))
+    if (params.include_salary)         q.set('include_salary', 'true')
     if (params.limit)                  q.set('limit', String(params.limit))
     if (params.offset)                 q.set('offset', String(params.offset))
     const { data } = await apiClient.get<ExpensesResponse>(`/expenses?${q}`)

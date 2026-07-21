@@ -1164,6 +1164,8 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   view?: 'row' | 'card'
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const isSalary = !!expense._is_salary
   const [editing, setEditing]             = useState(false)
   const [withdrawing, setWithdrawing]     = useState(false)
   const [markingDividend, setMarkingDividend] = useState(false)
@@ -1182,7 +1184,7 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); onRefresh() },
   })
 
-  if (editing) {
+  if (editing && !isSalary) {
     if (view === 'card') {
       return (
         <div className="bg-white rounded-xl shadow-sm border border-iris-200 p-4">
@@ -1209,10 +1211,18 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
 
   if (view === 'card') {
     return (
-      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col gap-3 ${expense.is_dividend ? 'border-purple-200 bg-purple-50/30' : ''}`}>
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col gap-3 ${expense.is_dividend ? 'border-purple-200 bg-purple-50/30' : ''} ${isSalary ? 'border-blue-200 bg-blue-50/20' : ''}`}>
         <div className="flex justify-between items-start gap-2">
           <div>
-            <div className="font-medium text-gray-900 text-sm mb-1">{categoryLabel(expense)}</div>
+            <div className="font-medium text-gray-900 text-sm mb-1">
+              {isSalary && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium mr-1.5">ЗП</span>}
+              {categoryLabel(expense)}
+              {isSalary && expense.staff_name && (
+                <button onClick={() => navigate(`/staff/${expense.staff_id}`)} className="ml-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                  → {expense.staff_name}
+                </button>
+              )}
+            </div>
             <div className="text-xs text-gray-500">{expense.accrual_date.slice(0, 10)} • {expense.account_name}</div>
           </div>
           <div className="text-right">
@@ -1279,71 +1289,85 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
         )}
 
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
-          {expense.is_advance && (
-            <button onClick={async () => {
-              const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
-              if (!amountStr) return
-              const amount = parseFloat(amountStr)
-              if (amount > 0) {
-                await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
-                qc.invalidateQueries({ queryKey: ['expenses'] })
-                qc.invalidateQueries({ queryKey: ['advances'] })
-                qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
-                onRefresh()
-              }
-            }}
-              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
-            >⮌ поверн.
-            </button>
-          )}
-          {expense.status === 'pending' && (isOwner || isAdmin) && (
-            <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
-              disabled={payMutation.isPending}
-              className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 transition-colors">
-              Оплатити
-            </button>
-          )}
-          {isOwner && (
-            expense.is_dividend ? (
-              <button onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
-                disabled={removeDividendMutation.isPending}
-                className="text-xs px-2 py-1 rounded border border-purple-200 transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
-              >₴↑</button>
-            ) : (
-              <button onClick={() => setMarkingDividend(true)}
-                className="text-xs px-2 py-1 rounded border border-gray-200 transition-colors text-gray-500 hover:text-purple-600 hover:bg-purple-50"
-              >₴↑</button>
-            )
-          )}
-          {isOwner && (
-            expense.withdrawal_transfer_id ? (
-              <span className="text-xs text-amber-700 font-medium border border-amber-100 bg-amber-50 px-2 py-1 rounded">
-                ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)}` : ''}
-              </span>
-            ) : (
-              <button onClick={() => setWithdrawing(true)}
-                className="text-xs text-gray-500 border border-gray-200 hover:text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
-              >↗</button>
-            )
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => setEditing(true)}
-              className="text-xs text-gray-500 border border-gray-200 hover:text-iris-600 hover:border-iris-200 hover:bg-iris-50 px-2 py-1 rounded transition-colors">ред.</button>
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => setShowHistory(true)}
-              className="text-xs text-gray-400 border border-gray-200 hover:text-gray-600 hover:bg-gray-50 px-2 py-1 rounded transition-colors" title="Історія змін">
-              📋
-            </button>
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
-              disabled={deleteMutation.isPending}
-              className="text-xs text-red-400 border border-red-100 hover:text-red-600 hover:bg-red-50 hover:border-red-200 px-2 py-1 rounded ml-auto transition-colors">✕</button>
+          {isSalary ? (
+            <>
+              {expense.staff_id && (
+                <button onClick={() => navigate(`/staff/${expense.staff_id}`)}
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors">
+                  👤 Картка співробітника
+                </button>
+              )}
+              <span className="text-xs text-gray-400 ml-auto">Зарплатна транзакція</span>
+            </>
+          ) : (
+            <>
+              {expense.is_advance && (
+                <button onClick={async () => {
+                  const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
+                  if (!amountStr) return
+                  const amount = parseFloat(amountStr)
+                  if (amount > 0) {
+                    await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
+                    qc.invalidateQueries({ queryKey: ['expenses'] })
+                    qc.invalidateQueries({ queryKey: ['advances'] })
+                    qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+                    onRefresh()
+                  }
+                }}
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded border border-blue-100 transition-colors"
+                >⮌ поверн.
+                </button>
+              )}
+              {expense.status === 'pending' && (isOwner || isAdmin) && (
+                <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
+                  disabled={payMutation.isPending}
+                  className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded border border-green-200 transition-colors">
+                  Оплатити
+                </button>
+              )}
+              {isOwner && (
+                expense.is_dividend ? (
+                  <button onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
+                    disabled={removeDividendMutation.isPending}
+                    className="text-xs px-2 py-1 rounded border border-purple-200 transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
+                  >₴↑</button>
+                ) : (
+                  <button onClick={() => setMarkingDividend(true)}
+                    className="text-xs px-2 py-1 rounded border border-gray-200 transition-colors text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+                  >₴↑</button>
+                )
+              )}
+              {isOwner && (
+                expense.withdrawal_transfer_id ? (
+                  <span className="text-xs text-amber-700 font-medium border border-amber-100 bg-amber-50 px-2 py-1 rounded">
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)}` : ''}
+                  </span>
+                ) : (
+                  <button onClick={() => setWithdrawing(true)}
+                    className="text-xs text-gray-500 border border-gray-200 hover:text-amber-600 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
+                  >↗</button>
+                )
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => setEditing(true)}
+                  className="text-xs text-gray-500 border border-gray-200 hover:text-iris-600 hover:border-iris-200 hover:bg-iris-50 px-2 py-1 rounded transition-colors">ред.</button>
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => setShowHistory(true)}
+                  className="text-xs text-gray-400 border border-gray-200 hover:text-gray-600 hover:bg-gray-50 px-2 py-1 rounded transition-colors" title="Історія змін">
+                  📋
+                </button>
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
+                  disabled={deleteMutation.isPending}
+                  className="text-xs text-red-400 border border-red-100 hover:text-red-600 hover:bg-red-50 hover:border-red-200 px-2 py-1 rounded ml-auto transition-colors">✕</button>
+              )}
+            </>
           )}
         </div>
 
-        {withdrawing && (
+        {!isSalary && withdrawing && (
           <WithdrawalDialog
             expense={expense}
             accounts={accounts}
@@ -1351,7 +1375,7 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             onSuccess={onRefresh}
           />
         )}
-        {markingDividend && (
+        {!isSalary && markingDividend && (
           <DividendMarkDialog
             expense={expense}
             onClose={() => setMarkingDividend(false)}
@@ -1366,12 +1390,15 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
   }
 
   return (
-    <tr className={`hover:bg-gray-50 transition-colors ${expense.is_dividend ? 'bg-purple-50/40' : ''}`}>
+    <tr className={`hover:bg-gray-50 transition-colors ${expense.is_dividend ? 'bg-purple-50/40' : ''} ${isSalary ? 'bg-blue-50/30' : ''}`}>
       <td className="px-4 py-2.5 text-sm text-gray-500 whitespace-nowrap">
         {expense.accrual_date.slice(0, 10)}
       </td>
       <td className="px-4 py-2.5 text-sm text-gray-700">
         <div className="flex items-center gap-1.5">
+          {isSalary && (
+            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">ЗП</span>
+          )}
           {expense.is_dividend && (
             <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
               дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
@@ -1379,12 +1406,12 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
                 : ''}
             </span>
           )}
-          {expense.is_advance && (
+          {!isSalary && expense.is_advance && (
             <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-medium">
               аванс{expense.staff_name ? ` → ${expense.staff_name}` : ''}
             </span>
           )}
-          {(expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
+          {!isSalary && (expense.advance_staff_id || expense.utilized_advance_id || Number(expense.pool_advance_amount) > 0) && !expense.is_advance_return && (
             <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded font-medium">
               з авансу{
                 (() => {
@@ -1407,14 +1434,25 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
               }
             </span>
           )}
-          {expense.is_advance_return && (
+          {!isSalary && expense.is_advance_return && (
             <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>
           )}
           <span>{categoryLabel(expense)}</span>
+          {isSalary && expense.staff_name && (
+            <button onClick={() => navigate(`/staff/${expense.staff_id}`)}
+              className="text-xs text-blue-600 hover:text-blue-800 hover:underline ml-0.5">
+              → {expense.staff_name}
+            </button>
+          )}
         </div>
-        {(expense.note || expense.staff_name) && (
+        {!isSalary && (expense.note || expense.staff_name) && (
           <p className="text-xs text-gray-400 mt-0.5 break-words">
             {fmtNote(expense.note)}{expense.staff_name ? ` (${expense.staff_name})` : ''}
+          </p>
+        )}
+        {isSalary && expense.note && (
+          <p className="text-xs text-gray-400 mt-0.5 break-words">
+            {fmtNote(expense.note)}
           </p>
         )}
       </td>
@@ -1435,82 +1473,95 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
       </td>
       <td className="px-4 py-2.5">
         <div className="flex items-center gap-2 justify-end">
-          {expense.is_advance && (
-            <button onClick={async () => {
-              const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
-              if (!amountStr) return
-              const amount = parseFloat(amountStr)
-              if (amount > 0) {
-                await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
-                qc.invalidateQueries({ queryKey: ['expenses'] })
-                qc.invalidateQueries({ queryKey: ['advances'] })
-                qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
-                onRefresh()
-              }
-            }}
-              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-1.5 py-1 rounded transition-colors"
-              title="Повернути залишок у касу">⮌ повернення
-            </button>
-          )}
-          {expense.status === 'pending' && (isOwner || isAdmin) && (
-            <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
-              disabled={payMutation.isPending}
-              className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded transition-colors">
-              Оплатити
-            </button>
-          )}
-          {isOwner && (
-            expense.is_dividend ? (
-              <button
-                onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
-                disabled={removeDividendMutation.isPending}
-                className="text-xs px-2 py-1 rounded transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
-                title="Зняти позначку дивіденду"
-              >
-                ₴↑
-              </button>
-            ) : (
-              <button
-                onClick={() => setMarkingDividend(true)}
-                className="text-xs px-2 py-1 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50"
-                title="Позначити як дивіденд"
-              >
-                ₴↑
-              </button>
-            )
-          )}
-          {isOwner && (
-            expense.withdrawal_transfer_id ? (
-              <span className="text-xs text-amber-700 font-medium" title="Обналичено">
-                ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''}
-              </span>
-            ) : (
-              <button
-                onClick={() => setWithdrawing(true)}
-                className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 px-1.5 py-1 rounded transition-colors"
-                title="Обналичування"
-              >
-                ↗
-              </button>
-            )
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => setEditing(true)}
-              className="text-xs text-gray-400 hover:text-iris-600 transition-colors">ред.</button>
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => setShowHistory(true)}
-              className="text-xs text-gray-300 hover:text-gray-500 transition-colors" title="Історія змін">
-              📋
-            </button>
-          )}
-          {(isOwner || isAdmin) && (
-            <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
-              disabled={deleteMutation.isPending}
-              className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
+          {isSalary ? (
+            <>
+              {expense.staff_id && (
+                <button onClick={() => navigate(`/staff/${expense.staff_id}`)}
+                  className="text-xs text-blue-500 hover:text-blue-700 transition-colors" title="Картка співробітника">
+                  👤
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {expense.is_advance && (
+                <button onClick={async () => {
+                  const amountStr = window.prompt('Введіть суму повернення залишку (₴):')
+                  if (!amountStr) return
+                  const amount = parseFloat(amountStr)
+                  if (amount > 0) {
+                    await expensesApi.returnAdvance(expense.id, { amount, account_id: expense.account_id })
+                    qc.invalidateQueries({ queryKey: ['expenses'] })
+                    qc.invalidateQueries({ queryKey: ['advances'] })
+                    qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
+                    onRefresh()
+                  }
+                }}
+                  className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-1.5 py-1 rounded transition-colors"
+                  title="Повернути залишок у касу">⮌ повернення
+                </button>
+              )}
+              {expense.status === 'pending' && (isOwner || isAdmin) && (
+                <button onClick={() => { if (window.confirm('Оплатити витрату?')) payMutation.mutate() }}
+                  disabled={payMutation.isPending}
+                  className="text-xs px-2 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded transition-colors">
+                  Оплатити
+                </button>
+              )}
+              {isOwner && (
+                expense.is_dividend ? (
+                  <button
+                    onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
+                    disabled={removeDividendMutation.isPending}
+                    className="text-xs px-2 py-1 rounded transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
+                    title="Зняти позначку дивіденду"
+                  >
+                    ₴↑
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setMarkingDividend(true)}
+                    className="text-xs px-2 py-1 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50"
+                    title="Позначити як дивіденд"
+                  >
+                    ₴↑
+                  </button>
+                )
+              )}
+              {isOwner && (
+                expense.withdrawal_transfer_id ? (
+                  <span className="text-xs text-amber-700 font-medium" title="Обналичено">
+                    ↗ обнал.{expense.withdrawal_amount ? ` ${Number(expense.withdrawal_amount).toFixed(2)} ₴` : ''}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setWithdrawing(true)}
+                    className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 px-1.5 py-1 rounded transition-colors"
+                    title="Обналичування"
+                  >
+                    ↗
+                  </button>
+                )
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => setEditing(true)}
+                  className="text-xs text-gray-400 hover:text-iris-600 transition-colors">ред.</button>
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => setShowHistory(true)}
+                  className="text-xs text-gray-300 hover:text-gray-500 transition-colors" title="Історія змін">
+                  📋
+                </button>
+              )}
+              {(isOwner || isAdmin) && (
+                <button onClick={() => { if (window.confirm('Видалити витрату?')) deleteMutation.mutate() }}
+                  disabled={deleteMutation.isPending}
+                  className="text-xs text-gray-300 hover:text-red-500 transition-colors">✕</button>
+              )}
+            </>
           )}
         </div>
-        {withdrawing && (
+        {!isSalary && withdrawing && (
           <WithdrawalDialog
             expense={expense}
             accounts={accounts}
@@ -1518,14 +1569,14 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             onSuccess={onRefresh}
           />
         )}
-        {markingDividend && (
+        {!isSalary && markingDividend && (
           <DividendMarkDialog
             expense={expense}
             onClose={() => setMarkingDividend(false)}
             onSuccess={onRefresh}
           />
         )}
-        {showHistory && (
+        {!isSalary && showHistory && (
           <ExpenseHistoryPopup expenseId={expense.id} onClose={() => setShowHistory(false)} />
         )}
       </td>
@@ -2024,6 +2075,7 @@ export function ExpensesPage() {
       is_dividend: filters.is_dividend,
       // Omit account_id to fetch all, we filter locally
       account_id: undefined,
+      include_salary: true,
     }),
     enabled: tab === 'expenses',
   })
