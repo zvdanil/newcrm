@@ -1279,10 +1279,10 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
   })()
 
   const isValid = isMonthlyByDayR
-    ? form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
+    ? form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount))
     : (usesQuantity || isPctMode)
       ? form.quantity !== '' && !isNaN(parseFloat(form.quantity)) && parseFloat(form.quantity) >= 0
-      : form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount)) && parseFloat(form.gross_amount) >= 0
+      : form.gross_amount !== '' && !isNaN(parseFloat(form.gross_amount))
 
   const mutation = useMutation({
     mutationFn: () => staffApi.addManualAccrual(staffId, {
@@ -1381,7 +1381,7 @@ export function ManualAccrualForm({ staffId, rates, onDone, initialDate, initial
         ) : (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Сума (gross) *</label>
-            <input type="number" min="0" step="0.01" placeholder="0.00"
+            <input type="number" step="0.01" placeholder="0.00"
               value={form.gross_amount}
               onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
               autoFocus

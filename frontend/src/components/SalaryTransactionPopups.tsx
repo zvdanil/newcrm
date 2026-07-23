@@ -375,7 +375,7 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Сума (gross)</label>
-                <input type="number" min="0.01" step="0.01" value={form.gross_amount}
+                <input type="number" step="0.01" value={form.gross_amount}
                   onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
                   autoFocus
                   onFocus={e => e.target.select()}

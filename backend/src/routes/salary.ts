@@ -243,9 +243,6 @@ export async function salaryRoutes(app: FastifyInstance) {
         }
       }
 
-      if (finalGross < 0) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Сума нарахування не може бути від\'ємною' })
-      }
 
       const tx = await db.insertInto('salary_transactions').values({
         staff_id:         req.params.id,
