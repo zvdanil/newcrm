@@ -90,7 +90,7 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .where('al.activity_id', '=', rate.activity_id!)
     .where('al.date', '>=', castAsDate(billingStart))
     .where('al.date', '<', castAsDate(billingEnd))
-    .where('al.status', 'in', ['present', 'special'])
+    .where('al.status', 'in', ['present', 'special', 'separate_billing'])
     .execute()
 
   // Group by child and date to ensure we count distinct visits (days attended)
@@ -505,7 +505,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', activityId)
     .where('date', '=', castAsDate(date))
-    .where('status', 'in', ['present', 'special'])
+    .where('status', 'in', ['present', 'special', 'separate_billing'])
     .executeTakeFirst()
 
   const presentCount = Number(presentResult?.cnt ?? 0)
