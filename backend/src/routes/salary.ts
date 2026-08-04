@@ -137,6 +137,28 @@ export async function salaryRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/staff/salary/special-children?activity_id=UUID&date=YYYY-MM-DD
+  app.get<{ Querystring: { activity_id?: string; date?: string } }>(
+    '/staff/salary/special-children',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const { activity_id, date } = req.query
+      if (!activity_id || !date) return { children: [] }
+
+      const dateObj = new Date(date)
+      const specialLogs = await db
+        .selectFrom('attendance_logs as al')
+        .innerJoin('children as c', 'c.id', 'al.child_id')
+        .select(['c.full_name'])
+        .where('al.activity_id', '=', activity_id)
+        .where('al.date', '=', dateObj)
+        .where('al.status', '=', 'special')
+        .execute()
+
+      return { children: specialLogs.map(l => l.full_name) }
+    }
+  )
+
   // POST /api/staff/:id/salary — manual accrual
   // For rate types hourly/per_lesson/per_child: pass quantity, gross = quantity × rate_value
   // For fixed_monthly/bonus or no rate: pass gross_amount directly

@@ -422,30 +422,32 @@ async function computeGross(
   dateObj: Date,
   presentCount: number,
   groupLessonCount: number = 1,
-  specialCount: number = 0
+  specialCount: number = 0,
+  specialChildren: string[] = []
 ): Promise<{ gross: number; meta: Record<string, unknown> }> {
   const rv = Number(rate.rate_value)
+  const specMeta = specialCount > 0 ? { special_count: specialCount, special_children: specialChildren } : {}
 
   if (rate.value_mode === 'percent_of_revenue') {
     const revenue = await revenueForActivityDate(activityId, dateObj)
     const gross   = Math.round(revenue * rv / 100 * 100) / 100
-    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, quantity: presentCount, revenue, rate_pct: rv } }
+    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, quantity: presentCount, revenue, rate_pct: rv, ...specMeta } }
   }
 
   if (rate.rate_type === 'per_lesson') {
-    return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv } }
+    return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv, ...specMeta } }
   }
   if (rate.rate_type === 'group_lesson') {
-    return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv } }
+    return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv, ...specMeta } }
   }
   if (rate.rate_type === 'individual_per_child') {
     const gross = Math.round(rv * specialCount * 100) / 100
-    return { gross, meta: { source: 'auto_individual_per_child', quantity: specialCount, rate_value: rv } }
+    return { gross, meta: { source: 'auto_individual_per_child', quantity: specialCount, rate_value: rv, ...specMeta } }
   }
 
   // per_child
   const gross = Math.round(rv * presentCount * 100) / 100
-  return { gross, meta: { source: 'auto_per_child', quantity: presentCount, rate_value: rv } }
+  return { gross, meta: { source: 'auto_per_child', quantity: presentCount, rate_value: rv, ...specMeta } }
 }
 
 /**
@@ -510,15 +512,17 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
   const presentCount = Number(presentResult?.cnt ?? 0)
 
-  const specialResult = await db
-    .selectFrom('attendance_logs')
-    .select((eb) => eb.fn.countAll<number>().as('cnt'))
-    .where('activity_id', '=', activityId)
-    .where('date', '=', castAsDate(date))
-    .where('status', '=', 'special')
-    .executeTakeFirst()
+  const specialChildren = await db
+    .selectFrom('attendance_logs as al')
+    .innerJoin('children as c', 'c.id', 'al.child_id')
+    .select(['c.full_name'])
+    .where('al.activity_id', '=', activityId)
+    .where('al.date', '=', castAsDate(date))
+    .where('al.status', '=', 'special')
+    .execute()
 
-  const specialCount = Number(specialResult?.cnt ?? 0)
+  const specialChildrenNames = specialChildren.map(c => c.full_name)
+  const specialCount = specialChildrenNames.length
 
   const groupLog = await db
     .selectFrom('group_lesson_logs')
@@ -559,7 +563,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
     const existing = existingAccruals.find(a => a.rate_id === rate.id)
 
-    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount)
+    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount, specialChildrenNames)
     let hasLesson = false
     if (rate.rate_type === 'group_lesson') {
       hasLesson = groupConducted || rate.value_mode === 'percent_of_revenue'

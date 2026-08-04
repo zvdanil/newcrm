@@ -313,6 +313,20 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
 
   const canEdit = tx.type !== 'PAYMENT'
 
+  const txDate = String(tx.transaction_date).slice(0, 10)
+  const meta = tx.metadata_json as Record<string, unknown> | null
+  const metaChildren = Array.isArray(meta?.special_children) && meta!.special_children.length > 0
+    ? (meta!.special_children as string[])
+    : null
+
+  const { data: fetchedSpecialChildren } = useQuery({
+    queryKey: ['special-children', tx.activity_id, txDate],
+    queryFn: () => staffApi.getSpecialChildren(tx.activity_id!, txDate),
+    enabled: !metaChildren && !!tx.activity_id && !!txDate && tx.type === 'ACCRUAL',
+  })
+
+  const specialChildrenList = metaChildren ?? fetchedSpecialChildren ?? []
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
@@ -348,6 +362,16 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
               <span className="font-mono text-gray-700">{d}</span>
             </div>
           ) : null })()}
+          {specialChildrenList.length > 0 && (
+            <div className="flex justify-between gap-2 py-1.5 px-3 bg-amber-50/80 rounded-lg border border-amber-200/60 my-1 text-xs">
+              <span className="text-amber-800 font-medium shrink-0">
+                Відмітки ОР ({specialChildrenList.length}):
+              </span>
+              <span className="text-amber-900 font-medium text-right break-words">
+                {specialChildrenList.join(', ')}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between font-medium">
             <span className="text-gray-500">Gross</span>
             <span className="font-mono">{fmt(tx.gross_amount)}</span>
