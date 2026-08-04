@@ -152,7 +152,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .innerJoin('children as c', 'c.id', 'al.child_id')
         .select(['c.full_name'])
         .where('al.date', '=', castAsDate(date))
-        .where('al.status', '=', 'special')
+        .where('al.status', 'in', ['special', 'separate_billing'])
 
       if (activity_id) {
         q = q.where('al.activity_id', '=', activity_id)
