@@ -538,6 +538,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         amount,
         accrual_date: form.accrual_date,
         payment_date: form.payment_date || null,
+        is_dividend:  form.is_dividend,
         note:      form.note || null,
         edit_note: editNote.trim() || undefined,
       })
@@ -1746,6 +1747,13 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             }}
             accounts={accounts}
             onClose={() => setWithdrawing(false)}
+            onSuccess={onRefresh}
+          />
+        )}
+        {!isSalary && markingDividend && (
+          <DividendMarkDialog
+            expense={expense}
+            onClose={() => setMarkingDividend(false)}
             onSuccess={onRefresh}
           />
         )}

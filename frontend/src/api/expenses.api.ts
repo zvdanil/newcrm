@@ -156,6 +156,7 @@ export const expensesApi = {
     amount?: number
     accrual_date?: string
     payment_date?: string | null
+    is_dividend?: boolean
     note?: string | null
     edit_note?: string
   }) => {

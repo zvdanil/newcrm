@@ -199,7 +199,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           .select([
             sql<string>`to_char(date_trunc('month', payment_date), 'YYYY-MM-01')`.as('month'),
             sql<string>`COALESCE(SUM(amount), 0)`.as('total'),
-            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN amount ELSE 0 END), 0)`.as('total_no_div'),
+            sql<string>`COALESCE(SUM(CASE WHEN NOT is_dividend THEN amount WHEN dividend_amount IS NOT NULL THEN (amount - dividend_amount) ELSE 0 END), 0)`.as('total_no_div'),
           ])
           .where('status', '=', 'paid')
           .where('is_deleted', '=', false)
@@ -654,6 +654,7 @@ export async function reportsRoutes(app: FastifyInstance) {
             'e.status',
             'e.note',
             'e.is_dividend',
+            'e.dividend_amount',
             'e.is_advance',
             'e.is_advance_return',
             'e.utilized_advance_amount',
@@ -814,20 +815,24 @@ export async function reportsRoutes(app: FastifyInstance) {
       for (const e of expenseTxDetails) {
         const catId = e.category_id ?? 'uncategorized'
         const catName = e.category_name ?? 'Без категорії'
-        const amount = Number(e.amount)
+        const totalAmount = Number(e.amount)
+        const divAmount = e.is_dividend
+          ? (e.dividend_amount != null ? Number(e.dividend_amount) : totalAmount)
+          : 0
+        const opAmount = totalAmount - divAmount
 
-        if (!e.is_dividend && !e.is_advance && !e.is_advance_return && (catId !== withdrawalCatId)) {
+        if (opAmount > 0 && !e.is_advance && !e.is_advance_return && (catId !== withdrawalCatId)) {
           const m = fmtMonth(new Date(e.accrual_date))
           if (!expDetailsMap[m]) expDetailsMap[m] = {}
           if (!expDetailsMap[m][catId]) {
             expDetailsMap[m][catId] = { category_name: catName, accrued: 0, paid: 0, transactions: [] }
           }
           const catObj = expDetailsMap[m][catId]
-          catObj.accrued += amount
+          catObj.accrued += opAmount
           catObj.transactions.push({
             id: e.id,
             date: new Date(e.accrual_date).toISOString().slice(0, 10),
-            amount,
+            amount: opAmount,
             note: e.note || '',
             type: 'accrued',
           })
@@ -836,36 +841,37 @@ export async function reportsRoutes(app: FastifyInstance) {
         if (e.status === 'paid' && e.payment_date && !e.is_advance && !e.is_advance_return) {
           const m = fmtMonth(new Date(e.payment_date))
           const paidDateStr = new Date(e.payment_date).toISOString().slice(0, 10)
-          const paidAmount = amount
 
-          if (e.is_dividend) {
+          if (e.is_dividend && divAmount > 0) {
             dividendExpensesList.push({
               month: m,
               id: e.id,
               date: paidDateStr,
               note: e.note || '',
-              amount: paidAmount,
+              amount: divAmount,
               dividend_payout_id: e.dividend_payout_id,
             })
-          } else if (catId === withdrawalCatId) {
+          }
+
+          if (catId === withdrawalCatId) {
             withdrawalsTxList.push({
               month: m,
               id: e.id,
               date: paidDateStr,
               note: e.note || '',
-              amount: paidAmount,
+              amount: totalAmount,
             })
-          } else {
+          } else if (opAmount > 0) {
             if (!expDetailsMap[m]) expDetailsMap[m] = {}
             if (!expDetailsMap[m][catId]) {
               expDetailsMap[m][catId] = { category_name: catName, accrued: 0, paid: 0, transactions: [] }
             }
             const catObj = expDetailsMap[m][catId]
-            catObj.paid += paidAmount
+            catObj.paid += opAmount
             catObj.transactions.push({
               id: e.id,
               date: paidDateStr,
-              amount: paidAmount,
+              amount: opAmount,
               note: e.note || '',
               type: 'paid',
             })

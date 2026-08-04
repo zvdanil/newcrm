@@ -547,7 +547,7 @@ export async function expensesRoutes(app: FastifyInstance) {
   // PUT /api/expenses/:id  — edit any expense (including paid), record audit diff
   app.put<{
     Params: { id: string }
-    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; payment_date?: string | null; note?: string | null; edit_note?: string }
+    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; payment_date?: string | null; note?: string | null; edit_note?: string; is_dividend?: boolean }
   }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
@@ -561,6 +561,10 @@ export async function expensesRoutes(app: FastifyInstance) {
 
       const { edit_note, ...fields } = req.body
       const editedBy = (req.user as { sub: string }).sub
+
+      if (fields.is_dividend === false) {
+        (fields as Record<string, unknown>).dividend_amount = null
+      }
 
       // Build only changed fields
       const tracked: Array<{ field_name: string; old_value: string | null; new_value: string | null }> = []
