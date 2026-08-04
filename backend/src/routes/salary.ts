@@ -83,7 +83,8 @@ export async function salaryRoutes(app: FastifyInstance) {
           'st.transaction_date', 'st.billing_month', 'st.note', 'st.edit_note',
           'st.metadata_json', 'st.created_at',
           'st.rate_id', 'r.rate_type', 'r.rate_category',
-          'st.activity_id', 'a.name as activity_name',
+          sql<string | null>`COALESCE(st.activity_id, r.activity_id)`.as('activity_id'),
+          'a.name as activity_name',
           'st.account_id', 'ac.name as account_name',
         ])
         .orderBy('st.transaction_date', 'asc')
@@ -144,17 +145,20 @@ export async function salaryRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
       const { activity_id, date } = req.query
-      if (!activity_id || !date) return { children: [] }
+      if (!date) return { children: [] }
 
-      const specialLogs = await db
+      let q = db
         .selectFrom('attendance_logs as al')
         .innerJoin('children as c', 'c.id', 'al.child_id')
         .select(['c.full_name'])
-        .where('al.activity_id', '=', activity_id)
         .where('al.date', '=', castAsDate(date))
         .where('al.status', '=', 'special')
-        .execute()
 
+      if (activity_id) {
+        q = q.where('al.activity_id', '=', activity_id)
+      }
+
+      const specialLogs = await q.execute()
       return { children: specialLogs.map(l => l.full_name) }
     }
   )

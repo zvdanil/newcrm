@@ -224,8 +224,9 @@ export const staffApi = {
     return data
   },
 
-  getSpecialChildren: async (activityId: string, date: string): Promise<string[]> => {
-    const { data } = await apiClient.get<{ children: string[] }>(`/staff/salary/special-children?activity_id=${activityId}&date=${date}`)
+  getSpecialChildren: async (activityId: string | undefined, date: string): Promise<string[]> => {
+    const actQuery = activityId ? `activity_id=${activityId}&` : ''
+    const { data } = await apiClient.get<{ children: string[] }>(`/staff/salary/special-children?${actQuery}date=${date}`)
     return data.children ?? []
   },
 

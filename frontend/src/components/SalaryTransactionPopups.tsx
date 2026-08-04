@@ -47,22 +47,24 @@ export function metaDetail(tx: SalaryTransaction): string | null {
   const m = tx.metadata_json as Record<string, unknown> | null
   if (!m) return null
   const src = m.source as string | undefined
+  const specCount = typeof m.special_count === 'number' && m.special_count > 0 ? m.special_count : null
+  const specLabel = specCount ? ` (${specCount} ОР)` : ''
 
   // percent_of_revenue modes
   if (typeof m.revenue === 'number' && typeof m.rate_pct === 'number') {
-    return `${fmt(m.revenue)} грн × ${m.rate_pct}%`
+    return `${fmt(m.revenue)} грн × ${m.rate_pct}%${specLabel}`
   }
 
   if (src === 'auto_per_lesson' || src === 'auto_group_lesson') {
     const qty = typeof m.quantity === 'number' ? m.quantity : 1
     const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
-    return rv != null ? `${qty} заняття × ${fmt(rv)} грн` : `${qty} заняття`
+    return rv != null ? `${qty} заняття × ${fmt(rv)} грн${specLabel}` : `${qty} заняття${specLabel}`
   }
 
   if (src === 'auto_per_child') {
     const qty = typeof m.quantity === 'number' ? m.quantity : '?'
     const rv  = typeof m.rate_value === 'number' ? m.rate_value : null
-    return rv != null ? `${qty} дітей × ${fmt(rv)} грн` : `${qty} дітей`
+    return rv != null ? `${qty} дітей${specLabel} × ${fmt(rv)} грн` : `${qty} дітей${specLabel}`
   }
 
   if (src === 'auto_individual_per_child') {
@@ -321,8 +323,8 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
 
   const { data: fetchedSpecialChildren } = useQuery({
     queryKey: ['special-children', tx.activity_id, txDate],
-    queryFn: () => staffApi.getSpecialChildren(tx.activity_id!, txDate),
-    enabled: !metaChildren && !!tx.activity_id && !!txDate && tx.type === 'ACCRUAL',
+    queryFn: () => staffApi.getSpecialChildren(tx.activity_id ?? undefined, txDate),
+    enabled: !metaChildren && !!txDate && tx.type === 'ACCRUAL',
   })
 
   const specialChildrenList = metaChildren ?? fetchedSpecialChildren ?? []
