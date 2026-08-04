@@ -1677,6 +1677,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                   const dayMap = grid.get(rowKey) ?? new Map<number, SalaryTransaction[]>()
                   let rowTotal = 0
                   let rowHoursTotal = 0
+                  let rowChildrenTotal = 0
                   let isRowHourly = false
 
                   // Find the effective rate for this row: first by exact rowKey, then by
@@ -1705,6 +1706,16 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                           return s + (typeof meta?.quantity === 'number' ? meta.quantity : 0)
                         }, 0) : 0
                         rowHoursTotal += cellHours
+
+                        const cellChildren = !isCellHourly ? cellTxs.reduce((s, t) => {
+                          const meta = t.metadata_json as Record<string, unknown> | null
+                          if (!meta) return s
+                          if (typeof meta.quantity === 'number') return s + meta.quantity
+                          if (Array.isArray(meta.children)) return s + meta.children.length
+                          return s
+                        }, 0) : 0
+                        rowChildrenTotal += cellChildren
+
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
                         const dailyRate_ = rowDailyRate
                         const isWe       = isWeekend(d)
@@ -1738,9 +1749,15 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                   (dailyRate_?.rate_type === 'monthly_by_day' && cellNet === 0) ? 'Н' : (
                                   <>
                                     <span className="block leading-tight">{cellNet % 1 === 0 ? cellNet : cellNet.toFixed(0)}</span>
-                                    {isCellHourly && cellHours > 0 && (
-                                      <span className="block text-[9px] opacity-60 leading-none">{cellHours.toFixed(1)}</span>
-                                    )}
+                                    {isCellHourly && cellHours > 0 ? (
+                                      <span className="block text-[9px] opacity-60 leading-none">
+                                        {cellHours % 1 === 0 ? cellHours : cellHours.toFixed(1)} ч.
+                                      </span>
+                                    ) : cellChildren > 0 ? (
+                                      <span className="block text-[9px] opacity-60 leading-none">
+                                        {cellChildren} д.
+                                      </span>
+                                    ) : null}
                                   </>
                                 )}
                               </button>
@@ -1765,9 +1782,15 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         {rowTotal > 0 ? (
                           <>
                             <span className="block leading-tight">{fmt(rowTotal)}</span>
-                            {isRowHourly && rowHoursTotal > 0 && (
-                              <span className="block text-[9px] opacity-60 leading-none">{rowHoursTotal.toFixed(1)}</span>
-                            )}
+                            {isRowHourly && rowHoursTotal > 0 ? (
+                              <span className="block text-[9px] opacity-60 leading-none">
+                                {rowHoursTotal % 1 === 0 ? rowHoursTotal : rowHoursTotal.toFixed(1)} ч.
+                              </span>
+                            ) : rowChildrenTotal > 0 ? (
+                              <span className="block text-[9px] opacity-60 leading-none">
+                                {rowChildrenTotal} д.
+                              </span>
+                            ) : null}
                           </>
                         ) : '—'}
                       </td>
