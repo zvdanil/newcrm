@@ -1678,6 +1678,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                   let rowTotal = 0
                   let rowHoursTotal = 0
                   let rowChildrenTotal = 0
+                  let rowOrTotal = 0
                   let isRowHourly = false
 
                   // Find the effective rate for this row: first by exact rowKey, then by
@@ -1734,6 +1735,16 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                         }, 0) : 0
                         rowChildrenTotal += cellChildren
 
+                        const cellOrCount = !isCellHourly ? cellTxs.reduce((s, t) => {
+                          const meta = t.metadata_json as Record<string, unknown> | null
+                          if (meta) {
+                            if (typeof meta.special_count === 'number') return s + meta.special_count
+                            if (Array.isArray(meta.special_children)) return s + meta.special_children.length
+                          }
+                          return s
+                        }, 0) : 0
+                        rowOrTotal += cellOrCount
+
                         const dateStr    = `${month}-${String(d).padStart(2, '0')}`
                         const dailyRate_ = rowDailyRate
                         const isWe       = isWeekend(d)
@@ -1773,7 +1784,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                       </span>
                                     ) : cellChildren > 0 ? (
                                       <span className="block text-[9px] opacity-60 leading-none">
-                                        {cellChildren} д.
+                                        {cellOrCount > 0 ? `${Math.max(0, cellChildren - cellOrCount)}д/${cellOrCount}ОР` : `${cellChildren} д.`}
                                       </span>
                                     ) : null}
                                   </>
@@ -1806,7 +1817,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                               </span>
                             ) : rowChildrenTotal > 0 ? (
                               <span className="block text-[9px] opacity-60 leading-none">
-                                {rowChildrenTotal} д.
+                                {rowOrTotal > 0 ? `${Math.max(0, rowChildrenTotal - rowOrTotal)}д/${rowOrTotal}ОР` : `${rowChildrenTotal} д.`}
                               </span>
                             ) : null}
                           </>
