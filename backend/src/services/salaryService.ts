@@ -429,7 +429,7 @@ async function computeGross(
   if (rate.value_mode === 'percent_of_revenue') {
     const revenue = await revenueForActivityDate(activityId, dateObj)
     const gross   = Math.round(revenue * rv / 100 * 100) / 100
-    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, revenue, rate_pct: rv } }
+    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, quantity: presentCount, revenue, rate_pct: rv } }
   }
 
   if (rate.rate_type === 'per_lesson') {

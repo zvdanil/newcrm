@@ -1709,9 +1709,27 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
                         const cellChildren = !isCellHourly ? cellTxs.reduce((s, t) => {
                           const meta = t.metadata_json as Record<string, unknown> | null
-                          if (!meta) return s
-                          if (typeof meta.quantity === 'number') return s + meta.quantity
-                          if (Array.isArray(meta.children)) return s + meta.children.length
+                          if (meta) {
+                            if (typeof meta.quantity === 'number' && meta.quantity > 0) return s + meta.quantity
+                            if (typeof meta.present_count === 'number' && meta.present_count > 0) return s + meta.present_count
+                            if (Array.isArray(meta.children) && meta.children.length > 0) return s + meta.children.length
+                            if (typeof meta.rate_value === 'number' && meta.rate_value > 0) {
+                              const q = Math.round(Number(t.gross_amount) / meta.rate_value)
+                              if (q > 0) return s + q
+                            }
+                          }
+
+                          // Fallback: check rate from rates list or rowDailyRate or t.rate_id
+                          const txRate = rates.find(r => r.id === t.rate_id) ?? rowDailyRate
+                          if (txRate && Number(txRate.rate_value) > 0) {
+                            const isPerChildRate = ['per_child', 'individual_per_child', 'smart_per_child', 'group_lesson'].includes(t.rate_type ?? txRate.rate_type)
+                              || actName.toLowerCase().includes('дитину')
+                            if (isPerChildRate) {
+                              const q = Math.round(Number(t.gross_amount) / Number(txRate.rate_value))
+                              if (q > 0) return s + q
+                            }
+                          }
+
                           return s
                         }, 0) : 0
                         rowChildrenTotal += cellChildren
