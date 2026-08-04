@@ -1,3 +1,4 @@
+import { castAsDate } from '../services/dateUtils.js'
 import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
@@ -145,13 +146,12 @@ export async function salaryRoutes(app: FastifyInstance) {
       const { activity_id, date } = req.query
       if (!activity_id || !date) return { children: [] }
 
-      const dateObj = new Date(date)
       const specialLogs = await db
         .selectFrom('attendance_logs as al')
         .innerJoin('children as c', 'c.id', 'al.child_id')
         .select(['c.full_name'])
         .where('al.activity_id', '=', activity_id)
-        .where('al.date', '=', dateObj)
+        .where('al.date', '=', castAsDate(date))
         .where('al.status', '=', 'special')
         .execute()
 
