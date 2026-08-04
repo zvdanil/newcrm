@@ -1,4 +1,4 @@
-import { castAsDate } from '../services/dateUtils.js'
+import { castAsDate, toDbDateStr } from '../services/dateUtils.js'
 import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
@@ -90,6 +90,45 @@ export async function salaryRoutes(app: FastifyInstance) {
         .orderBy('st.transaction_date', 'asc')
         .orderBy('st.created_at', 'asc')
         .execute()
+
+      // Dynamically enrich transactions metadata_json with OR children attendance info
+      const specialLogs = await db
+        .selectFrom('attendance_logs as al')
+        .innerJoin('children as c', 'c.id', 'al.child_id')
+        .select(['al.activity_id', 'al.date', 'c.full_name'])
+        .where('al.date', '>=', castAsDate(billingStart))
+        .where('al.date', '<', castAsDate(billingEnd))
+        .where('al.status', 'in', ['special', 'separate_billing'])
+        .execute()
+
+      const specialMap = new Map<string, string[]>()
+      for (const log of specialLogs) {
+        const dStr = toDbDateStr(log.date)
+        const key = `${log.activity_id}::${dStr}`
+        if (!specialMap.has(key)) specialMap.set(key, [])
+        specialMap.get(key)!.push(log.full_name)
+      }
+
+      for (const tx of txs) {
+        if (tx.type !== 'ACCRUAL') continue
+        const actId = tx.activity_id
+        const dStr = toDbDateStr(tx.transaction_date)
+        const key = `${actId}::${dStr}`
+        let specNames = specialMap.get(key)
+        if (!specNames && !actId) {
+          specNames = Array.from(specialMap.entries())
+            .filter(([k]) => k.endsWith(`::${dStr}`))
+            .flatMap(([, v]) => v)
+        }
+        if (specNames && specNames.length > 0) {
+          const meta = (tx.metadata_json as Record<string, unknown> | null) ?? {}
+          tx.metadata_json = {
+            ...meta,
+            special_count: specNames.length,
+            special_children: specNames,
+          }
+        }
+      }
 
       // Summary for current month
       let totalGross = 0, totalDeduction = 0, totalPaid = 0
