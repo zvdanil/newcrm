@@ -1784,7 +1784,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                                       </span>
                                     ) : cellChildren > 0 ? (
                                       <span className="block text-[9px] opacity-60 leading-none">
-                                        {cellOrCount > 0 ? `${Math.max(0, cellChildren - cellOrCount)}д/${cellOrCount}ОР` : `${cellChildren} д.`}
+                                        {cellOrCount > 0 ? `${Math.max(0, cellChildren - cellOrCount)}д/${cellOrCount} ОР` : `${cellChildren} д.`}
                                       </span>
                                     ) : null}
                                   </>
@@ -1817,7 +1817,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
                               </span>
                             ) : rowChildrenTotal > 0 ? (
                               <span className="block text-[9px] opacity-60 leading-none">
-                                {rowOrTotal > 0 ? `${Math.max(0, rowChildrenTotal - rowOrTotal)}д/${rowOrTotal}ОР` : `${rowChildrenTotal} д.`}
+                                {rowOrTotal > 0 ? `${Math.max(0, rowChildrenTotal - rowOrTotal)}д/${rowOrTotal} ОР` : `${rowChildrenTotal} д.`}
                               </span>
                             ) : null}
                           </>
