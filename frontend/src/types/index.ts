@@ -105,6 +105,7 @@ export interface Tariff {
   base_lessons?: number | null
   l1_threshold_absences?: number | null
   l1_threshold_fee?: string | null
+  l1_min_attended_lessons?: number | null
   l2_max_refunds?: number | null
   l2_refund_per_absence?: string | null
   rules_json?: unknown | null
@@ -116,6 +117,7 @@ export interface SmartTariffConfig {
   base_lessons: number
   l1_threshold_absences: number | null
   l1_threshold_fee: string | null
+  l1_min_attended_lessons: number | null
   l2_max_refunds: number | null
   l2_refund_per_absence: string | null
   rules_json?: unknown | null

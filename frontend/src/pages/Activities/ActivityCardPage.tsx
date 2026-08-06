@@ -147,6 +147,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
     l1_enabled: false,
     l1_threshold_absences: '',
     l1_threshold_fee: '',
+    l1_min_attended_lessons: '',
     l2_enabled: false,
     l2_max_refunds: '',
     l2_refund_per_absence: '',
@@ -163,6 +164,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
       base_lessons: form.base_lessons,
       l1_threshold_absences: form.l1_enabled && form.l1_threshold_absences ? Number(form.l1_threshold_absences) : null,
       l1_threshold_fee: form.l1_enabled && form.l1_threshold_fee ? Number(form.l1_threshold_fee) : null,
+      l1_min_attended_lessons: form.l1_enabled && form.l1_min_attended_lessons ? Number(form.l1_min_attended_lessons) : null,
       l2_max_refunds: form.l2_enabled && form.l2_max_refunds ? Number(form.l2_max_refunds) : null,
       l2_refund_per_absence: form.l2_enabled && form.l2_refund_per_absence ? Number(form.l2_refund_per_absence) : null,
     }),
@@ -181,6 +183,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
       l1_enabled: config?.l1_threshold_absences != null,
       l1_threshold_absences: config?.l1_threshold_absences?.toString() ?? '',
       l1_threshold_fee: config?.l1_threshold_fee ?? '',
+      l1_min_attended_lessons: config?.l1_min_attended_lessons?.toString() ?? '',
       l2_enabled: config?.l2_max_refunds != null,
       l2_max_refunds: config?.l2_max_refunds?.toString() ?? '',
       l2_refund_per_absence: config?.l2_refund_per_absence ?? '',
@@ -226,6 +229,9 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
               <span className="font-medium text-iris-700">Логіка 1 · </span>
               <span className="text-gray-700">
                 При ≥{config.l1_threshold_absences} пропусків → {Number(config.l1_threshold_fee).toFixed(2)} грн замість повного тарифу
+                {config.l1_min_attended_lessons != null && (
+                  <span className="text-gray-500 text-xs font-normal"> (якщо відвідано &lt; {config.l1_min_attended_lessons} занять)</span>
+                )}
               </span>
             </div>
           )}
@@ -261,7 +267,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
               <span className="text-sm font-medium text-gray-700">Логіка 1: знижена абонплата при порозі пропусків</span>
             </label>
             {form.l1_enabled && (
-              <div className="ml-6 grid grid-cols-2 gap-3">
+              <div className="ml-6 grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Поріг пропусків (≥)</label>
                   <input type="number" min="1" value={form.l1_threshold_absences}
@@ -274,6 +280,13 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
                   <input type="number" min="0" step="0.01" value={form.l1_threshold_fee}
                     onChange={(e) => setForm({ ...form, l1_threshold_fee: e.target.value })}
                     placeholder="напр. 1500"
+                    className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Мін. відвіданих (для повного тарифу)</label>
+                  <input type="number" min="1" value={form.l1_min_attended_lessons}
+                    onChange={(e) => setForm({ ...form, l1_min_attended_lessons: e.target.value })}
+                    placeholder="напр. 6 (необовʼязково)"
                     className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
                 </div>
               </div>
@@ -341,6 +354,7 @@ export function ActivityCardPage() {
     l1_enabled: false,
     l1_threshold_absences: '',
     l1_threshold_fee: '',
+    l1_min_attended_lessons: '',
     l2_enabled: false,
     l2_max_refunds: '',
     l2_refund_per_absence: '',
@@ -386,6 +400,7 @@ export function ActivityCardPage() {
       l1_enabled: currentSmartConfig?.l1_threshold_absences != null,
       l1_threshold_absences: currentSmartConfig?.l1_threshold_absences?.toString() ?? '',
       l1_threshold_fee: currentSmartConfig?.l1_threshold_fee ?? '',
+      l1_min_attended_lessons: currentSmartConfig?.l1_min_attended_lessons?.toString() ?? '',
       l2_enabled: currentSmartConfig?.l2_max_refunds != null,
       l2_max_refunds: currentSmartConfig?.l2_max_refunds?.toString() ?? '',
       l2_refund_per_absence: currentSmartConfig?.l2_refund_per_absence ?? '',
@@ -432,6 +447,7 @@ export function ActivityCardPage() {
           base_lessons: newTariff.base_lessons,
           l1_threshold_absences: newTariff.l1_enabled && newTariff.l1_threshold_absences ? Number(newTariff.l1_threshold_absences) : null,
           l1_threshold_fee: newTariff.l1_enabled && newTariff.l1_threshold_fee ? Number(newTariff.l1_threshold_fee) : null,
+          l1_min_attended_lessons: newTariff.l1_enabled && newTariff.l1_min_attended_lessons ? Number(newTariff.l1_min_attended_lessons) : null,
           l2_max_refunds: newTariff.l2_enabled && newTariff.l2_max_refunds ? Number(newTariff.l2_max_refunds) : null,
           l2_refund_per_absence: newTariff.l2_enabled && newTariff.l2_refund_per_absence ? Number(newTariff.l2_refund_per_absence) : null,
         } : {})
@@ -772,7 +788,7 @@ export function ActivityCardPage() {
                     <span className="text-xs font-medium text-gray-700">Логіка 1: знижена абонплата при порозі пропусків</span>
                   </label>
                   {newTariff.l1_enabled && (
-                    <div className="ml-5 grid grid-cols-2 gap-2">
+                    <div className="ml-5 grid grid-cols-3 gap-2">
                       <div>
                         <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Поріг пропусків (≥)</label>
                         <input type="number" min="1" value={newTariff.l1_threshold_absences}
@@ -785,6 +801,13 @@ export function ActivityCardPage() {
                         <input type="number" min="0" step="0.01" value={newTariff.l1_threshold_fee}
                           onChange={(e) => setNewTariff({ ...newTariff, l1_threshold_fee: e.target.value })}
                           placeholder="напр. 1500"
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Мін. відвіданих (для повного)</label>
+                        <input type="number" min="1" value={newTariff.l1_min_attended_lessons}
+                          onChange={(e) => setNewTariff({ ...newTariff, l1_min_attended_lessons: e.target.value })}
+                          placeholder="напр. 6 (необовʼязково)"
                           className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
                       </div>
                     </div>
@@ -851,7 +874,12 @@ export function ActivityCardPage() {
                   {activity?.tariff_type === 'smart' && (
                     <td className="py-2 text-xs">
                       {t.l1_threshold_absences != null && (
-                        <div>Л1: ≥{t.l1_threshold_absences} пропусків → {Number(t.l1_threshold_fee).toFixed(2)} грн</div>
+                        <div>
+                          Л1: ≥{t.l1_threshold_absences} пропусків → {Number(t.l1_threshold_fee).toFixed(2)} грн
+                          {t.l1_min_attended_lessons != null && (
+                            <span className="text-gray-400"> (якщо відвідано &lt; {t.l1_min_attended_lessons})</span>
+                          )}
+                        </div>
                       )}
                       {t.l2_max_refunds != null && (
                         <div>Л2: перші {t.l2_max_refunds} пропусків по {Number(t.l2_refund_per_absence).toFixed(2)} грн</div>

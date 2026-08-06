@@ -127,6 +127,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
           'stc.base_lessons',
           'stc.l1_threshold_absences',
           'stc.l1_threshold_fee',
+          'stc.l1_min_attended_lessons',
           'stc.l2_max_refunds',
           'stc.l2_refund_per_absence',
           'stc.rules_json',
@@ -146,6 +147,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
       base_lessons?: number
       l1_threshold_absences?: number | null
       l1_threshold_fee?: number | null
+      l1_min_attended_lessons?: number | null
       l2_max_refunds?: number | null
       l2_refund_per_absence?: number | null
       rules_json?: unknown | null
@@ -156,7 +158,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const {
         base_fee, valid_from, base_lessons = 20,
-        l1_threshold_absences, l1_threshold_fee,
+        l1_threshold_absences, l1_threshold_fee, l1_min_attended_lessons,
         l2_max_refunds, l2_refund_per_absence, rules_json
       } = req.body
       if (base_fee === undefined || base_fee < 0) return reply.status(400).send({ error: 'BadRequest', message: 'base_fee є обовʼязковим і >= 0' })
@@ -195,6 +197,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
         // Создаем соответствующий смарт-конфиг
         const l1Abs = l1_threshold_absences !== undefined ? l1_threshold_absences : (prevSmartConfig?.l1_threshold_absences ?? null)
         const l1Fee = l1_threshold_fee !== undefined ? l1_threshold_fee : (prevSmartConfig?.l1_threshold_fee ?? null)
+        const l1Min = l1_min_attended_lessons !== undefined ? l1_min_attended_lessons : (prevSmartConfig?.l1_min_attended_lessons ?? null)
         const l2Max = l2_max_refunds !== undefined ? l2_max_refunds : (prevSmartConfig?.l2_max_refunds ?? null)
         const l2Ref = l2_refund_per_absence !== undefined ? l2_refund_per_absence : (prevSmartConfig?.l2_refund_per_absence ?? null)
         const rules = rules_json !== undefined ? rules_json : (prevSmartConfig?.rules_json ?? null)
@@ -207,6 +210,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
             base_lessons: bLessons,
             l1_threshold_absences: l1Abs,
             l1_threshold_fee: l1Fee,
+            l1_min_attended_lessons: l1Min,
             l2_max_refunds: l2Max,
             l2_refund_per_absence: l2Ref,
             rules_json: rules,
@@ -313,6 +317,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
       base_lessons?: number
       l1_threshold_absences?: number | null
       l1_threshold_fee?: number | null
+      l1_min_attended_lessons?: number | null
       l2_max_refunds?: number | null
       l2_refund_per_absence?: number | null
       rules_json?: unknown | null
@@ -323,7 +328,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const {
         base_lessons = 20, l1_threshold_absences, l1_threshold_fee,
-        l2_max_refunds, l2_refund_per_absence, rules_json
+        l1_min_attended_lessons, l2_max_refunds, l2_refund_per_absence, rules_json
       } = req.body
 
       const l1hasThreshold = l1_threshold_absences != null
@@ -367,6 +372,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
           base_lessons,
           l1_threshold_absences: l1_threshold_absences ?? null,
           l1_threshold_fee: l1_threshold_fee ?? null,
+          l1_min_attended_lessons: l1_min_attended_lessons ?? null,
           l2_max_refunds: l2_max_refunds ?? null,
           l2_refund_per_absence: l2_refund_per_absence ?? null,
           rules_json: rules_json ?? null,
@@ -376,6 +382,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
             base_lessons,
             l1_threshold_absences: l1_threshold_absences ?? null,
             l1_threshold_fee: l1_threshold_fee ?? null,
+            l1_min_attended_lessons: l1_min_attended_lessons ?? null,
             l2_max_refunds: l2_max_refunds ?? null,
             l2_refund_per_absence: l2_refund_per_absence ?? null,
             rules_json: rules_json ?? null,

@@ -5,11 +5,12 @@ import { getChildIndividualTariff } from './billingRunService.js'
 import { castAsDate, toDbDateStr } from './dateUtils.js'
 
 type SmartConfig = {
-  base_lessons:          number | null
-  l1_threshold_absences: number | null
-  l1_threshold_fee:      string | null
-  l2_max_refunds:        number | null
-  l2_refund_per_absence: string | null
+  base_lessons:           number | null
+  l1_threshold_absences:  number | null
+  l1_threshold_fee:       string | null
+  l1_min_attended_lessons: number | null
+  l2_max_refunds:         number | null
+  l2_refund_per_absence:  string | null
 }
 
 /**
@@ -35,11 +36,12 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     // Child has individual smart tariff — use its own config and price
     if (ind.l1_threshold_absences === null && ind.l2_max_refunds === null) return // no config yet
     config = {
-      base_lessons:          ind.base_lessons,
-      l1_threshold_absences: ind.l1_threshold_absences,
-      l1_threshold_fee:      ind.l1_threshold_fee as string | null,
-      l2_max_refunds:        ind.l2_max_refunds,
-      l2_refund_per_absence: ind.l2_refund_per_absence as string | null,
+      base_lessons:           ind.base_lessons,
+      l1_threshold_absences:  ind.l1_threshold_absences,
+      l1_threshold_fee:       ind.l1_threshold_fee as string | null,
+      l1_min_attended_lessons: (ind as any).l1_min_attended_lessons ?? null,
+      l2_max_refunds:         ind.l2_max_refunds,
+      l2_refund_per_absence:  ind.l2_refund_per_absence as string | null,
     }
     B = Math.round(parseFloat(ind.price as string) * 100) / 100
   } else {
@@ -73,11 +75,12 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     if (!actConfig) return
 
     config = {
-      base_lessons:          actConfig.base_lessons,
-      l1_threshold_absences: actConfig.l1_threshold_absences,
-      l1_threshold_fee:      actConfig.l1_threshold_fee as string | null,
-      l2_max_refunds:        actConfig.l2_max_refunds,
-      l2_refund_per_absence: actConfig.l2_refund_per_absence as string | null,
+      base_lessons:           actConfig.base_lessons,
+      l1_threshold_absences:  actConfig.l1_threshold_absences,
+      l1_threshold_fee:       actConfig.l1_threshold_fee as string | null,
+      l1_min_attended_lessons: actConfig.l1_min_attended_lessons ?? null,
+      l2_max_refunds:         actConfig.l2_max_refunds,
+      l2_refund_per_absence:  actConfig.l2_refund_per_absence as string | null,
     }
   }
 
@@ -99,11 +102,26 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
 
   const absenceCount = Number(rawCount)
 
+  let attendedCount = 0
+  if (config.l1_min_attended_lessons !== null) {
+    const { count: rawAttended } = await db
+      .selectFrom('attendance_logs')
+      .select((eb) => eb.fn.count<string>('id').as('count'))
+      .where('enrollment_id', '=', enrollmentId)
+      .where('status', 'in', ['present', 'special'])
+      .where('date', '>=', castAsDate(billingMonth))
+      .where('date', '<', castAsDate(nextMonthStr))
+      .executeTakeFirstOrThrow()
+
+    attendedCount = Number(rawAttended)
+  }
+
   let benefitL1 = 0
   let benefitL2 = 0
 
   if (config.l1_threshold_absences !== null && config.l1_threshold_fee !== null) {
-    if (absenceCount >= config.l1_threshold_absences) {
+    const minAttendedReached = config.l1_min_attended_lessons !== null && attendedCount >= config.l1_min_attended_lessons
+    if (absenceCount >= config.l1_threshold_absences && !minAttendedReached) {
       benefitL1 = Math.max(0, B - parseFloat(config.l1_threshold_fee))
     }
   }

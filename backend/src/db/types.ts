@@ -104,15 +104,16 @@ export interface ActivitiesTable {
 }
 
 export interface SmartTariffConfigsTable {
-  tariff_id:             string
-  activity_id:           string | null
-  base_lessons:          Generated<number>
-  l1_threshold_absences: number | null
-  l1_threshold_fee:      ColumnType<string | null, number | string | null, number | string | null>
-  l2_max_refunds:        number | null
-  l2_refund_per_absence: ColumnType<string | null, number | string | null, number | string | null>
-  rules_json:            ColumnType<unknown | null, unknown | null, unknown | null>
-  updated_at:            Generated<Date>
+  tariff_id:              string
+  activity_id:            string | null
+  base_lessons:           Generated<number>
+  l1_threshold_absences:  number | null
+  l1_threshold_fee:       ColumnType<string | null, number | string | null, number | string | null>
+  l1_min_attended_lessons: number | null
+  l2_max_refunds:         number | null
+  l2_refund_per_absence:  ColumnType<string | null, number | string | null, number | string | null>
+  rules_json:             ColumnType<unknown | null, unknown | null, unknown | null>
+  updated_at:             Generated<Date>
 }
 
 export interface TariffsTable {
@@ -415,13 +416,14 @@ export interface ChildIndividualTariffsTable {
 }
 
 export interface ChildSmartTariffConfigsTable {
-  individual_tariff_id:  string
-  base_lessons:          Generated<number>
-  l1_threshold_absences: number | null
-  l1_threshold_fee:      ColumnType<string | null, number | string | null, number | string | null>
-  l2_max_refunds:        number | null
-  l2_refund_per_absence: ColumnType<string | null, number | string | null, number | string | null>
-  updated_at:            Generated<Date>
+  individual_tariff_id:   string
+  base_lessons:           Generated<number>
+  l1_threshold_absences:  number | null
+  l1_threshold_fee:       ColumnType<string | null, number | string | null, number | string | null>
+  l1_min_attended_lessons: number | null
+  l2_max_refunds:         number | null
+  l2_refund_per_absence:  ColumnType<string | null, number | string | null, number | string | null>
+  updated_at:             Generated<Date>
 }
 
 export interface ChildParentsTable {
