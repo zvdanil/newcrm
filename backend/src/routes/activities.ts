@@ -115,25 +115,70 @@ export async function activitiesRoutes(app: FastifyInstance) {
     '/:id/tariff-history',
     { preHandler: authenticate },
     async (req) => {
-      return db.selectFrom('tariffs')
-        .selectAll()
-        .where('activity_id', '=', req.params.id)
-        .orderBy('valid_from', 'desc')
+      return db.selectFrom('tariffs as t')
+        .leftJoin('smart_tariff_configs as stc', 'stc.tariff_id', 't.id')
+        .select([
+          't.id',
+          't.activity_id',
+          't.base_fee',
+          't.valid_from',
+          't.valid_to',
+          't.created_at',
+          'stc.base_lessons',
+          'stc.l1_threshold_absences',
+          'stc.l1_threshold_fee',
+          'stc.l2_max_refunds',
+          'stc.l2_refund_per_absence',
+          'stc.rules_json',
+        ])
+        .where('t.activity_id', '=', req.params.id)
+        .orderBy('t.valid_from', 'desc')
         .execute()
     }
   )
 
-  // POST /api/activities/:id/tariff — новая ставка, закрывает предыдущую
-  app.post<{ Params: { id: string }; Body: { base_fee: number; valid_from?: string } }>(
+  // POST /api/activities/:id/tariff — новая ставка + смарт конфигурация, закрывает предыдущую
+  app.post<{
+    Params: { id: string }
+    Body: {
+      base_fee: number
+      valid_from?: string
+      base_lessons?: number
+      l1_threshold_absences?: number | null
+      l1_threshold_fee?: number | null
+      l2_max_refunds?: number | null
+      l2_refund_per_absence?: number | null
+      rules_json?: unknown | null
+    }
+  }>(
     '/:id/tariff',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { base_fee, valid_from } = req.body
+      const {
+        base_fee, valid_from, base_lessons = 20,
+        l1_threshold_absences, l1_threshold_fee,
+        l2_max_refunds, l2_refund_per_absence, rules_json
+      } = req.body
       if (base_fee === undefined || base_fee < 0) return reply.status(400).send({ error: 'BadRequest', message: 'base_fee є обовʼязковим і >= 0' })
 
       const from = valid_from ?? new Date().toISOString().slice(0, 10)
 
-      const tariff = await db.transaction().execute(async (trx) => {
+      const result = await db.transaction().execute(async (trx) => {
+        // Находим текущий тариф для сохранения его смарт-конфига, если в теле не передали новый
+        const prevTariff = await trx.selectFrom('tariffs')
+          .select('id')
+          .where('activity_id', '=', req.params.id)
+          .where('valid_to', 'is', null)
+          .executeTakeFirst()
+
+        let prevSmartConfig: any = null
+        if (prevTariff) {
+          prevSmartConfig = await trx.selectFrom('smart_tariff_configs')
+            .selectAll()
+            .where('tariff_id', '=', prevTariff.id)
+            .executeTakeFirst()
+        }
+
         // Закрываем текущий актуальный тариф
         await trx.updateTable('tariffs')
           .set({ valid_to: from })
@@ -141,12 +186,38 @@ export async function activitiesRoutes(app: FastifyInstance) {
           .where('valid_to', 'is', null)
           .execute()
 
-        return trx.insertInto('tariffs')
+        // Создаем новый тариф
+        const newTariff = await trx.insertInto('tariffs')
           .values({ activity_id: req.params.id, base_fee, valid_from: from, valid_to: null })
           .returningAll()
           .executeTakeFirstOrThrow()
+
+        // Создаем соответствующий смарт-конфиг
+        const l1Abs = l1_threshold_absences !== undefined ? l1_threshold_absences : (prevSmartConfig?.l1_threshold_absences ?? null)
+        const l1Fee = l1_threshold_fee !== undefined ? l1_threshold_fee : (prevSmartConfig?.l1_threshold_fee ?? null)
+        const l2Max = l2_max_refunds !== undefined ? l2_max_refunds : (prevSmartConfig?.l2_max_refunds ?? null)
+        const l2Ref = l2_refund_per_absence !== undefined ? l2_refund_per_absence : (prevSmartConfig?.l2_refund_per_absence ?? null)
+        const rules = rules_json !== undefined ? rules_json : (prevSmartConfig?.rules_json ?? null)
+        const bLessons = base_lessons !== undefined ? base_lessons : (prevSmartConfig?.base_lessons ?? 20)
+
+        const smartConfig = await trx.insertInto('smart_tariff_configs')
+          .values({
+            tariff_id: newTariff.id,
+            activity_id: req.params.id,
+            base_lessons: bLessons,
+            l1_threshold_absences: l1Abs,
+            l1_threshold_fee: l1Fee,
+            l2_max_refunds: l2Max,
+            l2_refund_per_absence: l2Ref,
+            rules_json: rules,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+
+        return { ...newTariff, ...smartConfig }
       })
-      return reply.status(201).send(tariff)
+
+      return reply.status(201).send(result)
     }
   )
 
@@ -208,16 +279,34 @@ export async function activitiesRoutes(app: FastifyInstance) {
     '/:id/smart-tariff',
     { preHandler: authenticate },
     async (req) => {
-      const config = await db
+      // Ищем смарт-конфиг для текущего активного тарифа
+      const activeTariff = await db
+        .selectFrom('tariffs')
+        .select('id')
+        .where('activity_id', '=', req.params.id)
+        .where('valid_to', 'is', null)
+        .executeTakeFirst()
+
+      if (activeTariff) {
+        const config = await db
+          .selectFrom('smart_tariff_configs')
+          .selectAll()
+          .where('tariff_id', '=', activeTariff.id)
+          .executeTakeFirst()
+        if (config) return config
+      }
+
+      const fallbackConfig = await db
         .selectFrom('smart_tariff_configs')
         .selectAll()
         .where('activity_id', '=', req.params.id)
         .executeTakeFirst()
-      return config ?? null
+
+      return fallbackConfig ?? null
     }
   )
 
-  // PUT /api/activities/:id/smart-tariff — upsert smart config
+  // PUT /api/activities/:id/smart-tariff — upsert smart config for active tariff
   app.put<{
     Params: { id: string }
     Body: {
@@ -226,12 +315,16 @@ export async function activitiesRoutes(app: FastifyInstance) {
       l1_threshold_fee?: number | null
       l2_max_refunds?: number | null
       l2_refund_per_absence?: number | null
+      rules_json?: unknown | null
     }
   }>(
     '/:id/smart-tariff',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { base_lessons = 20, l1_threshold_absences, l1_threshold_fee, l2_max_refunds, l2_refund_per_absence } = req.body
+      const {
+        base_lessons = 20, l1_threshold_absences, l1_threshold_fee,
+        l2_max_refunds, l2_refund_per_absence, rules_json
+      } = req.body
 
       const l1hasThreshold = l1_threshold_absences != null
       const l1hasFee       = l1_threshold_fee != null
@@ -245,23 +338,47 @@ export async function activitiesRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'l2_max_refunds і l2_refund_per_absence мають бути вказані разом або не вказані взагалі' })
       }
 
+      let activeTariff = await db
+        .selectFrom('tariffs')
+        .select('id')
+        .where('activity_id', '=', req.params.id)
+        .where('valid_to', 'is', null)
+        .executeTakeFirst()
+
+      if (!activeTariff) {
+        // Создаем стартовый тариф, если его нет
+        activeTariff = await db
+          .insertInto('tariffs')
+          .values({
+            activity_id: req.params.id,
+            base_fee: 0,
+            valid_from: new Date().toISOString().slice(0, 10),
+            valid_to: null,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      }
+
       const config = await db
         .insertInto('smart_tariff_configs')
         .values({
+          tariff_id: activeTariff.id,
           activity_id: req.params.id,
           base_lessons,
           l1_threshold_absences: l1_threshold_absences ?? null,
           l1_threshold_fee: l1_threshold_fee ?? null,
           l2_max_refunds: l2_max_refunds ?? null,
           l2_refund_per_absence: l2_refund_per_absence ?? null,
+          rules_json: rules_json ?? null,
         })
         .onConflict((oc) =>
-          oc.column('activity_id').doUpdateSet({
+          oc.column('tariff_id').doUpdateSet({
             base_lessons,
             l1_threshold_absences: l1_threshold_absences ?? null,
             l1_threshold_fee: l1_threshold_fee ?? null,
             l2_max_refunds: l2_max_refunds ?? null,
             l2_refund_per_absence: l2_refund_per_absence ?? null,
+            rules_json: rules_json ?? null,
             updated_at: new Date().toISOString() as unknown as Date,
           })
         )

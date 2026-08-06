@@ -104,12 +104,14 @@ export interface ActivitiesTable {
 }
 
 export interface SmartTariffConfigsTable {
-  activity_id:           string
+  tariff_id:             string
+  activity_id:           string | null
   base_lessons:          Generated<number>
   l1_threshold_absences: number | null
   l1_threshold_fee:      ColumnType<string | null, number | string | null, number | string | null>
   l2_max_refunds:        number | null
   l2_refund_per_absence: ColumnType<string | null, number | string | null, number | string | null>
+  rules_json:            ColumnType<unknown | null, unknown | null, unknown | null>
   updated_at:            Generated<Date>
 }
 

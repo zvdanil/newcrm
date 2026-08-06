@@ -27,7 +27,15 @@ export const activitiesApi = {
     return data
   },
 
-  setTariff: async (id: string, payload: { base_fee: number; valid_from?: string }) => {
+  setTariff: async (id: string, payload: {
+    base_fee: number
+    valid_from?: string
+    base_lessons?: number
+    l1_threshold_absences?: number | null
+    l1_threshold_fee?: number | null
+    l2_max_refunds?: number | null
+    l2_refund_per_absence?: number | null
+  }) => {
     const { data } = await apiClient.post<Tariff>(`/activities/${id}/tariff`, payload)
     return data
   },

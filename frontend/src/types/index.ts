@@ -102,15 +102,23 @@ export interface Tariff {
   valid_from: string
   valid_to: string | null
   created_at: string
+  base_lessons?: number | null
+  l1_threshold_absences?: number | null
+  l1_threshold_fee?: string | null
+  l2_max_refunds?: number | null
+  l2_refund_per_absence?: string | null
+  rules_json?: unknown | null
 }
 
 export interface SmartTariffConfig {
-  activity_id: string
+  tariff_id?: string
+  activity_id: string | null
   base_lessons: number
   l1_threshold_absences: number | null
   l1_threshold_fee: string | null
   l2_max_refunds: number | null
   l2_refund_per_absence: string | null
+  rules_json?: unknown | null
   updated_at: string
 }
 

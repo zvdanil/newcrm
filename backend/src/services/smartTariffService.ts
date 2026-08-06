@@ -43,12 +43,32 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     }
     B = Math.round(parseFloat(ind.price as string) * 100) / 100
   } else {
-    // Activity-level smart config
-    const actConfig = await db
+    // Activity-level smart config bound to the tariff active during billingMonth
+    const tariff = await db
+      .selectFrom('tariffs')
+      .select(['id', 'base_fee'])
+      .where('activity_id', '=', enrollment.activity_id)
+      .where('valid_from', '<=', castAsDate(billingMonth))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(billingMonth))]))
+      .orderBy('valid_from', 'desc')
+      .executeTakeFirst()
+
+    if (!tariff) return
+    B = parseFloat(tariff.base_fee as string)
+
+    let actConfig = await db
       .selectFrom('smart_tariff_configs')
       .selectAll()
-      .where('activity_id', '=', enrollment.activity_id)
+      .where('tariff_id', '=', tariff.id)
       .executeTakeFirst()
+
+    if (!actConfig) {
+      actConfig = await db
+        .selectFrom('smart_tariff_configs')
+        .selectAll()
+        .where('activity_id', '=', enrollment.activity_id)
+        .executeTakeFirst()
+    }
 
     if (!actConfig) return
 
@@ -59,19 +79,6 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
       l2_max_refunds:        actConfig.l2_max_refunds,
       l2_refund_per_absence: actConfig.l2_refund_per_absence as string | null,
     }
-
-    // Use individual price if activity-level override exists, otherwise tariff base_fee
-    const tariff = await db
-      .selectFrom('tariffs')
-      .select('base_fee')
-      .where('activity_id', '=', enrollment.activity_id)
-      .where('valid_from', '<=', castAsDate(billingMonth))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(billingMonth))]))
-      .orderBy('valid_from', 'desc')
-      .executeTakeFirst()
-
-    if (!tariff) return
-    B = parseFloat(tariff.base_fee as string)
   }
 
   if (!config || B <= 0) return

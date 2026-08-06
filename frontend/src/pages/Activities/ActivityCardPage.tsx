@@ -168,6 +168,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['activity-smart-tariff', activityId] })
+      qc.invalidateQueries({ queryKey: ['activity-tariffs', activityId] })
       setEditing(false)
       setError(null)
     },
@@ -333,7 +334,17 @@ export function ActivityCardPage() {
   const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, has_group_classes: false, auto_group_classes: false, note: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const [newTariff, setNewTariff] = useState({ base_fee: '', valid_from: today() })
+  const [newTariff, setNewTariff] = useState({
+    base_fee: '',
+    valid_from: today(),
+    base_lessons: 20,
+    l1_enabled: false,
+    l1_threshold_absences: '',
+    l1_threshold_fee: '',
+    l2_enabled: false,
+    l2_max_refunds: '',
+    l2_refund_per_absence: '',
+  })
   const [showTariffForm, setShowTariffForm] = useState(false)
   const [tariffError, setTariffError] = useState<string | null>(null)
   const [recalcFrom, setRecalcFrom] = useState(today())
@@ -361,6 +372,28 @@ export function ActivityCardPage() {
     enabled: !!id,
   })
 
+  const { data: currentSmartConfig } = useQuery({
+    queryKey: ['activity-smart-tariff', id],
+    queryFn: () => activitiesApi.getSmartTariff(id!),
+    enabled: !!id && activity?.tariff_type === 'smart',
+  })
+
+  const handleOpenTariffForm = () => {
+    setNewTariff({
+      base_fee: '',
+      valid_from: today(),
+      base_lessons: currentSmartConfig?.base_lessons ?? 20,
+      l1_enabled: currentSmartConfig?.l1_threshold_absences != null,
+      l1_threshold_absences: currentSmartConfig?.l1_threshold_absences?.toString() ?? '',
+      l1_threshold_fee: currentSmartConfig?.l1_threshold_fee ?? '',
+      l2_enabled: currentSmartConfig?.l2_max_refunds != null,
+      l2_max_refunds: currentSmartConfig?.l2_max_refunds?.toString() ?? '',
+      l2_refund_per_absence: currentSmartConfig?.l2_refund_per_absence ?? '',
+    })
+    setShowTariffForm(true)
+    setTariffError(null)
+  }
+
   useEffect(() => {
     if (history.length > 0) {
       const latest = history.reduce((a, b) => String(a.valid_from) > String(b.valid_from) ? a : b)
@@ -383,15 +416,35 @@ export function ActivityCardPage() {
   })
 
   const tariffMutation = useMutation({
-    mutationFn: () => activitiesApi.setTariff(id!, { base_fee: Number(newTariff.base_fee), valid_from: newTariff.valid_from }),
+    mutationFn: () => {
+      if (activity?.tariff_type === 'smart') {
+        if (newTariff.l1_enabled && (!newTariff.l1_threshold_absences || !newTariff.l1_threshold_fee)) {
+          throw new Error('Для логіки 1 вкажіть поріг пропусків і суму')
+        }
+        if (newTariff.l2_enabled && (!newTariff.l2_max_refunds || !newTariff.l2_refund_per_absence)) {
+          throw new Error('Для логіки 2 вкажіть ліміт і суму за пропуск')
+        }
+      }
+      return activitiesApi.setTariff(id!, {
+        base_fee: Number(newTariff.base_fee),
+        valid_from: newTariff.valid_from,
+        ...(activity?.tariff_type === 'smart' ? {
+          base_lessons: newTariff.base_lessons,
+          l1_threshold_absences: newTariff.l1_enabled && newTariff.l1_threshold_absences ? Number(newTariff.l1_threshold_absences) : null,
+          l1_threshold_fee: newTariff.l1_enabled && newTariff.l1_threshold_fee ? Number(newTariff.l1_threshold_fee) : null,
+          l2_max_refunds: newTariff.l2_enabled && newTariff.l2_max_refunds ? Number(newTariff.l2_max_refunds) : null,
+          l2_refund_per_absence: newTariff.l2_enabled && newTariff.l2_refund_per_absence ? Number(newTariff.l2_refund_per_absence) : null,
+        } : {})
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['activity', id] })
       qc.invalidateQueries({ queryKey: ['activity-tariffs', id] })
+      qc.invalidateQueries({ queryKey: ['activity-smart-tariff', id] })
       setShowTariffForm(false)
-      setNewTariff({ base_fee: '', valid_from: today() })
       setTariffError(null)
     },
-    onError: () => setTariffError('Помилка при збереженні тарифу'),
+    onError: (err: any) => setTariffError(err.message || 'Помилка при збереженні тарифу'),
   })
 
   const recalcMutation = useMutation({
@@ -681,7 +734,7 @@ export function ActivityCardPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-medium text-gray-900">Історія тарифів</h2>
           {canEdit && !showTariffForm && (
-            <button onClick={() => setShowTariffForm(true)} className="text-sm text-iris-600 hover:text-iris-700 font-medium">+ Новий тариф</button>
+            <button onClick={handleOpenTariffForm} className="text-sm text-iris-600 hover:text-iris-700 font-medium">+ Новий тариф</button>
           )}
         </div>
 
@@ -701,6 +754,72 @@ export function ActivityCardPage() {
                   className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
               </div>
             </div>
+
+            {activity?.tariff_type === 'smart' && (
+              <div className="border-t border-iris-200 pt-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-medium text-gray-700">Базових занять на місяць:</label>
+                  <input type="number" min="1" max="31" value={newTariff.base_lessons}
+                    onChange={(e) => setNewTariff({ ...newTariff, base_lessons: Number(e.target.value) })}
+                    className="w-16 rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+
+                <div className="border border-iris-200 bg-white rounded-lg p-3 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={newTariff.l1_enabled}
+                      onChange={(e) => setNewTariff({ ...newTariff, l1_enabled: e.target.checked })}
+                      className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                    <span className="text-xs font-medium text-gray-700">Логіка 1: знижена абонплата при порозі пропусків</span>
+                  </label>
+                  {newTariff.l1_enabled && (
+                    <div className="ml-5 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Поріг пропусків (≥)</label>
+                        <input type="number" min="1" value={newTariff.l1_threshold_absences}
+                          onChange={(e) => setNewTariff({ ...newTariff, l1_threshold_absences: e.target.value })}
+                          placeholder="напр. 5"
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Сума до нарахування (грн)</label>
+                        <input type="number" min="0" step="0.01" value={newTariff.l1_threshold_fee}
+                          onChange={(e) => setNewTariff({ ...newTariff, l1_threshold_fee: e.target.value })}
+                          placeholder="напр. 1500"
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-iris-200 bg-white rounded-lg p-3 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={newTariff.l2_enabled}
+                      onChange={(e) => setNewTariff({ ...newTariff, l2_enabled: e.target.checked })}
+                      className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                    <span className="text-xs font-medium text-gray-700">Логіка 2: повернення за перші N пропусків</span>
+                  </label>
+                  {newTariff.l2_enabled && (
+                    <div className="ml-5 grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Макс. пропусків з поверненням</label>
+                        <input type="number" min="1" value={newTariff.l2_max_refunds}
+                          onChange={(e) => setNewTariff({ ...newTariff, l2_max_refunds: e.target.value })}
+                          placeholder="напр. 4"
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Повернення за пропуск (грн)</label>
+                        <input type="number" min="0" step="0.01" value={newTariff.l2_refund_per_absence}
+                          onChange={(e) => setNewTariff({ ...newTariff, l2_refund_per_absence: e.target.value })}
+                          placeholder="напр. 100"
+                          className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
             <div className="flex gap-2">
               <button onClick={() => { if (!newTariff.base_fee) { setTariffError('Вкажіть суму'); return } tariffMutation.mutate() }}
@@ -721,6 +840,7 @@ export function ActivityCardPage() {
               <th className="text-left pb-2">Сума</th>
               <th className="text-left pb-2">Діє з</th>
               <th className="text-left pb-2">Діє до</th>
+              {activity?.tariff_type === 'smart' && <th className="text-left pb-2">Смарт-логіки</th>}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {history.map((t) => (
@@ -728,6 +848,19 @@ export function ActivityCardPage() {
                   <td className="py-2">{Number(t.base_fee).toFixed(2)} грн</td>
                   <td className="py-2">{formatDate(String(t.valid_from))}</td>
                   <td className="py-2">{t.valid_to ? formatDate(String(t.valid_to)) : <span className="text-green-600 text-xs">поточний</span>}</td>
+                  {activity?.tariff_type === 'smart' && (
+                    <td className="py-2 text-xs">
+                      {t.l1_threshold_absences != null && (
+                        <div>Л1: ≥{t.l1_threshold_absences} пропусків → {Number(t.l1_threshold_fee).toFixed(2)} грн</div>
+                      )}
+                      {t.l2_max_refunds != null && (
+                        <div>Л2: перші {t.l2_max_refunds} пропусків по {Number(t.l2_refund_per_absence).toFixed(2)} грн</div>
+                      )}
+                      {t.l1_threshold_absences == null && t.l2_max_refunds == null && (
+                        <span className="text-gray-400">Без смарт-логік</span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
