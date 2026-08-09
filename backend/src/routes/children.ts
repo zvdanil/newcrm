@@ -796,6 +796,25 @@ export async function childrenRoutes(app: FastifyInstance) {
         }))
         .execute()
 
+      const indTariff = await db.selectFrom('child_individual_tariffs')
+        .select(['activity_id'])
+        .where('id', '=', req.params.tariffId)
+        .where('child_id', '=', req.params.id)
+        .executeTakeFirst()
+
+      if (indTariff) {
+        const enrollment = await db.selectFrom('enrollments').select('id')
+          .where('child_id', '=', req.params.id)
+          .where('activity_id', '=', indTariff.activity_id)
+          .where('status', 'in', ['active', 'frozen'])
+          .executeTakeFirst()
+        if (enrollment) {
+          const now = new Date()
+          const mStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+          await recalcSmartBenefit(enrollment.id, mStr)
+        }
+      }
+
       return reply.send({ ok: true })
     }
   )

@@ -32,7 +32,7 @@ async function triggerRefund(
       .select('base_fee')
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', castAsDate(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst(),
   ])
@@ -273,6 +273,103 @@ function buildNotesJsonUpsert(userId: string, userRole: string, userName: string
   `
 }
 
+/**
+ * Synchronizes financial transactions (accruals, refunds, smart benefits) when an attendance log
+ * is created, updated, or deleted. Unified across POST, PUT, and DELETE routes.
+ */
+export async function syncAttendanceFinancials(params: {
+  enrollmentId: string
+  childId: string
+  accountId: string
+  activityId: string
+  date: string
+  oldStatus: string | null
+  newStatus: string | null
+  oldCustomAmount?: number | null
+  newCustomAmount?: number | null
+  userId: string | null
+}): Promise<void> {
+  const {
+    enrollmentId,
+    childId,
+    accountId,
+    activityId,
+    date,
+    oldStatus,
+    newStatus,
+    oldCustomAmount,
+    newCustomAmount,
+    userId,
+  } = params
+
+  const activityRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', activityId).executeTakeFirst()
+  const ind = await getChildIndividualTariff(childId, activityId, date)
+  const effectiveTariffType = ind?.tariff_type ?? activityRow?.tariff_type
+  const indPrice = ind ? Math.round(parseFloat(ind.price as string) * 100) / 100 : null
+
+  const isChargeable = (s: string | null) => s === 'present' || s === 'special' || s === 'separate_billing'
+  const isExcused = (s: string | null) => s === 'absent_excused' || s === 'absent_excused_30'
+
+  const wasChargeable = isChargeable(oldStatus)
+  const isNowChargeable = isChargeable(newStatus)
+  const wasExcused = isExcused(oldStatus)
+  const isNowExcused = isExcused(newStatus)
+
+  const oldAmt = oldCustomAmount != null ? Number(oldCustomAmount) : null
+  const newAmt = newCustomAmount != null ? Number(newCustomAmount) : null
+  const amountChanged = oldAmt !== newAmt
+
+  const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', activityId).execute()
+
+  if (effectiveTariffType === 'per_lesson') {
+    if (wasChargeable && !isNowChargeable) {
+      await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
+    } else if (!wasChargeable && isNowChargeable) {
+      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+    } else if (wasChargeable && isNowChargeable && (oldStatus !== newStatus || amountChanged)) {
+      await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
+      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+    }
+  } else if (effectiveTariffType === 'smart') {
+    if (oldStatus !== newStatus || amountChanged || (wasExcused !== isNowExcused)) {
+      const billingMonth = date.slice(0, 7) + '-01'
+      await recalcSmartBenefit(enrollmentId, billingMonth)
+    }
+  } else {
+    // monthly: refund handling for absent_excused / absent_excused_30
+    if (wasExcused && (!isNowExcused || oldStatus !== newStatus)) {
+      await reverseRefund(enrollmentId, accountId, childId, date, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await reverseRefund(le.id, le.account_id, childId, date, userId)
+      }
+    }
+    if (isNowExcused && (!wasExcused || oldStatus !== newStatus)) {
+      await triggerRefund(enrollmentId, childId, accountId, activityId, date, newStatus!, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await triggerRefund(le.id, childId, le.account_id, child_activity_id, date, newStatus!, userId)
+      }
+    }
+  }
+
+  // Staff salary auto-accruals
+  await recalcStaffAccruals(activityId, date)
+  const smartStaffRates = await db.selectFrom('staff_rates')
+    .select(['id', 'rate_type'])
+    .where('activity_id', '=', activityId)
+    .where('rate_type', 'in', ['smart', 'smart_per_child'])
+    .where('rate_category', '=', 'auto')
+    .execute()
+  for (const r of smartStaffRates) {
+    if (r.rate_type === 'smart') {
+      await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
+    } else {
+      await recalcSmartPerChildBenefit(r.id, date.slice(0, 7) + '-01')
+    }
+  }
+}
+
 export async function journalsRoutes(app: FastifyInstance) {
   // GET /api/journals?activity_id=&from=&to=
   // Возвращает данные журнала: активность + строки (дети + логи по датам)
@@ -443,6 +540,14 @@ export async function journalsRoutes(app: FastifyInstance) {
         }
       }
 
+      // Check for existing log before insertion to capture oldStatus & oldCustomAmount
+      const existingBefore = await db
+        .selectFrom('attendance_logs')
+        .select(['status', 'custom_amount'])
+        .where('enrollment_id', '=', enrollment_id)
+        .where('date', '=', castAsDate(date))
+        .executeTakeFirst()
+
       const createdBy = req.user.sub
       const createdByRole = req.user.role
       const createdByName = await fetchUserName(createdBy)
@@ -530,56 +635,19 @@ export async function journalsRoutes(app: FastifyInstance) {
         return { main, linkedEnrollments }
       })
 
-      // Финансовые триггеры (вне DB-транзакции, после записи лога)
-      const activity = await db.selectFrom('activities').select('tariff_type').where('id', '=', enrollment.activity_id).executeTakeFirst()
-      const ind = await getChildIndividualTariff(enrollment.child_id, enrollment.activity_id, date)
-      const effectiveTariffType = ind?.tariff_type ?? activity?.tariff_type
-      const indPrice = ind ? Math.round(parseFloat(ind.price as string) * 100) / 100 : null
-
-      if (effectiveTariffType === 'per_lesson' && (status === 'present' || status === 'special' || status === 'separate_billing')) {
-        await triggerPerLessonAccrual(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, custom_amount ?? null, indPrice, createdBy)
-      } else if (effectiveTariffType === 'monthly' && (status === 'absent_excused' || status === 'absent_excused_30')) {
-        const existingRefund = await db.selectFrom('transactions').select('id')
-          .where('enrollment_id', '=', enrollment_id)
-          .where('type', '=', 'REFUND')
-          .where('transaction_date', '=', castAsDate(date))
-          .where('is_deleted', '=', false)
-          .executeTakeFirst()
-        if (!existingRefund) {
-          await triggerRefund(enrollment_id, enrollment.child_id, enrollment.account_id, enrollment.activity_id, date, status, createdBy)
-          for (const le of log.linkedEnrollments) {
-            const leExistingRefund = await db.selectFrom('transactions').select('id')
-              .where('enrollment_id', '=', le.id)
-              .where('type', '=', 'REFUND')
-              .where('transaction_date', '=', castAsDate(date))
-              .where('is_deleted', '=', false)
-              .executeTakeFirst()
-            if (!leExistingRefund) {
-              await triggerRefund(le.id, enrollment.child_id, le.account_id, le.activity_id, date, status, createdBy)
-            }
-          }
-        }
-      } else if (effectiveTariffType === 'smart') {
-        const billingMonth = date.slice(0, 7) + '-01'
-        await recalcSmartBenefit(enrollment_id, billingMonth)
-      }
-
-      // Staff salary auto-accruals
-      await recalcStaffAccruals(enrollment.activity_id, date)
-      // Smart staff rates: recalc for all smart rates on this activity
-      const smartStaffRates = await db.selectFrom('staff_rates')
-        .select(['id', 'rate_type'])
-        .where('activity_id', '=', enrollment.activity_id)
-        .where('rate_type', 'in', ['smart', 'smart_per_child'])
-        .where('rate_category', '=', 'auto')
-        .execute()
-      for (const r of smartStaffRates) {
-        if (r.rate_type === 'smart') {
-          await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
-        } else {
-          await recalcSmartPerChildBenefit(r.id, date.slice(0, 7) + '-01')
-        }
-      }
+      // Единая финансовая синхронизация (после записи лога)
+      await syncAttendanceFinancials({
+        enrollmentId: enrollment_id,
+        childId: enrollment.child_id,
+        accountId: enrollment.account_id,
+        activityId: enrollment.activity_id,
+        date,
+        oldStatus: existingBefore?.status ?? null,
+        newStatus: status,
+        oldCustomAmount: existingBefore?.custom_amount != null ? Number(existingBefore.custom_amount) : null,
+        newCustomAmount: custom_amount ?? null,
+        userId: createdBy,
+      })
 
       return reply.status(201).send(log.main)
     }
@@ -607,11 +675,12 @@ export async function journalsRoutes(app: FastifyInstance) {
       if (!enrollment) return reply.status(404).send({ error: 'NotFound' })
 
       const oldStatus = existing.status
+      const oldCustomAmount = existing.custom_amount != null ? Number(existing.custom_amount) : null
       const dateStr = toDateStr(existing.date as unknown as Date)
 
       // duty_admin не может изменить custom_amount у special-отметки
       const safeCustomAmount = (req.user.role === 'duty_admin' && existing.status === 'special' && status === 'special')
-        ? existing.custom_amount
+        ? (existing.custom_amount != null ? Number(existing.custom_amount) : null)
         : (custom_amount ?? null)
 
       const putUserId   = req.user.sub
@@ -648,79 +717,19 @@ export async function journalsRoutes(app: FastifyInstance) {
         return main
       })
 
-      // Финансовые триггеры вне DB-транзакции
-      const activityRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', existing.activity_id).executeTakeFirst()
-      const putInd = await getChildIndividualTariff(existing.child_id, existing.activity_id, dateStr)
-      const putEffectiveType = putInd?.tariff_type ?? activityRow?.tariff_type
-      const putIndPrice = putInd ? Math.round(parseFloat(putInd.price as string) * 100) / 100 : null
-
-      const wasChargeable = oldStatus === 'present' || oldStatus === 'special' || oldStatus === 'separate_billing'
-      const isChargeable  = status === 'present' || status === 'special' || status === 'separate_billing'
-      const oldAmount = existing.custom_amount != null ? Number(existing.custom_amount) : null
-      const newAmount = custom_amount != null ? Number(custom_amount) : null
-      const amountChanged = oldAmount !== newAmount
-
-      if (putEffectiveType === 'per_lesson') {
-        if (!wasChargeable && isChargeable) {
-          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
-        } else if (wasChargeable && !isChargeable) {
-          await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-        } else if (wasChargeable && isChargeable && (oldStatus !== status || amountChanged)) {
-          await reversePerLessonAccrual(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-          await triggerPerLessonAccrual(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, custom_amount ?? null, putIndPrice, createdBy)
-        }
-      } else if (putEffectiveType === 'smart') {
-        if (oldStatus !== status || amountChanged) {
-          const billingMonth = dateStr.slice(0, 7) + '-01'
-          await recalcSmartBenefit(existing.enrollment_id, billingMonth)
-        }
-      } else {
-        // monthly: логика возврата за absent_excused / absent_excused_30
-        const oldIsExcused = oldStatus === 'absent_excused' || oldStatus === 'absent_excused_30'
-        const newIsExcused = status === 'absent_excused' || status === 'absent_excused_30'
-        const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', existing.activity_id).execute()
-
-        if (oldIsExcused && newIsExcused && oldStatus !== status) {
-          // Status changed between absent_excused and absent_excused_30: reverse and re-trigger
-          await reverseRefund(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-          await triggerRefund(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, status, createdBy)
-          for (const { child_activity_id } of linked) {
-            const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
-            if (le) {
-              await reverseRefund(le.id, le.account_id, existing.child_id, dateStr, createdBy)
-              await triggerRefund(le.id, existing.child_id, le.account_id, child_activity_id, dateStr, status, createdBy)
-            }
-          }
-        } else if (!oldIsExcused && newIsExcused) {
-          await triggerRefund(existing.enrollment_id, existing.child_id, enrollment.account_id, existing.activity_id, dateStr, status, createdBy)
-          for (const { child_activity_id } of linked) {
-            const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
-            if (le) await triggerRefund(le.id, existing.child_id, le.account_id, child_activity_id, dateStr, status, createdBy)
-          }
-        } else if (oldIsExcused && !newIsExcused) {
-          await reverseRefund(existing.enrollment_id, enrollment.account_id, existing.child_id, dateStr, createdBy)
-          for (const { child_activity_id } of linked) {
-            const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', existing.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
-            if (le) await reverseRefund(le.id, le.account_id, existing.child_id, dateStr, createdBy)
-          }
-        }
-      }
-
-      // Staff salary auto-accruals after PUT
-      await recalcStaffAccruals(existing.activity_id, dateStr)
-      const smartStaffRatesPut = await db.selectFrom('staff_rates')
-        .select(['id', 'rate_type'])
-        .where('activity_id', '=', existing.activity_id)
-        .where('rate_type', 'in', ['smart', 'smart_per_child'])
-        .where('rate_category', '=', 'auto')
-        .execute()
-      for (const r of smartStaffRatesPut) {
-        if (r.rate_type === 'smart') {
-          await recalcSmartStaffBenefit(r.id, dateStr.slice(0, 7) + '-01')
-        } else {
-          await recalcSmartPerChildBenefit(r.id, dateStr.slice(0, 7) + '-01')
-        }
-      }
+      // Единая финансовая синхронизация
+      await syncAttendanceFinancials({
+        enrollmentId: existing.enrollment_id,
+        childId: existing.child_id,
+        accountId: enrollment.account_id,
+        activityId: existing.activity_id,
+        date: dateStr,
+        oldStatus,
+        newStatus: status,
+        oldCustomAmount,
+        newCustomAmount: safeCustomAmount,
+        userId: putUserId,
+      })
 
       return updated
     }
@@ -746,46 +755,20 @@ export async function journalsRoutes(app: FastifyInstance) {
 
       if (enrollment) {
         const dateStr = toDateStr(log.date as unknown as Date)
-        const actRow = await db.selectFrom('activities').select('tariff_type').where('id', '=', log.activity_id).executeTakeFirst()
-        const delInd = await getChildIndividualTariff(log.child_id, log.activity_id, dateStr)
-        const delEffectiveType = delInd?.tariff_type ?? actRow?.tariff_type
 
-        if (delEffectiveType === 'per_lesson') {
-          if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') {
-            await reversePerLessonAccrual(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
-          }
-        } else if (delEffectiveType === 'smart') {
-          if (log.status === 'absent_excused' || log.status === 'absent_excused_30') {
-            const billingMonth = dateStr.slice(0, 7) + '-01'
-            await recalcSmartBenefit(log.enrollment_id, billingMonth)
-          }
-        } else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') {
-          await reverseRefund(log.enrollment_id, enrollment.account_id, log.child_id, dateStr, deletedBy)
-          const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', log.activity_id).execute()
-          for (const { child_activity_id } of linked) {
-            const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', log.child_id).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
-            if (le) await reverseRefund(le.id, le.account_id, log.child_id, dateStr, deletedBy)
-          }
-        }
-      }
-
-      // Staff salary auto-accruals after DELETE
-      if (log.activity_id) {
-        const dateStrDel = toDateStr(log.date as unknown as Date)
-        await recalcStaffAccruals(log.activity_id, dateStrDel)
-        const smartStaffRatesDel = await db.selectFrom('staff_rates')
-          .select(['id', 'rate_type'])
-          .where('activity_id', '=', log.activity_id)
-          .where('rate_type', 'in', ['smart', 'smart_per_child'])
-          .where('rate_category', '=', 'auto')
-          .execute()
-        for (const r of smartStaffRatesDel) {
-          if (r.rate_type === 'smart') {
-            await recalcSmartStaffBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
-          } else {
-            await recalcSmartPerChildBenefit(r.id, dateStrDel.slice(0, 7) + '-01')
-          }
-        }
+        // Единая финансовая синхронизация при удалении
+        await syncAttendanceFinancials({
+          enrollmentId: log.enrollment_id,
+          childId: log.child_id,
+          accountId: enrollment.account_id,
+          activityId: log.activity_id,
+          date: dateStr,
+          oldStatus: log.status,
+          newStatus: null,
+          oldCustomAmount: log.custom_amount != null ? Number(log.custom_amount) : null,
+          newCustomAmount: null,
+          userId: deletedBy,
+        })
       }
 
       return { ok: true }
