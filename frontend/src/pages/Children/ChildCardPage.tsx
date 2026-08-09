@@ -676,6 +676,22 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const activeEnrollments   = enrollments.filter((e) => e.status !== 'archived')
   const archivedEnrollments = enrollments.filter((e) => e.status === 'archived')
 
+  const getEffectiveTariffType = (e: Enrollment) => {
+    const ind = indTariffByActivity[e.activity_id]
+    if (ind?.tariff_type) return ind.tariff_type
+    return e.tariff_type || 'monthly'
+  }
+
+  const subscriptionEnrollments = activeEnrollments.filter((e) => {
+    const t = getEffectiveTariffType(e)
+    return t === 'monthly' || t === 'smart'
+  })
+
+  const payPerLessonEnrollments = activeEnrollments.filter((e) => {
+    const t = getEffectiveTariffType(e)
+    return t === 'per_lesson'
+  })
+
   const openTariffForm = (enrollmentId: string, activityId: string) => {
     const existing = indTariffByActivity[activityId]
     setTariffForm({
@@ -691,6 +707,345 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
     })
     setTariffEnrollId(enrollmentId)
     setTariffError(null)
+  }
+
+  const renderEnrollmentRow = (e: Enrollment) => {
+    const indTariff = indTariffByActivity[e.activity_id]
+    return (
+      <li key={e.id} className="py-3">
+        {/* Freeze form */}
+        {freezeId === e.id ? (
+          <div className="space-y-2 p-3 bg-blue-50 rounded-lg">
+            <p className="text-xs font-medium text-gray-700">Заморозити підписку</p>
+            <div className="flex gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Від</label>
+                <input type="date" value={freezeForm.frozen_from} onChange={(ev) => setFreezeForm({ ...freezeForm, frozen_from: ev.target.value })}
+                  className="rounded border-gray-300 text-xs shadow-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">До</label>
+                <input type="date" value={freezeForm.frozen_to} onChange={(ev) => setFreezeForm({ ...freezeForm, frozen_to: ev.target.value })}
+                  className="rounded border-gray-300 text-xs shadow-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => freezeMutation.mutate({ id: e.id })} disabled={freezeMutation.isPending}
+                className="text-xs px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
+                {freezeMutation.isPending ? '...' : 'Заморозити'}
+              </button>
+              <button onClick={() => setFreezeId(null)} className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900">Скасувати</button>
+            </div>
+          </div>
+
+        ) : rebindId === e.id ? (
+          /* ── Rebind account form ── */
+          <div className="space-y-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-xs font-medium text-gray-700">Змінити рахунок · {e.activity_name}</p>
+
+            <div className="flex gap-2 flex-wrap items-end">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Новий рахунок</label>
+                <select
+                  value={rebindForm.new_account_id}
+                  onChange={(ev) => { setRebindForm({ ...rebindForm, new_account_id: ev.target.value }); setRebindWarning(null) }}
+                  className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                >
+                  <option value="">— оберіть —</option>
+                  {accounts.filter((a) => a.id !== e.account_id && a.is_active).map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">З місяця</label>
+                <input
+                  type="month"
+                  value={rebindForm.from_month}
+                  onChange={(ev) => { setRebindForm({ ...rebindForm, from_month: ev.target.value }); setRebindWarning(null) }}
+                  className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">По місяць (необов'язково)</label>
+                <input
+                  type="month"
+                  value={rebindForm.to_month}
+                  onChange={(ev) => { setRebindForm({ ...rebindForm, to_month: ev.target.value }); setRebindWarning(null) }}
+                  className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rebindForm.update_future}
+                onChange={(ev) => setRebindForm({ ...rebindForm, update_future: ev.target.checked })}
+              />
+              Змінити рахунок підписки для майбутніх місяців
+            </label>
+
+            {rebindWarning && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 space-y-1">
+                <p className="font-medium">{rebindWarning.message}</p>
+                <ul className="space-y-0.5 pl-2">
+                  {rebindWarning.payments.map((p) => (
+                    <li key={p.id}>
+                      {new Date(p.date).toLocaleDateString('uk-UA')} — {Number(p.amount).toLocaleString('uk-UA', { minimumFractionDigits: 2 })} ₴
+                      {p.note && ` (${p.note})`}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-red-600 font-medium mt-1">Все одно перенести нарахування?</p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              {rebindWarning ? (
+                <button
+                  onClick={() => rebindMutation.mutate({ force: true })}
+                  disabled={rebindMutation.isPending}
+                  className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
+                >
+                  {rebindMutation.isPending ? '...' : 'Так, перенести'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!rebindForm.new_account_id) return
+                    rebindMutation.mutate({ force: false })
+                  }}
+                  disabled={!rebindForm.new_account_id || rebindMutation.isPending}
+                  className="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded disabled:opacity-50"
+                >
+                  {rebindMutation.isPending ? '...' : 'Перенести'}
+                </button>
+              )}
+              <button
+                onClick={() => { setRebindId(null); setRebindForm(EMPTY_REBIND); setRebindWarning(null) }}
+                className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900"
+              >
+                Скасувати
+              </button>
+            </div>
+          </div>
+
+        ) : tariffEnrollId === e.id ? (
+          /* ── Individual tariff form ── */
+          <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
+            <p className="text-xs font-medium text-gray-700">Індивідуальний тариф · {e.activity_name}</p>
+
+            {/* Tariff type */}
+            <div className="flex gap-4">
+              {(['monthly', 'per_lesson', 'smart'] as IndTariffType[]).map((t) => (
+                <label key={t} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="radio" checked={tariffForm.tariff_type === t}
+                    onChange={() => setTariffForm({ ...tariffForm, tariff_type: t })} />
+                  {TARIFF_TYPE_LABEL[t]}
+                </label>
+              ))}
+            </div>
+
+            {/* Price + valid_from */}
+            <div className="flex gap-2 items-end flex-wrap">
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Ціна (грн)</label>
+                <input type="number" min="0.01" step="0.01" value={tariffForm.price}
+                  onChange={(ev) => setTariffForm({ ...tariffForm, price: ev.target.value })}
+                  className="w-28 rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-0.5">Діє з</label>
+                <input type="date" value={tariffForm.valid_from}
+                  onChange={(ev) => setTariffForm({ ...tariffForm, valid_from: ev.target.value })}
+                  className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+              </div>
+              <button
+                onClick={() => { if (!tariffForm.price) { setTariffError('Введіть ціну'); return } setTariffMutation.mutate(e.activity_id) }}
+                disabled={setTariffMutation.isPending}
+                className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md">
+                {setTariffMutation.isPending ? '...' : 'Зберегти'}
+              </button>
+              <button onClick={() => { setTariffEnrollId(null); setTariffError(null) }} className="text-xs text-gray-400 hover:text-gray-700">Скасувати</button>
+            </div>
+
+            {/* Smart config */}
+            {tariffForm.tariff_type === 'smart' && (
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-iris-100">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Базових занять</label>
+                  <input type="number" min="0" value={tariffForm.base_lessons}
+                    onChange={(ev) => setTariffForm({ ...tariffForm, base_lessons: ev.target.value })}
+                    className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Поріг пропусків (L1)</label>
+                  <input type="number" min="0" value={tariffForm.l1_threshold_absences}
+                    onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_absences: ev.target.value })}
+                    className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Сума при порозі (L1, грн)</label>
+                  <input type="number" min="0" step="0.01" value={tariffForm.l1_threshold_fee}
+                    onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_fee: ev.target.value })}
+                    className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Макс. повернень (L2)</label>
+                  <input type="number" min="0" value={tariffForm.l2_max_refunds}
+                    onChange={(ev) => setTariffForm({ ...tariffForm, l2_max_refunds: ev.target.value })}
+                    className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Повернення за пропуск (L2, грн)</label>
+                  <input type="number" min="0" step="0.01" value={tariffForm.l2_refund_per_absence}
+                    onChange={(ev) => setTariffForm({ ...tariffForm, l2_refund_per_absence: ev.target.value })}
+                    className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                </div>
+              </div>
+            )}
+
+            {/* Close tariff */}
+            {indTariff && (
+              <div className="pt-2 border-t border-iris-100 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">Скасувати тариф з</span>
+                <input type="date" value={tariffForm.close_date}
+                  onChange={(ev) => setTariffForm({ ...tariffForm, close_date: ev.target.value })}
+                  className="rounded border-gray-300 text-xs shadow-sm" />
+                <button
+                  onClick={() => closeTariffMutation.mutate({ tariffId: indTariff.id, validTo: tariffForm.close_date })}
+                  disabled={closeTariffMutation.isPending}
+                  className="text-xs text-red-400 hover:text-red-600 transition-colors underline underline-offset-2">
+                  {closeTariffMutation.isPending ? '...' : '→ повернути базову ціну'}
+                </button>
+              </div>
+            )}
+
+            {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
+          </div>
+
+        ) : (
+          /* Normal row */
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                {e.activity_name}
+                {e.tariff_valid_from && e.start_date < e.tariff_valid_from && (
+                  <span
+                    title={`Тариф діє з ${new Date(e.tariff_valid_from).toLocaleDateString('uk-UA')}. Нарахування до цієї дати відсутні.`}
+                    className="text-amber-500 cursor-help text-xs">⚠</span>
+                )}
+              </p>
+              <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
+                <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
+                {indTariff ? (
+                  <span className="text-iris-500">
+                    · (тариф з {new Date(indTariff.valid_from).toLocaleDateString('uk-UA')} {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн)
+                  </span>
+                ) : e.base_fee ? (
+                  <span>
+                    · {e.current_tariff_valid_from
+                      ? `(тариф з ${new Date(e.current_tariff_valid_from).toLocaleDateString('uk-UA')} ${Number(e.base_fee).toFixed(0)} грн)`
+                      : `${Number(e.base_fee).toFixed(0)} грн`}
+                  </span>
+                ) : null}
+                {e.status === 'frozen' && e.frozen_to && (
+                  <span>· заморожена до {new Date(e.frozen_to).toLocaleDateString('uk-UA')}</span>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[e.status]}`}>
+                {STATUS_LABELS[e.status]}
+              </span>
+              <div className="flex gap-2 text-xs text-gray-400">
+                {canEditTariffs && (
+                  <>
+                    <button onClick={() => openTariffForm(e.id, e.activity_id)}
+                      className="hover:text-iris-600 transition-colors">
+                      {indTariff ? 'тариф' : '+ тариф'}
+                    </button>
+                    {indTariff && (
+                      <button
+                        onClick={() => recalcTariffMutation.mutate(indTariff.id)}
+                        disabled={recalcTariffMutation.isPending}
+                        className="hover:text-amber-600 transition-colors disabled:opacity-50"
+                        title="Перерахувати нарахування за індивідуальним тарифом">
+                        {recalcTariffMutation.isPending ? '...' : 'перерах.'}
+                      </button>
+                    )}
+                  </>
+                )}
+                {canEdit && (
+                  <>
+                    {e.status !== 'archived' && (
+                      <button
+                        onClick={() => { setRebindId(e.id); setRebindForm({ ...EMPTY_REBIND, from_month: TODAY.slice(0, 7) }); setRebindWarning(null) }}
+                        className="hover:text-amber-600 transition-colors">рахунок</button>
+                    )}
+                    {e.status === 'active' && (
+                      <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: TODAY, frozen_to: '' }) }}
+                        className="hover:text-blue-600 transition-colors">заморозити</button>
+                    )}
+                    {e.status === 'frozen' && (
+                      <button onClick={() => unfreezeMutation.mutate(e.id)} className="hover:text-green-600 transition-colors">розморозити</button>
+                    )}
+                    {archiveState?.enrollmentId === e.id ? (
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="date"
+                          value={archiveState.date}
+                          onChange={(ev) => setArchiveState({ ...archiveState, date: ev.target.value })}
+                          className="border rounded px-1 py-0.5 text-xs text-gray-700"
+                        />
+                        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={archiveState.cancelAccruals}
+                            onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked, recalculateSubscription: ev.target.checked ? archiveState.recalculateSubscription : false })}
+                          />
+                          скасувати нарахування
+                        </label>
+                        {(e.tariff_type === 'monthly' || e.tariff_type === 'smart') && archiveState.cancelAccruals && (
+                          <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={archiveState.recalculateSubscription}
+                              onChange={(ev) => setArchiveState({ ...archiveState, recalculateSubscription: ev.target.checked })}
+                            />
+                            перерахувати абонплату
+                          </label>
+                        )}
+                        <label style={{ display: 'none' }}>
+                          dummy
+                        </label>
+                        <button
+                          onClick={() => archiveMutation.mutate({
+                            id: e.id,
+                            endDate: archiveState.date,
+                            cancelAccruals: archiveState.cancelAccruals,
+                            recalculateSubscription: archiveState.recalculateSubscription
+                          })}
+                          disabled={archiveMutation.isPending}
+                          className="text-red-600 hover:text-red-800 font-medium transition-colors">
+                          підтвердити
+                        </button>
+                        <button onClick={() => setArchiveState(null)} className="hover:text-gray-600 transition-colors">скасувати</button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setArchiveState({ enrollmentId: e.id, date: TODAY, cancelAccruals: false, recalculateSubscription: false })}
+                        className="hover:text-red-600 transition-colors">архів</button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </li>
+    )
   }
 
   return (
@@ -806,346 +1161,39 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
       ) : activeEnrollments.length === 0 && !showForm ? (
         <p className="text-sm text-gray-400">Немає активних підписок</p>
       ) : (
-        <ul className="divide-y divide-gray-100">
-          {activeEnrollments.map((e) => {
-            const indTariff = indTariffByActivity[e.activity_id]
-            return (
-              <li key={e.id} className="py-3">
-                {/* Freeze form */}
-                {freezeId === e.id ? (
-                  <div className="space-y-2 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700">Заморозити підписку</p>
-                    <div className="flex gap-2">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Від</label>
-                        <input type="date" value={freezeForm.frozen_from} onChange={(ev) => setFreezeForm({ ...freezeForm, frozen_from: ev.target.value })}
-                          className="rounded border-gray-300 text-xs shadow-sm" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">До</label>
-                        <input type="date" value={freezeForm.frozen_to} onChange={(ev) => setFreezeForm({ ...freezeForm, frozen_to: ev.target.value })}
-                          className="rounded border-gray-300 text-xs shadow-sm" />
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => freezeMutation.mutate({ id: e.id })} disabled={freezeMutation.isPending}
-                        className="text-xs px-2 py-1 bg-blue-600 text-white rounded disabled:opacity-50">
-                        {freezeMutation.isPending ? '...' : 'Заморозити'}
-                      </button>
-                      <button onClick={() => setFreezeId(null)} className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900">Скасувати</button>
-                    </div>
-                  </div>
+        <div className="space-y-5">
+          {/* Subscriptions with monthly fee */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+              <span className="text-xs font-semibold text-iris-800 bg-iris-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                З абонплатою ({subscriptionEnrollments.length})
+              </span>
+            </div>
+            {subscriptionEnrollments.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1 italic">Немає підписок з абонплатою</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {subscriptionEnrollments.map(renderEnrollmentRow)}
+              </ul>
+            )}
+          </div>
 
-                ) : rebindId === e.id ? (
-                  /* ── Rebind account form ── */
-                  <div className="space-y-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700">Змінити рахунок · {e.activity_name}</p>
-
-                    <div className="flex gap-2 flex-wrap items-end">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Новий рахунок</label>
-                        <select
-                          value={rebindForm.new_account_id}
-                          onChange={(ev) => { setRebindForm({ ...rebindForm, new_account_id: ev.target.value }); setRebindWarning(null) }}
-                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        >
-                          <option value="">— оберіть —</option>
-                          {accounts.filter((a) => a.id !== e.account_id && a.is_active).map((a) => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">З місяця</label>
-                        <input
-                          type="month"
-                          value={rebindForm.from_month}
-                          onChange={(ev) => { setRebindForm({ ...rebindForm, from_month: ev.target.value }); setRebindWarning(null) }}
-                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">По місяць (необов'язково)</label>
-                        <input
-                          type="month"
-                          value={rebindForm.to_month}
-                          onChange={(ev) => { setRebindForm({ ...rebindForm, to_month: ev.target.value }); setRebindWarning(null) }}
-                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500"
-                        />
-                      </div>
-                    </div>
-
-                    <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={rebindForm.update_future}
-                        onChange={(ev) => setRebindForm({ ...rebindForm, update_future: ev.target.checked })}
-                      />
-                      Змінити рахунок підписки для майбутніх місяців
-                    </label>
-
-                    {rebindWarning && (
-                      <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 space-y-1">
-                        <p className="font-medium">{rebindWarning.message}</p>
-                        <ul className="space-y-0.5 pl-2">
-                          {rebindWarning.payments.map((p) => (
-                            <li key={p.id}>
-                              {new Date(p.date).toLocaleDateString('uk-UA')} — {Number(p.amount).toLocaleString('uk-UA', { minimumFractionDigits: 2 })} ₴
-                              {p.note && ` (${p.note})`}
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="text-red-600 font-medium mt-1">Все одно перенести нарахування?</p>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      {rebindWarning ? (
-                        <button
-                          onClick={() => rebindMutation.mutate({ force: true })}
-                          disabled={rebindMutation.isPending}
-                          className="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-50"
-                        >
-                          {rebindMutation.isPending ? '...' : 'Так, перенести'}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (!rebindForm.new_account_id) return
-                            rebindMutation.mutate({ force: false })
-                          }}
-                          disabled={!rebindForm.new_account_id || rebindMutation.isPending}
-                          className="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded disabled:opacity-50"
-                        >
-                          {rebindMutation.isPending ? '...' : 'Перенести'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { setRebindId(null); setRebindForm(EMPTY_REBIND); setRebindWarning(null) }}
-                        className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900"
-                      >
-                        Скасувати
-                      </button>
-                    </div>
-                  </div>
-
-                ) : tariffEnrollId === e.id ? (
-                  /* ── Individual tariff form ── */
-                  <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
-                    <p className="text-xs font-medium text-gray-700">Індивідуальний тариф · {e.activity_name}</p>
-
-                    {/* Tariff type */}
-                    <div className="flex gap-4">
-                      {(['monthly', 'per_lesson', 'smart'] as IndTariffType[]).map((t) => (
-                        <label key={t} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                          <input type="radio" checked={tariffForm.tariff_type === t}
-                            onChange={() => setTariffForm({ ...tariffForm, tariff_type: t })} />
-                          {TARIFF_TYPE_LABEL[t]}
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Price + valid_from */}
-                    <div className="flex gap-2 items-end flex-wrap">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Ціна (грн)</label>
-                        <input type="number" min="0.01" step="0.01" value={tariffForm.price}
-                          onChange={(ev) => setTariffForm({ ...tariffForm, price: ev.target.value })}
-                          className="w-28 rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-0.5">Діє з</label>
-                        <input type="date" value={tariffForm.valid_from}
-                          onChange={(ev) => setTariffForm({ ...tariffForm, valid_from: ev.target.value })}
-                          className="rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                      </div>
-                      <button
-                        onClick={() => { if (!tariffForm.price) { setTariffError('Введіть ціну'); return } setTariffMutation.mutate(e.activity_id) }}
-                        disabled={setTariffMutation.isPending}
-                        className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md">
-                        {setTariffMutation.isPending ? '...' : 'Зберегти'}
-                      </button>
-                      <button onClick={() => { setTariffEnrollId(null); setTariffError(null) }} className="text-xs text-gray-400 hover:text-gray-700">Скасувати</button>
-                    </div>
-
-                    {/* Smart config */}
-                    {tariffForm.tariff_type === 'smart' && (
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-iris-100">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-0.5">Базових занять</label>
-                          <input type="number" min="0" value={tariffForm.base_lessons}
-                            onChange={(ev) => setTariffForm({ ...tariffForm, base_lessons: ev.target.value })}
-                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-0.5">Поріг пропусків (L1)</label>
-                          <input type="number" min="0" value={tariffForm.l1_threshold_absences}
-                            onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_absences: ev.target.value })}
-                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-0.5">Сума при порозі (L1, грн)</label>
-                          <input type="number" min="0" step="0.01" value={tariffForm.l1_threshold_fee}
-                            onChange={(ev) => setTariffForm({ ...tariffForm, l1_threshold_fee: ev.target.value })}
-                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-0.5">Макс. повернень (L2)</label>
-                          <input type="number" min="0" value={tariffForm.l2_max_refunds}
-                            onChange={(ev) => setTariffForm({ ...tariffForm, l2_max_refunds: ev.target.value })}
-                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-0.5">Повернення за пропуск (L2, грн)</label>
-                          <input type="number" min="0" step="0.01" value={tariffForm.l2_refund_per_absence}
-                            onChange={(ev) => setTariffForm({ ...tariffForm, l2_refund_per_absence: ev.target.value })}
-                            className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Close tariff */}
-                    {indTariff && (
-                      <div className="pt-2 border-t border-iris-100 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500">Скасувати тариф з</span>
-                        <input type="date" value={tariffForm.close_date}
-                          onChange={(ev) => setTariffForm({ ...tariffForm, close_date: ev.target.value })}
-                          className="rounded border-gray-300 text-xs shadow-sm" />
-                        <button
-                          onClick={() => closeTariffMutation.mutate({ tariffId: indTariff.id, validTo: tariffForm.close_date })}
-                          disabled={closeTariffMutation.isPending}
-                          className="text-xs text-red-400 hover:text-red-600 transition-colors underline underline-offset-2">
-                          {closeTariffMutation.isPending ? '...' : '→ повернути базову ціну'}
-                        </button>
-                      </div>
-                    )}
-
-                    {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
-                  </div>
-
-                ) : (
-                  /* Normal row */
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
-                        {e.activity_name}
-                        {e.tariff_valid_from && e.start_date < e.tariff_valid_from && (
-                          <span
-                            title={`Тариф діє з ${new Date(e.tariff_valid_from).toLocaleDateString('uk-UA')}. Нарахування до цієї дати відсутні.`}
-                            className="text-amber-500 cursor-help text-xs">⚠</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
-                        <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
-                        {indTariff ? (
-                          <span className="text-iris-500">
-                            · (тариф з {new Date(indTariff.valid_from).toLocaleDateString('uk-UA')} {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн)
-                          </span>
-                        ) : e.base_fee ? (
-                          <span>
-                            · {e.current_tariff_valid_from
-                              ? `(тариф з ${new Date(e.current_tariff_valid_from).toLocaleDateString('uk-UA')} ${Number(e.base_fee).toFixed(0)} грн)`
-                              : `${Number(e.base_fee).toFixed(0)} грн`}
-                          </span>
-                        ) : null}
-                        {e.status === 'frozen' && e.frozen_to && (
-                          <span>· заморожена до {new Date(e.frozen_to).toLocaleDateString('uk-UA')}</span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[e.status]}`}>
-                        {STATUS_LABELS[e.status]}
-                      </span>
-                      <div className="flex gap-2 text-xs text-gray-400">
-                        {canEditTariffs && (
-                          <>
-                            <button onClick={() => openTariffForm(e.id, e.activity_id)}
-                              className="hover:text-iris-600 transition-colors">
-                              {indTariff ? 'тариф' : '+ тариф'}
-                            </button>
-                            {indTariff && (
-                              <button
-                                onClick={() => recalcTariffMutation.mutate(indTariff.id)}
-                                disabled={recalcTariffMutation.isPending}
-                                className="hover:text-amber-600 transition-colors disabled:opacity-50"
-                                title="Перерахувати нарахування за індивідуальним тарифом">
-                                {recalcTariffMutation.isPending ? '...' : 'перерах.'}
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {canEdit && (
-                          <>
-                            {e.status !== 'archived' && (
-                              <button
-                                onClick={() => { setRebindId(e.id); setRebindForm({ ...EMPTY_REBIND, from_month: TODAY.slice(0, 7) }); setRebindWarning(null) }}
-                                className="hover:text-amber-600 transition-colors">рахунок</button>
-                            )}
-                            {e.status === 'active' && (
-                              <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: TODAY, frozen_to: '' }) }}
-                                className="hover:text-blue-600 transition-colors">заморозити</button>
-                            )}
-                            {e.status === 'frozen' && (
-                              <button onClick={() => unfreezeMutation.mutate(e.id)} className="hover:text-green-600 transition-colors">розморозити</button>
-                            )}
-                            {archiveState?.enrollmentId === e.id ? (
-                              <span className="flex items-center gap-2 flex-wrap">
-                                <input
-                                  type="date"
-                                  value={archiveState.date}
-                                  onChange={(ev) => setArchiveState({ ...archiveState, date: ev.target.value })}
-                                  className="border rounded px-1 py-0.5 text-xs text-gray-700"
-                                />
-                                <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={archiveState.cancelAccruals}
-                                    onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked, recalculateSubscription: ev.target.checked ? archiveState.recalculateSubscription : false })}
-                                  />
-                                  скасувати нарахування
-                                </label>
-                                {(e.tariff_type === 'monthly' || e.tariff_type === 'smart') && archiveState.cancelAccruals && (
-                                  <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={archiveState.recalculateSubscription}
-                                      onChange={(ev) => setArchiveState({ ...archiveState, recalculateSubscription: ev.target.checked })}
-                                    />
-                                    перерахувати абонплату
-                                  </label>
-                                )}
-                                <label style={{ display: 'none' }}>
-                                  dummy
-                                </label>
-                                <button
-                                  onClick={() => archiveMutation.mutate({
-                                    id: e.id,
-                                    endDate: archiveState.date,
-                                    cancelAccruals: archiveState.cancelAccruals,
-                                    recalculateSubscription: archiveState.recalculateSubscription
-                                  })}
-                                  disabled={archiveMutation.isPending}
-                                  className="text-red-600 hover:text-red-800 font-medium transition-colors">
-                                  підтвердити
-                                </button>
-                                <button onClick={() => setArchiveState(null)} className="hover:text-gray-600 transition-colors">скасувати</button>
-                              </span>
-                            ) : (
-                              <button
-                                onClick={() => setArchiveState({ enrollmentId: e.id, date: TODAY, cancelAccruals: false, recalculateSubscription: false })}
-                                className="hover:text-red-600 transition-colors">архів</button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+          {/* Subscriptions per lesson */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">
+                Оплата по факту ({payPerLessonEnrollments.length})
+              </span>
+            </div>
+            {payPerLessonEnrollments.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1 italic">Немає підписок з оплатою по факту</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {payPerLessonEnrollments.map(renderEnrollmentRow)}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
 
       {archivedEnrollments.length > 0 && (
