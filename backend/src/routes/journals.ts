@@ -142,7 +142,7 @@ async function triggerPerLessonAccrual(
       .select('base_fee')
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', castAsDate(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -155,7 +155,7 @@ async function triggerPerLessonAccrual(
       .where('child_id', '=', childId)
       .where('activity_id', '=', activityId)
       .where('valid_from', '<=', castAsDate(date))
-      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>', castAsDate(date))]))
+      .where((eb) => eb.or([eb('valid_to', 'is', null), eb('valid_to', '>=', castAsDate(date))]))
       .orderBy('valid_from', 'desc')
       .executeTakeFirst()
 
@@ -169,6 +169,42 @@ async function triggerPerLessonAccrual(
   }
 
   if (amount <= 0) return null
+
+  // Check if an un-deleted per-lesson ACCRUAL transaction already exists for this enrollment & date
+  const existingTxs = await db
+    .selectFrom('transactions')
+    .select(['id', 'amount'])
+    .where('enrollment_id', '=', enrollmentId)
+    .where('type', '=', 'ACCRUAL')
+    .where('transaction_date', '=', castAsDate(date))
+    .where('billing_month', 'is', null)
+    .where('is_deleted', '=', false)
+    .execute()
+
+  if (existingTxs.length > 0) {
+    const matching = existingTxs.find(tx => Math.abs(parseFloat(tx.amount as string) - amount) < 0.01)
+    if (matching) {
+      // If there are duplicate matching transactions, soft-delete extra duplicates
+      const duplicates = existingTxs.filter(tx => tx.id !== matching.id)
+      for (const dup of duplicates) {
+        await db.updateTable('transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: createdBy })
+          .where('id', '=', dup.id)
+          .execute()
+      }
+      if (duplicates.length > 0) {
+        await recalcBalance(childId, accountId)
+      }
+      return matching.id
+    }
+    // Amount changed — soft delete all previous transactions for this date
+    for (const tx of existingTxs) {
+      await db.updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: createdBy })
+        .where('id', '=', tx.id)
+        .execute()
+    }
+  }
 
   return createTransaction({
     type: 'ACCRUAL',
@@ -202,15 +238,17 @@ async function reversePerLessonAccrual(
     .where('transaction_date', '=', castAsDate(date))
     .where('billing_month', 'is', null)   // только per_lesson (billing_month не задан)
     .where('is_deleted', '=', false)
-    .executeTakeFirst()
-
-  if (!existing) return
-
-  await db
-    .updateTable('transactions')
-    .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: deletedBy })
-    .where('id', '=', existing.id)
     .execute()
+
+  if (existing.length === 0) return
+
+  for (const tx of existing) {
+    await db
+      .updateTable('transactions')
+      .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: deletedBy })
+      .where('id', '=', tx.id)
+      .execute()
+  }
 
   await recalcBalance(childId, accountId)
 }
@@ -324,11 +362,32 @@ export async function syncAttendanceFinancials(params: {
   if (effectiveTariffType === 'per_lesson') {
     if (wasChargeable && !isNowChargeable) {
       await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await reversePerLessonAccrual(le.id, le.account_id, childId, date, userId)
+      }
     } else if (!wasChargeable && isNowChargeable) {
       await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) {
+          const leInd = await getChildIndividualTariff(childId, child_activity_id, date)
+          const leIndPrice = leInd ? Math.round(parseFloat(leInd.price as string) * 100) / 100 : null
+          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId)
+        }
+      }
     } else if (wasChargeable && isNowChargeable && (oldStatus !== newStatus || amountChanged)) {
       await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
       await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) {
+          const leInd = await getChildIndividualTariff(childId, child_activity_id, date)
+          const leIndPrice = leInd ? Math.round(parseFloat(leInd.price as string) * 100) / 100 : null
+          await reversePerLessonAccrual(le.id, le.account_id, childId, date, userId)
+          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId)
+        }
+      }
     }
   } else if (effectiveTariffType === 'smart') {
     if (oldStatus !== newStatus || amountChanged || (wasExcused !== isNowExcused)) {
