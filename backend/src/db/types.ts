@@ -182,14 +182,15 @@ export interface AttendanceLogsTable {
 }
 
 export interface GroupLessonLogsTable {
-  id:          Generated<string>
-  activity_id: string
-  date:        ColumnType<Date, string, string>
-  status:      'conducted' | 'cancelled'
+  id:            Generated<string>
+  activity_id:   string
+  staff_id:      string | null
+  date:          ColumnType<Date, string, string>
+  status:        'conducted' | 'cancelled'
   lessons_count: Generated<number>
-  created_by:  string | null
-  created_at:  Generated<Date>
-  updated_at:  Generated<Date>
+  created_by:    string | null
+  created_at:    Generated<Date>
+  updated_at:    Generated<Date>
 }
 
 export interface RefundConfigsTable {

@@ -385,7 +385,7 @@ export function JournalPage() {
   const updateMutation = useMutation({ mutationFn: ({ id, payload }: any) => attendanceApi.update(id, payload), onSuccess: invalidate })
   const removeMutation = useMutation({ mutationFn: attendanceApi.remove, onSuccess: invalidate })
   const groupMarkMutation = useMutation({
-    mutationFn: (p: any) => attendanceApi.markGroup({ activity_id: activityId!, date: p.dateStr, status: p.status, lessons_count: p.count }),
+    mutationFn: (p: any) => attendanceApi.markGroup({ activity_id: activityId!, staff_id: p.staff_id, date: p.dateStr, status: p.status, lessons_count: p.count }),
     onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
   })
   const groupRemoveMutation = useMutation({
@@ -393,23 +393,32 @@ export function JournalPage() {
     onSuccess: () => { invalidate(); setGroupPopupTarget(null) }
   })
 
+  const groupTeachers: { id: string; full_name: string }[] = (data as any)?.assigned_staff?.group_teachers ?? []
+  const additionalTeachers: { id: string; full_name: string }[] = (data as any)?.assigned_staff?.additional_teachers ?? []
+
+  const triggerAutoGroup = useCallback((dateStr: string) => {
+    if (!data?.activity?.auto_group_classes) return
+    const teachers = groupTeachers.length > 0 ? groupTeachers : [{ id: null, full_name: null }]
+    teachers.forEach((gt) => {
+      const key = gt.id ? `${dateStr}::${gt.id}` : dateStr
+      const gLog = data.group_logs[key] ?? data.group_logs[dateStr]
+      if (!gLog || gLog.status !== 'conducted') {
+        groupMarkMutation.mutate({ dateStr, staff_id: gt.id, status: 'conducted', count: 1 })
+      }
+    })
+  }, [data, groupTeachers, groupMarkMutation])
+
   const handleMarkQuick = useCallback((enrollmentId: string, dateStr: string) => {
     markMutation.mutate({ enrollment_id: enrollmentId, date: dateStr, status: 'present' })
-    if (data?.activity?.auto_group_classes) {
-      const gLog = data.group_logs[dateStr]
-      if (!gLog || gLog.status !== 'conducted') {
-        groupMarkMutation.mutate({ dateStr, status: 'conducted', count: 1 })
-      }
-    }
-  }, [markMutation, groupMarkMutation, data])
+    triggerAutoGroup(dateStr)
+  }, [markMutation, triggerAutoGroup])
 
   const handleDialogSave = (payload: any) => {
     if (payload.logId) updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note } })
     else markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note })
     
-    if (data?.activity?.auto_group_classes && (payload.status === 'present' || payload.status === 'special')) {
-      const gLog = data.group_logs[payload.dateStr]
-      if (!gLog || gLog.status !== 'conducted') groupMarkMutation.mutate({ dateStr: payload.dateStr, status: 'conducted', count: 1 })
+    if (payload.status === 'present' || payload.status === 'special') {
+      triggerAutoGroup(payload.dateStr)
     }
     setDialogTarget(null)
   }
@@ -418,8 +427,6 @@ export function JournalPage() {
   const dates = data?.dates ?? []
   const rows = data?.rows ?? []
   const groupLogs = data?.group_logs ?? {}
-  const groupTeachers: { id: string; full_name: string }[] = (data as any)?.assigned_staff?.group_teachers ?? []
-  const additionalTeachers: { id: string; full_name: string }[] = (data as any)?.assigned_staff?.additional_teachers ?? []
   const compact = mode === 'month'
 
   const groupedData = useMemo(() => {
@@ -558,42 +565,40 @@ export function JournalPage() {
           <tbody className="divide-y divide-gray-200">
                {activity?.has_group_classes && (
                  <>
-                   <tr className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
-                     <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
-                       <div className="flex items-center gap-1.5 flex-wrap">
-                         <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse flex-shrink-0" />
-                         <span>ГРУПОВЕ ЗАНЯТТЯ</span>
-                         {groupTeachers.length > 0 && (
-                           <span className="text-iris-400 font-medium normal-case">
-                             ({groupTeachers.map((t, i) => (
-                               <span key={t.id}>
-                                 {i > 0 && ', '}
-                                 <Link to={`/staff/${t.id}`} className="hover:text-iris-700 underline underline-offset-2 transition-colors">{t.full_name}</Link>
-                               </span>
-                             ))})
-                           </span>
-                         )}
-                       </div>
-                     </td>
-                     {dates.map(d => {
-                       const gLog = groupLogs[d]
-                       const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
-                       const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
-                       const baseBg = isWeekend ? 'bg-amber-50/30' : ''
-                       return (
-                         <td key={`group-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
-                           {!gLog || gLog.status !== 'conducted' ? (
-                             <button onClick={() => groupMarkMutation.mutate({ dateStr: d, status: 'conducted', count: 1 })}
-                               className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
-                           ) : (
-                             <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d })}
-                               className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black hover:bg-iris-600 transition-colors">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
+                   {(groupTeachers.length > 0 ? groupTeachers : [{ id: null, full_name: null }]).map((t) => (
+                     <tr key={t.id ?? 'group-default'} className="bg-iris-50/5 hover:bg-iris-50/10 transition-colors">
+                       <td className="sticky left-0 z-10 px-3 py-1.5 font-black text-iris-600 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
+                         <div className="flex items-center gap-1.5 flex-wrap">
+                           <span className="w-1.5 h-1.5 bg-iris-500 rounded-full animate-pulse flex-shrink-0" />
+                           <span>ГРУПОВЕ ЗАНЯТТЯ{t.full_name ? `: ${t.full_name}` : ''}</span>
+                           {t.id && (
+                             <span className="text-iris-400 font-medium normal-case">
+                               (<Link to={`/staff/${t.id}`} className="hover:text-iris-700 underline underline-offset-2 transition-colors">{t.full_name}</Link>)
+                             </span>
                            )}
-                         </td>
-                       )
-                     })}
-                     <td className="border-b border-gray-200 bg-inherit" />
-                   </tr>
+                         </div>
+                       </td>
+                       {dates.map(d => {
+                         const key = t.id ? `${d}::${t.id}` : d
+                         const gLog = groupLogs[key] ?? groupLogs[d]
+                         const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
+                         const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
+                         const baseBg = isWeekend ? 'bg-amber-50/30' : ''
+                         return (
+                           <td key={`group-${t.id ?? 'def'}-${d}`} className={`px-0.5 py-0.5 text-center border-r border-b border-gray-200 transition-colors min-w-[32px] ${hoveredDate === d ? hoverBg : baseBg}`}>
+                             {!gLog || gLog.status !== 'conducted' ? (
+                               <button onClick={() => groupMarkMutation.mutate({ dateStr: d, staff_id: t.id, status: 'conducted', count: 1 })}
+                                 className="w-5 h-5 mx-auto rounded border border-dashed border-iris-200 text-iris-300 hover:border-iris-500 hover:text-iris-500 transition-all flex items-center justify-center text-[10px]">+</button>
+                             ) : (
+                               <button onClick={() => setGroupPopupTarget({ log: gLog, dateStr: d, staff_id: t.id })}
+                                 className="w-5 h-5 mx-auto rounded bg-iris-500 text-white shadow-sm flex items-center justify-center text-[8px] font-black hover:bg-iris-600 transition-colors">{gLog.lessons_count > 1 ? `x${gLog.lessons_count}` : '✔'}</button>
+                             )}
+                           </td>
+                         )
+                       })}
+                       <td className="border-b border-gray-200 bg-inherit" />
+                     </tr>
+                   ))}
                    <tr className="bg-gray-50/30">
                      <td className="sticky left-0 z-10 px-3 py-1 font-black text-gray-400 text-[9px] border-r border-b border-gray-200 bg-inherit shadow-[1px_0_0_0_rgba(0,0,0,0.03)] min-w-[180px]">
                        <div className="flex items-center gap-1.5 flex-wrap">
@@ -729,7 +734,7 @@ export function JournalPage() {
           log={groupPopupTarget.log}
           dateStr={groupPopupTarget.dateStr}
           onUpdate={(count: number) => {
-            groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, status: 'conducted', count })
+            groupMarkMutation.mutate({ dateStr: groupPopupTarget.dateStr, staff_id: groupPopupTarget.staff_id, status: 'conducted', count })
             setGroupPopupTarget(null)
           }}
           onDelete={() => {

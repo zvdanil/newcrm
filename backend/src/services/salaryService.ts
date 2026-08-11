@@ -524,15 +524,13 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
   const specialChildrenNames = specialChildren.map(c => c.full_name)
   const specialCount = specialChildrenNames.length
 
-  const groupLog = await db
+  const groupLogs = await db
     .selectFrom('group_lesson_logs')
-    .select(['status', 'lessons_count'])
+    .select(['staff_id', 'status', 'lessons_count'])
     .where('activity_id', '=', activityId)
     .where('date', '=', castAsDate(date))
-    .executeTakeFirst()
+    .execute()
 
-  const groupConducted = groupLog?.status === 'conducted'
-  const groupLessonCount = groupLog?.lessons_count ?? 1
   const billing        = billingMonthOf(date)
 
   const existingAccruals = await db
@@ -562,6 +560,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     if (blockedStaffId && rate.staff_id === blockedStaffId) continue
 
     const existing = existingAccruals.find(a => a.rate_id === rate.id)
+
+    const teacherGroupLog = groupLogs.find(g => g.staff_id === rate.staff_id) ?? groupLogs.find(g => g.staff_id === null)
+    const groupConducted = teacherGroupLog?.status === 'conducted'
+    const groupLessonCount = teacherGroupLog?.lessons_count ?? 1
 
     const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount, specialChildrenNames)
     let hasLesson = false

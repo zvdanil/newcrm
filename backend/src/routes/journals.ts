@@ -513,10 +513,16 @@ export async function journalsRoutes(app: FastifyInstance) {
         logsIndex[log.enrollment_id][toDateStr(log.date)] = log
       }
 
-      // Индекс group logs: date → log
+      // Индекс group logs: date (and date::staff_id) → log
       const groupLogsIndex: Record<string, typeof groupLogs[0]> = {}
       for (const log of groupLogs) {
-        groupLogsIndex[toDateStr(log.date)] = log
+        const d = toDateStr(log.date)
+        if (log.staff_id) {
+          groupLogsIndex[`${d}::${log.staff_id}`] = log
+        }
+        if (!groupLogsIndex[d] || !log.staff_id) {
+          groupLogsIndex[d] = log
+        }
       }
 
       const groupTeachers = assignedStaff
@@ -838,6 +844,7 @@ export async function journalsRoutes(app: FastifyInstance) {
   app.post<{
     Body: {
       activity_id: string
+      staff_id?: string | null
       date: string
       status: 'conducted' | 'cancelled'
       lessons_count?: number
@@ -846,34 +853,55 @@ export async function journalsRoutes(app: FastifyInstance) {
     '/group-attendance',
     { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
-      const { activity_id, date, status, lessons_count } = req.body
+      const { activity_id, staff_id, date, status, lessons_count } = req.body
       if (!activity_id || !date || !status) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, date, status є обовʼязковими' })
       }
 
       const createdBy = (req.user as { sub: string }).sub
+      const targetStaffId = staff_id ?? null
 
-      const log = await db.insertInto('group_lesson_logs')
-        .values({
-          activity_id,
-          date,
-          status,
-          lessons_count: lessons_count ?? 1,
-          created_by: createdBy,
-        })
-        .onConflict((oc) =>
-          oc.columns(['activity_id', 'date']).doUpdateSet({
+      let existingQuery = db.selectFrom('group_lesson_logs')
+        .select('id')
+        .where('activity_id', '=', activity_id)
+        .where('date', '=', castAsDate(date))
+
+      if (targetStaffId) {
+        existingQuery = existingQuery.where('staff_id', '=', targetStaffId)
+      } else {
+        existingQuery = existingQuery.where('staff_id', 'is', null)
+      }
+
+      const existing = await existingQuery.executeTakeFirst()
+
+      let log
+      if (existing) {
+        log = await db.updateTable('group_lesson_logs')
+          .set({
             status,
             lessons_count: lessons_count ?? 1,
             updated_at: new Date().toISOString() as unknown as Date,
           })
-        )
-        .returningAll()
-        .executeTakeFirstOrThrow()
+          .where('id', '=', existing.id)
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      } else {
+        log = await db.insertInto('group_lesson_logs')
+          .values({
+            activity_id,
+            staff_id: targetStaffId,
+            date,
+            status,
+            lessons_count: lessons_count ?? 1,
+            created_by: createdBy,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+      }
 
       // Staff salary auto-accruals
       await recalcStaffAccruals(activity_id, date)
-      
+
       return reply.status(201).send(log)
     }
   )
