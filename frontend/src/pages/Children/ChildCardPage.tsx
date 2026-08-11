@@ -2254,191 +2254,208 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                         if (e.start_date && new Date(e.start_date) > monthLastDay) return false
                         return true
                       })
-                      .filter((e, i, arr) => arr.findIndex(x => x.activity_id === e.activity_id) === i)
+                    // Helper to classify activity or transaction as main
+                    const isMainAct = (actId: string | null) => actId ? childEnrollments.some(e => e.activity_id === actId && e.is_main) : false
+                    const isTxMain = (tx: LedgerEntry) => {
+                      if (tx.activity_is_main != null) return tx.activity_is_main
+                      if (tx.activity_id) return childEnrollments.some(e => e.activity_id === tx.activity_id && e.is_main)
+                      return false
+                    }
+
+                    // Main vs Additional Accruals & Zero Activities
+                    const mainAccruals = Object.entries(byActivity).filter(([_, d]) => isMainAct(d.activityId))
+                    const addAccruals  = Object.entries(byActivity).filter(([_, d]) => !isMainAct(d.activityId))
+                    const zeroMain = zeroActivities.filter(e => isMainAct(e.activity_id))
+                    const zeroAdd  = zeroActivities.filter(e => !isMainAct(e.activity_id))
+
+                    // Main vs Additional Refunds
+                    const mainRefunds = (group?.refunds ?? []).filter(isTxMain)
+                    const addRefunds  = (group?.refunds ?? []).filter(tx => !isTxMain(tx))
+
+                    const groupRefunds = (list: LedgerEntry[]) => Object.entries(list.reduce<Record<string, number>>((acc, tx) => {
+                      const key = tx.activity_name ?? tx.note ?? '—'
+                      acc[key] = (acc[key] ?? 0) + Number(tx.amount)
+                      return acc
+                    }, {}))
+
                     return (
-                  <div className="px-4 py-3 space-y-2 text-xs">
+                  <div className="px-4 py-3 space-y-3 text-xs">
                     {pastDebt > 0 && (
                       <div className="flex items-center justify-between py-1.5 px-2.5 rounded bg-red-50 border border-red-100 text-red-700 font-semibold mb-1.5">
                         <span>Борг минулих періодів:</span>
                         <span className="font-mono">{pastDebt.toFixed(2)} грн</span>
                       </div>
                     )}
-                    {/* Accruals grouped by activity (categorized by main / additional) */}
-                    {(enriched.length > 0 || zeroActivities.length > 0) && (() => {
-                      const isMainAct = (actId: string | null) => actId ? childEnrollments.some(e => e.activity_id === actId && e.is_main) : false
-                      const mainAccruals = Object.entries(byActivity).filter(([_, d]) => isMainAct(d.activityId))
-                      const addAccruals  = Object.entries(byActivity).filter(([_, d]) => !isMainAct(d.activityId))
-                      const zeroMain = zeroActivities.filter(e => isMainAct(e.activity_id))
-                      const zeroAdd  = zeroActivities.filter(e => !isMainAct(e.activity_id))
 
-                      return (
-                        <div className="space-y-2">
-                          <div className="flex justify-between mb-1">
-                            <p className="font-bold text-red-500">Нарахування</p>
-                            {enriched.length > 0 && (
-                              <span className="font-bold font-mono text-red-500">
-                                −{Object.values(byActivity).reduce((s, { eff }) => s + eff, 0).toFixed(2)}
-                              </span>
-                            )}
+                    {/* 🔷 БЛОК 1: ОСНОВНА ПОСЛУГА */}
+                    {(mainAccruals.length > 0 || zeroMain.length > 0 || mainRefunds.length > 0) && (
+                      <div className="p-3 bg-iris-50/40 border border-iris-100 rounded-lg space-y-2.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-iris-100">
+                          <span className="text-[11px] font-bold text-iris-900 uppercase tracking-wide flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-iris-600"></span>
+                            Основна послуга
+                          </span>
+                        </div>
+
+                        {/* Нарахування основної послуги */}
+                        {(mainAccruals.length > 0 || zeroMain.length > 0) && (
+                          <div className="space-y-0.5">
+                            <div className="flex justify-between text-[11px] font-bold text-red-500 mb-0.5">
+                              <span>Нарахування</span>
+                              <span>−{mainAccruals.reduce((s, [_, d]) => s + d.eff, 0).toFixed(2)}</span>
+                            </div>
+                            {mainAccruals.map(([name, d]) => (
+                              <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-gray-700 font-medium truncate">{name}</span>
+                                  {d.activityId && activityFlagsMap[d.activityId] === false && (
+                                    <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                                  )}
+                                  {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
+                                    <span className="text-gray-400 shrink-0">
+                                      {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
+                                      {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
+                                      {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-mono shrink-0 flex items-center gap-1">
+                                  {d.adjusted ? (
+                                    <>
+                                      <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
+                                      <span className="text-gray-400">→</span>
+                                      <span className="text-red-500">−{d.eff.toFixed(2)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-red-500">−{d.orig.toFixed(2)}</span>
+                                  )}
+                                  {canEdit && d.activityId && (
+                                    <button onClick={() => {
+                                      const bm = d.billingMonth ?? selectedBillingMonth
+                                      if (d.isPerLesson) {
+                                        if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
+                                        clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
+                                      } else {
+                                        const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
+                                        if (reason === null) return
+                                        clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
+                                      }
+                                    }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                            {zeroMain.map((e) => (
+                              <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
+                                <span className="truncate">{e.activity_name}</span>
+                                <span className="font-mono text-gray-300">0.00</span>
+                              </div>
+                            ))}
                           </div>
+                        )}
 
-                          {/* Main activities accruals */}
-                          {(mainAccruals.length > 0 || zeroMain.length > 0) && (
-                            <div className="space-y-0.5 border-l-2 border-iris-300 pl-2 my-1">
-                              <p className="text-[10px] font-bold text-iris-800 uppercase tracking-wide">Основні послуги</p>
-                              {mainAccruals.map(([name, d]) => (
-                                <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-gray-600 truncate">{name}</span>
-                                    {d.activityId && activityFlagsMap[d.activityId] === false && (
-                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
-                                    )}
-                                    {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
-                                      <span className="text-gray-400 shrink-0">
-                                        {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
-                                        {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
-                                        {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="font-mono shrink-0 flex items-center gap-1">
-                                    {d.adjusted ? (
-                                      <>
-                                        <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
-                                        <span className="text-gray-400">→</span>
-                                        <span className="text-red-500">−{d.eff.toFixed(2)}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-red-500">−{d.orig.toFixed(2)}</span>
-                                    )}
-                                    {canEdit && d.activityId && (
-                                      <button onClick={() => {
-                                        const bm = d.billingMonth ?? selectedBillingMonth
-                                        if (d.isPerLesson) {
-                                          if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
-                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
-                                        } else {
-                                          const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
-                                          if (reason === null) return
-                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
-                                        }
-                                      }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                              {zeroMain.map((e) => (
-                                <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
-                                  <span className="truncate">{e.activity_name}</span>
-                                  <span className="font-mono text-gray-300">0.00</span>
-                                </div>
-                              ))}
+                        {/* Повернення основної послуги */}
+                        {mainRefunds.length > 0 && (
+                          <div className="space-y-0.5 pt-1.5 border-t border-iris-100">
+                            <div className="flex justify-between text-[11px] font-bold text-green-600 mb-0.5">
+                              <span>Повернення</span>
+                              <span>+{mainRefunds.reduce((s, t) => s + Number(t.amount), 0).toFixed(2)}</span>
                             </div>
-                          )}
+                            {groupRefunds(mainRefunds).map(([name, total]) => (
+                              <div key={name} className="flex justify-between py-0.5">
+                                <span className="text-gray-700 font-medium">{name}</span>
+                                <span className="font-mono text-green-600">+{total.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                          {/* Additional activities accruals */}
-                          {(addAccruals.length > 0 || zeroAdd.length > 0) && (
-                            <div className="space-y-0.5 border-l-2 border-gray-300 pl-2 my-1">
-                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Додаткові послуги</p>
-                              {addAccruals.map(([name, d]) => (
-                                <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="text-gray-600 truncate">{name}</span>
-                                    {d.activityId && activityFlagsMap[d.activityId] === false && (
-                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
-                                    )}
-                                    {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
-                                      <span className="text-gray-400 shrink-0">
-                                        {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
-                                        {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
-                                        {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="font-mono shrink-0 flex items-center gap-1">
-                                    {d.adjusted ? (
-                                      <>
-                                        <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
-                                        <span className="text-gray-400">→</span>
-                                        <span className="text-red-500">−{d.eff.toFixed(2)}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-red-500">−{d.orig.toFixed(2)}</span>
-                                    )}
-                                    {canEdit && d.activityId && (
-                                      <button onClick={() => {
-                                        const bm = d.billingMonth ?? selectedBillingMonth
-                                        if (d.isPerLesson) {
-                                          if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
-                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
-                                        } else {
-                                          const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
-                                          if (reason === null) return
-                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
-                                        }
-                                      }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                              {zeroAdd.map((e) => (
-                                <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
-                                  <span className="truncate">{e.activity_name}</span>
-                                  <span className="font-mono text-gray-300">0.00</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                    {/* 🔸 БЛОК 2: ДОДАТКОВІ ПОСЛУГИ */}
+                    {(addAccruals.length > 0 || zeroAdd.length > 0 || addRefunds.length > 0) && (
+                      <div className="p-3 bg-gray-50/80 border border-gray-200 rounded-lg space-y-2.5">
+                        <div className="flex items-center justify-between pb-1 border-b border-gray-200">
+                          <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                            Додаткові послуги
+                          </span>
                         </div>
-                      )
-                    })()}
 
-                    {/* Refunds grouped by activity and categorized by main / additional */}
-                    {(group?.refunds ?? []).length > 0 && (() => {
-                      const isRefMain = (tx: LedgerEntry) => {
-                        if (tx.activity_is_main != null) return tx.activity_is_main
-                        if (tx.activity_id) return childEnrollments.some(e => e.activity_id === tx.activity_id && e.is_main)
-                        return false
-                      }
-                      const mainRefunds = (group?.refunds ?? []).filter(isRefMain)
-                      const addRefunds  = (group?.refunds ?? []).filter(tx => !isRefMain(tx))
-
-                      const groupRefunds = (list: LedgerEntry[]) => Object.entries(list.reduce<Record<string, number>>((acc, tx) => {
-                        const key = tx.activity_name ?? tx.note ?? '—'
-                        acc[key] = (acc[key] ?? 0) + Number(tx.amount)
-                        return acc
-                      }, {}))
-
-                      return (
-                        <div className="space-y-2 pt-1 border-t border-gray-100">
-                          <p className="font-bold text-green-500 mb-1">Повернення</p>
-
-                          {mainRefunds.length > 0 && (
-                            <div className="space-y-0.5 border-l-2 border-iris-300 pl-2 my-1">
-                              <p className="text-[10px] font-bold text-iris-800 uppercase tracking-wide">Основна послуга</p>
-                              {groupRefunds(mainRefunds).map(([name, total]) => (
-                                <div key={name} className="flex justify-between py-0.5">
-                                  <span className="text-gray-600">{name}</span>
-                                  <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
-                                </div>
-                              ))}
+                        {/* Нарахування додаткових послуг */}
+                        {(addAccruals.length > 0 || zeroAdd.length > 0) && (
+                          <div className="space-y-0.5">
+                            <div className="flex justify-between text-[11px] font-bold text-red-500 mb-0.5">
+                              <span>Нарахування</span>
+                              <span>−{addAccruals.reduce((s, [_, d]) => s + d.eff, 0).toFixed(2)}</span>
                             </div>
-                          )}
-
-                          {addRefunds.length > 0 && (
-                            <div className="space-y-0.5 border-l-2 border-gray-300 pl-2 my-1">
-                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Додаткові послуги</p>
-                              {groupRefunds(addRefunds).map(([name, total]) => (
-                                <div key={name} className="flex justify-between py-0.5">
-                                  <span className="text-gray-600">{name}</span>
-                                  <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
+                            {addAccruals.map(([name, d]) => (
+                              <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-gray-700 font-medium truncate">{name}</span>
+                                  {d.activityId && activityFlagsMap[d.activityId] === false && (
+                                    <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                                  )}
+                                  {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
+                                    <span className="text-gray-400 shrink-0">
+                                      {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
+                                      {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
+                                      {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
+                                    </span>
+                                  )}
                                 </div>
-                              ))}
+                                <span className="font-mono shrink-0 flex items-center gap-1">
+                                  {d.adjusted ? (
+                                    <>
+                                      <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
+                                      <span className="text-gray-400">→</span>
+                                      <span className="text-red-500">−{d.eff.toFixed(2)}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-red-500">−{d.orig.toFixed(2)}</span>
+                                  )}
+                                  {canEdit && d.activityId && (
+                                    <button onClick={() => {
+                                      const bm = d.billingMonth ?? selectedBillingMonth
+                                      if (d.isPerLesson) {
+                                        if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
+                                        clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
+                                      } else {
+                                        const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
+                                        if (reason === null) return
+                                        clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
+                                      }
+                                    }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
+                            {zeroAdd.map((e) => (
+                              <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
+                                <span className="truncate">{e.activity_name}</span>
+                                <span className="font-mono text-gray-300">0.00</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Повернення додаткових послуг */}
+                        {addRefunds.length > 0 && (
+                          <div className="space-y-0.5 pt-1.5 border-t border-gray-200">
+                            <div className="flex justify-between text-[11px] font-bold text-green-600 mb-0.5">
+                              <span>Повернення</span>
+                              <span>+{addRefunds.reduce((s, t) => s + Number(t.amount), 0).toFixed(2)}</span>
                             </div>
-                          )}
-                        </div>
-                      )
-                    })()}
+                            {groupRefunds(addRefunds).map(([name, total]) => (
+                              <div key={name} className="flex justify-between py-0.5">
+                                <span className="text-gray-700 font-medium">{name}</span>
+                                <span className="font-mono text-green-600">+{total.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Unlinked adjustments only */}
                     {unlinkedAdjs.length > 0 && (
