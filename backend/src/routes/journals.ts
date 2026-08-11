@@ -441,7 +441,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'BadRequest', message: 'activity_id, from, to є обовʼязковими' })
       }
 
-      const [activity, refundConfig, enrollments, logs, groupLogs, assignedStaff] = await Promise.all([
+      const [activity, refundConfig, enrollments, logs, groupLogs, rawStaffRates] = await Promise.all([
         db.selectFrom('activities as a')
           .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
           .select(['a.id', 'a.name', 'a.account_id', 'a.tariff_type', 'a.is_rigid', 'a.has_group_classes', 'a.auto_group_classes', 'ac.name as account_name'])
@@ -491,16 +491,20 @@ export async function journalsRoutes(app: FastifyInstance) {
 
         db.selectFrom('staff_rates as sr')
           .innerJoin('staff as s', 's.id', 'sr.staff_id')
-          .select(['s.id as staff_id', 's.full_name', 'sr.rate_type'])
+          .select(['s.id as staff_id', 's.full_name', 'sr.rate_type', 'sr.valid_from', 'sr.valid_to', 'sr.created_at'])
           .where('sr.activity_id', '=', activity_id)
+          .where('sr.rate_category', '=', 'auto')
+          .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'individual_per_child', 'smart', 'smart_per_child'])
           .where('sr.valid_from', '<=', castAsDate(to))
+          .where((eb) => eb.or([
+            eb('sr.valid_to', 'is', null),
+            eb('sr.valid_to', '>=', castAsDate(new Date().toISOString().slice(0, 10))),
+          ]))
           .where((eb) => eb.or([
             eb('sr.valid_to', 'is', null),
             eb('sr.valid_to', '>=', castAsDate(from)),
           ]))
-          .where('sr.rate_category', '=', 'auto')
-          .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'individual_per_child', 'smart', 'smart_per_child'])
-          .orderBy('s.full_name', 'asc')
+          .orderBy('sr.created_at', 'desc')
           .execute(),
       ])
 
@@ -509,6 +513,15 @@ export async function journalsRoutes(app: FastifyInstance) {
       const requestUserId = req.user.sub
       const requestRole   = req.user.role
       const isDutyAdmin   = requestRole === 'duty_admin'
+
+      // Deduplicate assigned staff by staff_id to prevent multiple rows per teacher
+      const staffMap = new Map<string, { staff_id: string; full_name: string; rate_type: string }>()
+      for (const r of rawStaffRates) {
+        if (!staffMap.has(r.staff_id)) {
+          staffMap.set(r.staff_id, { staff_id: r.staff_id, full_name: r.full_name, rate_type: r.rate_type })
+        }
+      }
+      const assignedStaff = Array.from(staffMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
 
       // Индекс логов: enrollment_id → date → log
       const logsIndex: Record<string, Record<string, typeof logs[0]>> = {}
@@ -534,9 +547,9 @@ export async function journalsRoutes(app: FastifyInstance) {
         .filter(s => s.rate_type === 'group_lesson')
         .map(s => ({ id: s.staff_id, full_name: s.full_name }))
 
+      const groupTeacherIds = new Set(groupTeachers.map(g => g.id))
       const additionalTeachers = assignedStaff
-        .filter(s => s.rate_type !== 'group_lesson')
-        .filter((s, i, arr) => arr.findIndex(x => x.staff_id === s.staff_id) === i)
+        .filter(s => !groupTeacherIds.has(s.staff_id))
         .map(s => ({ id: s.staff_id, full_name: s.full_name }))
 
       return {
