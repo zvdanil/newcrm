@@ -493,7 +493,11 @@ export async function journalsRoutes(app: FastifyInstance) {
           .innerJoin('staff as s', 's.id', 'sr.staff_id')
           .select(['s.id as staff_id', 's.full_name', 'sr.rate_type'])
           .where('sr.activity_id', '=', activity_id)
-          .where('sr.valid_to', 'is', null)
+          .where('sr.valid_from', '<=', castAsDate(to))
+          .where((eb) => eb.or([
+            eb('sr.valid_to', 'is', null),
+            eb('sr.valid_to', '>=', castAsDate(from)),
+          ]))
           .where('sr.rate_category', '=', 'auto')
           .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'individual_per_child', 'smart', 'smart_per_child'])
           .orderBy('s.full_name', 'asc')
@@ -513,14 +517,15 @@ export async function journalsRoutes(app: FastifyInstance) {
         logsIndex[log.enrollment_id][toDateStr(log.date)] = log
       }
 
-      // Индекс group logs: date (and date::staff_id) → log
+      // Индекс group logs:
+      // Если у лога есть staff_id — индексируем по key `${d}::${staff_id}`.
+      // Если staff_id IS NULL (для старых записей) — индексируем по `d`.
       const groupLogsIndex: Record<string, typeof groupLogs[0]> = {}
       for (const log of groupLogs) {
         const d = toDateStr(log.date)
         if (log.staff_id) {
           groupLogsIndex[`${d}::${log.staff_id}`] = log
-        }
-        if (!groupLogsIndex[d] || !log.staff_id) {
+        } else {
           groupLogsIndex[d] = log
         }
       }

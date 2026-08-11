@@ -693,8 +693,11 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
   })
 
   const closeMutation = useMutation({
-    mutationFn: (rateId: string) => staffApi.closeRate(staffId, rateId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff-rates', staffId] }),
+    mutationFn: ({ rateId, validTo }: { rateId: string; validTo?: string }) => staffApi.closeRate(staffId, rateId, validTo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['staff-rates', staffId] })
+      qc.invalidateQueries({ queryKey: ['staff-salary', staffId] })
+    },
   })
 
   const active   = rates.filter(r => !r.valid_to || new Date(r.valid_to) >= new Date())
@@ -703,6 +706,8 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
   function RateRow({ rate }: { rate: StaffRate }) {
     const isActive = !rate.valid_to || new Date(rate.valid_to) >= new Date()
     const [editing, setEditing] = useState(false)
+    const [showCloseModal, setShowCloseModal] = useState(false)
+    const [closeDate, setCloseDate] = useState(() => new Date().toISOString().slice(0, 10))
     const currentYear = new Date().getFullYear()
 
     const { data: vacDays } = useQuery({
@@ -1059,11 +1064,54 @@ function RatesBlock({ staffId, isAdmin }: { staffId: string; isAdmin: boolean })
               </button>
             )}
             {isActive && (
-              <button onClick={() => { if (window.confirm('Закрити ставку (встановити valid_to = сьогодні)?')) closeMutation.mutate(rate.id) }}
+              <button onClick={() => setShowCloseModal(true)}
                 className="text-xs text-gray-300 hover:text-red-500 transition-colors">
                 закрити
               </button>
             )}
+          </div>
+        )}
+        {showCloseModal && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5 space-y-4 text-left">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-900">Закриття ставки</h3>
+                <button onClick={() => setShowCloseModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Вкажіть дату, по яку ставка діє. Можна обрати дату в минулому (заднім числом) або в майбутньому.
+              </p>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Дата закриття (valid_to)
+                </label>
+                <input
+                  type="date"
+                  value={closeDate}
+                  onChange={(e) => setCloseDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:border-iris-500"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCloseModal(false)}
+                  className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium"
+                >
+                  Скасувати
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMutation.mutate({ rateId: rate.id, validTo: closeDate })
+                    setShowCloseModal(false)
+                  }}
+                  className="px-4 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-sm transition-colors"
+                >
+                  Закрити ставку
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

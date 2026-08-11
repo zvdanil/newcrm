@@ -483,7 +483,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where('valid_from', '<=', castAsDate(date))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', castAsDate(date)),
+      eb('valid_to', '>=', castAsDate(date)),
     ]))
     .selectAll()
     .orderBy('valid_from', 'desc')
@@ -649,7 +649,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where('valid_from', '<=', castAsDate(date))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', castAsDate(date)),
+      eb('valid_to', '>=', castAsDate(date)),
     ]))
     .execute()
 
@@ -771,7 +771,7 @@ export async function runFixedMonthlyAccruals(billingMonth: string): Promise<voi
     .where('valid_from', '<=', castAsDate(billingMonth))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>', castAsDate(billingMonth)),
+      eb('valid_to', '>=', castAsDate(billingMonth)),
     ]))
     .selectAll()
     .execute()

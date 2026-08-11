@@ -401,7 +401,9 @@ export function JournalPage() {
     const teachers = groupTeachers.length > 0 ? groupTeachers : [{ id: null, full_name: null }]
     teachers.forEach((gt) => {
       const key = gt.id ? `${dateStr}::${gt.id}` : dateStr
-      const gLog = data.group_logs[key] ?? data.group_logs[dateStr]
+      const gLog = gt.id
+        ? (data.group_logs[key] ?? (data.group_logs[dateStr]?.staff_id === null ? data.group_logs[dateStr] : undefined))
+        : data.group_logs[dateStr]
       if (!gLog || gLog.status !== 'conducted') {
         groupMarkMutation.mutate({ dateStr, staff_id: gt.id, status: 'conducted', count: 1 })
       }
@@ -579,8 +581,9 @@ export function JournalPage() {
                          </div>
                        </td>
                        {dates.map(d => {
-                         const key = t.id ? `${d}::${t.id}` : d
-                         const gLog = groupLogs[key] ?? groupLogs[d]
+                         const gLog = t.id
+                           ? (groupLogs[`${d}::${t.id}`] ?? (groupLogs[d]?.staff_id === null ? groupLogs[d] : undefined))
+                           : groupLogs[d]
                          const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6
                          const hoverBg = isWeekend ? 'bg-amber-100/80' : 'bg-iris-100/50'
                          const baseBg = isWeekend ? 'bg-amber-50/30' : ''

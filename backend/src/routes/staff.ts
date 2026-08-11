@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { sql } from 'kysely'
 import { requireRole } from '../plugins/authenticate.js'
-import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit, recalcFixedMonthlyAccruals } from '../services/salaryService.js'
+import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit, recalcFixedMonthlyAccruals, recalcStaffAccruals } from '../services/salaryService.js'
 
 function countDaysInPeriod(periodStart: string, periodEnd: string, calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS'): number {
   const start = new Date(periodStart + 'T00:00:00')
@@ -494,22 +494,26 @@ export async function staffRoutes(app: FastifyInstance) {
     }
   )
 
-  // DELETE /api/staff/:id/rates/:rateId — close rate (valid_to = today)
-  app.delete<{ Params: { id: string; rateId: string } }>(
+  // DELETE /api/staff/:id/rates/:rateId — close rate with specified valid_to (defaults to today)
+  app.delete<{ Params: { id: string; rateId: string }; Querystring: { valid_to?: string } }>(
     '/:id/rates/:rateId',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const today = new Date().toISOString().slice(0, 10)
+      const closingDate = (req.query.valid_to || (req.body as any)?.valid_to || new Date().toISOString().slice(0, 10))
       const updated = await db.updateTable('staff_rates')
-        .set({ valid_to: today })
+        .set({ valid_to: closingDate })
         .where('id', '=', req.params.rateId)
         .where('staff_id', '=', req.params.id)
-        .where('valid_to', 'is', null)
         .returningAll()
         .executeTakeFirst()
 
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
-      return { ok: true }
+
+      if (updated.activity_id) {
+        await recalcStaffAccruals(updated.activity_id, closingDate)
+      }
+
+      return { ok: true, rate: updated }
     }
   )
 

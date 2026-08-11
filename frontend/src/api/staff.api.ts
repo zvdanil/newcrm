@@ -257,8 +257,9 @@ export const staffApi = {
     return data
   },
 
-  closeRate: async (staffId: string, rateId: string): Promise<void> => {
-    await apiClient.delete(`/staff/${staffId}/rates/${rateId}`)
+  closeRate: async (staffId: string, rateId: string, validTo?: string): Promise<void> => {
+    const q = validTo ? `?valid_to=${validTo}` : ''
+    await apiClient.delete(`/staff/${staffId}/rates/${rateId}${q}`)
   },
 
   // Salary
