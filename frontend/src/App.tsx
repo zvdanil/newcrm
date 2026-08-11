@@ -30,6 +30,7 @@ import UsersPage from './pages/Users/UsersPage'
 import AcceptInvitePage from './pages/Invite/AcceptInvitePage'
 import ResetPasswordPage from './pages/Invite/ResetPasswordPage'
 import { CabinetPage } from './pages/Cabinet/CabinetPage'
+import { ChildCabinetPreviewPage } from './pages/Cabinet/ChildCabinetPreviewPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +90,7 @@ export function App() {
                 <Route path="children"      element={<ChildrenListPage />} />
                 <Route path="children/new"  element={<ChildCreatePage />} />
                 <Route path="children/:id"  element={<ChildCardPage />} />
+                <Route path="children/:childId/cabinet" element={<ChildCabinetPreviewPage />} />
 
                 {/* Сім'ї */}
                 <Route path="families"      element={<FamiliesListPage />} />

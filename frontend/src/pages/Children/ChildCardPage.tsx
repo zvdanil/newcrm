@@ -136,7 +136,18 @@ export function ChildCardPage() {
         {/* View mode */}
         {!editing && (
           <dl className="grid grid-cols-2 gap-4">
-            <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
+            <div>
+              <InfoRow label="Дата народження" value={formatDate(child.birth_date)} />
+              <div className="mt-2">
+                <button
+                  onClick={() => navigate(`/children/${child.id}/cabinet`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-iris-50 hover:bg-iris-100 text-iris-700 text-xs font-semibold rounded-lg transition-colors border border-iris-200 shadow-sm"
+                  title="Переглянути кабінет батьків"
+                >
+                  👁️ Кабінет батьків
+                </button>
+              </div>
+            </div>
             <InfoRow label="Група"           value={child.group_name ?? '—'} />
             {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
           </dl>

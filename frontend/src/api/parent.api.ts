@@ -5,7 +5,7 @@ export interface ParentChild {
   full_name: string
   birth_date: string | null
   note: string | null
-  balances: { account_name: string; balance: string }[]
+  balances: { account_id?: string; account_name: string; balance: string; is_main?: boolean }[]
 }
 
 export interface ParentLedgerRow {
@@ -44,6 +44,7 @@ export interface ActivityMonthlySummary {
   activity_id: string
   activity_name: string
   activity_is_active: boolean
+  activity_is_main?: boolean
   activity_tariff_type: 'monthly' | 'per_lesson' | 'smart'
   enrollment_status: string | null  // null = archived enrollment (has transactions but no active enrollment)
   accrual_total: number
@@ -65,6 +66,11 @@ export interface AccountMonthlySummary {
 export const parentApi = {
   getChildren: async (): Promise<ParentChild[]> => {
     const { data } = await apiClient.get<ParentChild[]>('/parent/children')
+    return data
+  },
+
+  getChildInfo: async (childId: string): Promise<ParentChild> => {
+    const { data } = await apiClient.get<ParentChild>(`/parent/children/${childId}/info`)
     return data
   },
 

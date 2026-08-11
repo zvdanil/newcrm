@@ -46,11 +46,24 @@ export async function parentRoutes(app: FastifyInstance) {
       const balances = await db
         .selectFrom('child_balances as cb')
         .innerJoin('accounts as a', 'a.id', 'cb.account_id')
-        .select(['a.name as account_name', 'cb.balance'])
+        .select(['a.id as account_id', 'a.name as account_name', 'cb.balance'])
         .where('cb.child_id', '=', child.id)
         .execute()
 
-      return { ...child, balances }
+      const enrollments = await db
+        .selectFrom('enrollments as e')
+        .innerJoin('activities as act', 'act.id', 'e.activity_id')
+        .select(['e.account_id', 'act.is_main'])
+        .where('e.child_id', '=', child.id)
+        .where('e.status', 'in', ['active', 'frozen'])
+        .execute()
+
+      const balancesWithMain = balances.map((b) => {
+        const is_main = enrollments.some((e) => e.account_id === b.account_id && e.is_main)
+        return { ...b, is_main }
+      })
+
+      return { ...child, balances: balancesWithMain }
     }))
 
     return result
@@ -61,12 +74,16 @@ export async function parentRoutes(app: FastifyInstance) {
     Params: { childId: string }
     Querystring: { from?: string; to?: string }
   }>('/children/:childId/ledger', async (req, reply) => {
-    const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
-    const parentId = await getParentId(userId)
-    if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
+    const role = (req as any).user?.role
+    const isAdmin = role === 'admin' || role === 'owner' || role === 'manager'
+    if (!isAdmin) {
+      const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
+      const parentId = await getParentId(userId)
+      if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
 
-    const hasAccess = await assertChildAccess(parentId, req.params.childId)
-    if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+      const hasAccess = await assertChildAccess(parentId, req.params.childId)
+      if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+    }
 
     const { from, to } = req.query
 
@@ -116,7 +133,7 @@ export async function parentRoutes(app: FastifyInstance) {
     const txFields = [
       't.id', 't.type', 't.amount', 't.transaction_date', 't.billing_month', 't.note',
       't.account_id',
-      'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+      'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active', 'a.is_main as activity_is_main',
       'a.tariff_type as activity_tariff_type',
       'ac.name as account_name',
       'ac.payment_details as account_payment_details',
@@ -130,7 +147,7 @@ export async function parentRoutes(app: FastifyInstance) {
         .select([
           'e.account_id', 'ac.name as account_name', 'ac.payment_details as account_payment_details', 'e.status as enrollment_status',
           'e.start_date',
-          'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active',
+          'a.id as activity_id', 'a.name as activity_name', 'a.is_active as activity_is_active', 'a.is_main as activity_is_main',
           'a.tariff_type as activity_tariff_type',
         ])
         .where('e.child_id', '=', req.params.childId)
@@ -230,6 +247,7 @@ export async function parentRoutes(app: FastifyInstance) {
     type TxRow = typeof transactions[number]
     type ActivityEntry = {
       activity_id: string; activity_name: string; activity_is_active: boolean
+      activity_is_main: boolean
       activity_tariff_type: 'monthly' | 'per_lesson' | 'smart'
       enrollment_status: string | null  // null = has transactions but no active/frozen enrollment
       accrual_total: number; refund_total: number; visit_count: number; excused_count: number
@@ -247,6 +265,7 @@ export async function parentRoutes(app: FastifyInstance) {
       activityId: string,
       activityName: string,
       activityIsActive: boolean,
+      activityIsMain: boolean,
       activityTariffType: 'monthly' | 'per_lesson' | 'smart',
       enrollmentStatus: string | null,
       expectedPrice: number
@@ -260,7 +279,8 @@ export async function parentRoutes(app: FastifyInstance) {
       if (!entry) {
         entry = {
           activity_id: activityId, activity_name: activityName,
-          activity_is_active: activityIsActive, activity_tariff_type: activityTariffType,
+          activity_is_active: activityIsActive, activity_is_main: activityIsMain,
+          activity_tariff_type: activityTariffType,
           enrollment_status: enrollmentStatus,
           accrual_total: 0, refund_total: 0, visit_count: 0, excused_count: 0,
           expected_price: expectedPrice,
@@ -275,7 +295,7 @@ export async function parentRoutes(app: FastifyInstance) {
     for (const e of enrollmentsWithPrices) {
       ensureActivity(
         e.account_id, e.account_name, e.account_payment_details,
-        e.activity_id, e.activity_name, e.activity_is_active,
+        e.activity_id, e.activity_name, e.activity_is_active, e.activity_is_main ?? false,
         e.activity_tariff_type, e.enrollment_status,
         e.expected_price
       )
@@ -291,7 +311,7 @@ export async function parentRoutes(app: FastifyInstance) {
       const tariffType = t.activity_tariff_type ?? 'monthly'
       const entry = ensureActivity(
         accountId, accountName, accountPaymentDetails,
-        activityId, activityName, t.activity_is_active ?? false,
+        activityId, activityName, t.activity_is_active ?? false, t.activity_is_main ?? false,
         tariffType, null,
         0
       )
@@ -336,17 +356,65 @@ export async function parentRoutes(app: FastifyInstance) {
       .sort((a, b) => a.account_name.localeCompare(b.account_name, 'uk'))
   })
 
+  // GET /api/parent/children/:childId/info — single child details and balances for parent cabinet
+  app.get<{ Params: { childId: string } }>('/children/:childId/info', async (req, reply) => {
+    const role = (req as any).user?.role
+    const isAdmin = role === 'admin' || role === 'owner' || role === 'manager'
+    if (!isAdmin) {
+      const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
+      const parentId = await getParentId(userId)
+      if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
+
+      const hasAccess = await assertChildAccess(parentId, req.params.childId)
+      if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+    }
+
+    const child = await db
+      .selectFrom('children as c')
+      .select(['c.id', 'c.full_name', 'c.birth_date', 'c.note'])
+      .where('c.id', '=', req.params.childId)
+      .executeTakeFirst()
+
+    if (!child) return reply.status(404).send({ error: 'NotFound' })
+
+    const balances = await db
+      .selectFrom('child_balances as cb')
+      .innerJoin('accounts as a', 'a.id', 'cb.account_id')
+      .select(['a.id as account_id', 'a.name as account_name', 'cb.balance'])
+      .where('cb.child_id', '=', child.id)
+      .execute()
+
+    const enrollments = await db
+      .selectFrom('enrollments as e')
+      .innerJoin('activities as act', 'act.id', 'e.activity_id')
+      .select(['e.account_id', 'act.is_main'])
+      .where('e.child_id', '=', child.id)
+      .where('e.status', 'in', ['active', 'frozen'])
+      .execute()
+
+    const balancesWithMain = balances.map((b) => {
+      const is_main = enrollments.some((e) => e.account_id === b.account_id && e.is_main)
+      return { ...b, is_main }
+    })
+
+    return { ...child, balances: balancesWithMain }
+  })
+
   // GET /api/parent/children/:childId/attendance?month=YYYY-MM
   app.get<{
     Params: { childId: string }
     Querystring: { month?: string }
   }>('/children/:childId/attendance', async (req, reply) => {
-    const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
-    const parentId = await getParentId(userId)
-    if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
+    const role = (req as any).user?.role
+    const isAdmin = role === 'admin' || role === 'owner' || role === 'manager'
+    if (!isAdmin) {
+      const userId = (req as { user?: { sub?: string } }).user?.sub ?? ''
+      const parentId = await getParentId(userId)
+      if (!parentId) return reply.status(403).send({ error: 'Forbidden' })
 
-    const hasAccess = await assertChildAccess(parentId, req.params.childId)
-    if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+      const hasAccess = await assertChildAccess(parentId, req.params.childId)
+      if (!hasAccess) return reply.status(403).send({ error: 'Forbidden' })
+    }
 
     const month = req.query.month ?? new Date().toISOString().slice(0, 7)
     const [y, m] = month.split('-').map(Number)

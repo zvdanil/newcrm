@@ -202,6 +202,9 @@ function AccrualActivityRow({ summary }: { summary: ActivityMonthlySummary }) {
           <span className={`font-medium truncate ${isArchived ? 'text-gray-500' : 'text-gray-800'}`}>
             {summary.activity_name}
           </span>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${summary.activity_is_main ? 'bg-iris-50 text-iris-700 border border-iris-200' : 'bg-gray-200 text-gray-600'}`}>
+            {summary.activity_is_main ? 'Основна' : 'Додаткова'}
+          </span>
           {isArchived && (
             <span className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-400">архів</span>
           )}
@@ -266,6 +269,9 @@ function AccrualsTab({ childId, month }: { childId: string; month: string }) {
     <div className="px-6 py-4 space-y-5">
       {accounts.map((acct) => {
         const totalNet = acct.activities.reduce((s, a) => s + a.accrual_total - a.refund_total, 0)
+        const mainActivities = acct.activities.filter((a) => a.activity_is_main)
+        const addActivities = acct.activities.filter((a) => !a.activity_is_main)
+
         return (
           <div key={acct.account_id} className="border border-gray-200 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
@@ -274,10 +280,40 @@ function AccrualsTab({ childId, month }: { childId: string; month: string }) {
                 {totalNet !== 0 ? (totalNet > 0 ? '+' : '−') : ''}{Math.abs(totalNet).toFixed(2)} ₴
               </span>
             </div>
-            <div className="p-3 space-y-2">
-              {acct.activities.map((s) => (
-                <AccrualActivityRow key={`${acct.account_id}:${s.activity_id}`} summary={s} />
-              ))}
+            <div className="p-3 space-y-3">
+              {/* Main Services Block */}
+              {mainActivities.length > 0 && (
+                <div className="p-3 bg-iris-50/40 border border-iris-100 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between pb-1 border-b border-iris-100">
+                    <span className="text-xs font-bold text-iris-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-iris-600"></span>
+                      Основна послуга
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {mainActivities.map((s) => (
+                      <AccrualActivityRow key={`${acct.account_id}:${s.activity_id}`} summary={s} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Services Block */}
+              {addActivities.length > 0 && (
+                <div className="p-3 bg-gray-50/80 border border-gray-200 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between pb-1 border-b border-gray-200">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                      Додаткові послуги
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {addActivities.map((s) => (
+                      <AccrualActivityRow key={`${acct.account_id}:${s.activity_id}`} summary={s} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )
@@ -630,31 +666,57 @@ const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: 'invoice',    label: 'Рахунок на оплату' },
 ]
 
-function ChildPanel({ child }: { child: ParentChild }) {
+export function ChildPanel({ child }: { child: ParentChild }) {
   const [tab, setTab]     = useState<MainTab>('attendance')
   const [month, setMonth] = useState(currentMonth())
   const canGoNext = month < currentMonth()
 
+  const overallTotal = child.balances.reduce((s, b) => s + parseFloat(b.balance || '0'), 0)
+  const mainTotal = child.balances.filter(b => b.is_main).reduce((s, b) => s + parseFloat(b.balance || '0'), 0)
+  const addTotal = child.balances.filter(b => !b.is_main).reduce((s, b) => s + parseFloat(b.balance || '0'), 0)
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-100">
+      <div className="px-6 py-4 border-b border-gray-100 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-gray-900">{child.full_name}</h2>
+            <h2 className="font-bold text-gray-900 text-lg">{child.full_name}</h2>
             {child.birth_date && (
               <p className="text-xs text-gray-400 mt-0.5">{formatDate(child.birth_date)}</p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 justify-end">
-            {child.balances.length === 0 && (
-              <span className="text-xs text-gray-400">Балансів немає</span>
-            )}
-            {child.balances.map((b) => (
-              <BalancePill key={b.account_name} balance={b.balance} account_name={b.account_name} />
-            ))}
-          </div>
         </div>
+
+        {/* Balance Cards Summary */}
+        {child.balances.length > 0 && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-iris-200 bg-gradient-to-br from-iris-50 to-white p-3 shadow-sm">
+              <p className="text-[10px] font-bold text-iris-800 uppercase tracking-wide">Загальний баланс</p>
+              <p className={`text-base font-bold mt-0.5 ${overallTotal > 0 ? 'text-green-700' : overallTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {overallTotal > 0 ? '+' : ''}{overallTotal.toFixed(2)} ₴
+              </p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+              <p className="text-[10px] font-semibold text-blue-900 uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                Основна послуга
+              </p>
+              <p className={`text-base font-bold mt-0.5 ${mainTotal > 0 ? 'text-green-700' : mainTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {mainTotal > 0 ? '+' : ''}{mainTotal.toFixed(2)} ₴
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+              <p className="text-[10px] font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                Додаткові послуги
+              </p>
+              <p className={`text-base font-bold mt-0.5 ${addTotal > 0 ? 'text-green-700' : addTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {addTotal > 0 ? '+' : ''}{addTotal.toFixed(2)} ₴
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Month navigation — shared for all tabs */}
