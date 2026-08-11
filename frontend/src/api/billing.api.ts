@@ -23,6 +23,7 @@ export interface LedgerEntry {
   account_name: string
   activity_id: string | null
   activity_name: string | null
+  activity_is_main?: boolean | null
   enrollment_id: string | null
   metadata_json: Record<string, unknown> | null
   created_by_email: string | null

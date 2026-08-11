@@ -682,12 +682,23 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
     return e.tariff_type || 'monthly'
   }
 
-  const subscriptionEnrollments = activeEnrollments.filter((e) => {
+  const mainActiveEnrollments = activeEnrollments.filter((e) => e.is_main)
+  const additionalActiveEnrollments = activeEnrollments.filter((e) => !e.is_main)
+
+  const subscriptionEnrollmentsMain = mainActiveEnrollments.filter((e) => {
     const t = getEffectiveTariffType(e)
     return t === 'monthly' || t === 'smart'
   })
+  const payPerLessonEnrollmentsMain = mainActiveEnrollments.filter((e) => {
+    const t = getEffectiveTariffType(e)
+    return t === 'per_lesson'
+  })
 
-  const payPerLessonEnrollments = activeEnrollments.filter((e) => {
+  const subscriptionEnrollmentsAdditional = additionalActiveEnrollments.filter((e) => {
+    const t = getEffectiveTariffType(e)
+    return t === 'monthly' || t === 'smart'
+  })
+  const payPerLessonEnrollmentsAdditional = additionalActiveEnrollments.filter((e) => {
     const t = getEffectiveTariffType(e)
     return t === 'per_lesson'
   })
@@ -931,6 +942,9 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
             <div>
               <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
                 {e.activity_name}
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${e.is_main ? 'bg-iris-50 text-iris-700 border border-iris-200' : 'bg-gray-100 text-gray-500'}`}>
+                  {e.is_main ? 'Основна' : 'Додаткова'}
+                </span>
                 {e.tariff_valid_from && e.start_date < e.tariff_valid_from && (
                   <span
                     title={`Тариф діє з ${new Date(e.tariff_valid_from).toLocaleDateString('uk-UA')}. Нарахування до цієї дати відсутні.`}
@@ -1162,35 +1176,67 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
         <p className="text-sm text-gray-400">Немає активних підписок</p>
       ) : (
         <div className="space-y-5">
-          {/* Subscriptions with monthly fee */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
-              <span className="text-xs font-semibold text-iris-800 bg-iris-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                З абонплатою ({subscriptionEnrollments.length})
+          {/* Main activities block */}
+          <div className="space-y-3 p-4 bg-iris-50/40 border border-iris-100 rounded-xl">
+            <div className="flex items-center justify-between pb-1.5 border-b border-iris-100">
+              <span className="text-xs font-bold text-iris-900 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-iris-600"></span>
+                Основні активності ({mainActiveEnrollments.length})
               </span>
             </div>
-            {subscriptionEnrollments.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1 italic">Немає підписок з абонплатою</p>
+            {mainActiveEnrollments.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1 italic">Немає основних активностей</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {subscriptionEnrollments.map(renderEnrollmentRow)}
-              </ul>
+              <div className="space-y-3">
+                {subscriptionEnrollmentsMain.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                      З абонплатою ({subscriptionEnrollmentsMain.length})
+                    </span>
+                    <ul className="divide-y divide-gray-100">{subscriptionEnrollmentsMain.map(renderEnrollmentRow)}</ul>
+                  </div>
+                )}
+                {payPerLessonEnrollmentsMain.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                      Оплата по факту ({payPerLessonEnrollmentsMain.length})
+                    </span>
+                    <ul className="divide-y divide-gray-100">{payPerLessonEnrollmentsMain.map(renderEnrollmentRow)}</ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Subscriptions per lesson */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
-              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                Оплата по факту ({payPerLessonEnrollments.length})
+          {/* Additional activities block */}
+          <div className="space-y-3 p-4 bg-gray-50/80 border border-gray-200 rounded-xl">
+            <div className="flex items-center justify-between pb-1.5 border-b border-gray-200">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                Додаткові активності ({additionalActiveEnrollments.length})
               </span>
             </div>
-            {payPerLessonEnrollments.length === 0 ? (
-              <p className="text-xs text-gray-400 py-1 italic">Немає підписок з оплатою по факту</p>
+            {additionalActiveEnrollments.length === 0 ? (
+              <p className="text-xs text-gray-400 py-1 italic">Немає додаткових активностей</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {payPerLessonEnrollments.map(renderEnrollmentRow)}
-              </ul>
+              <div className="space-y-3">
+                {subscriptionEnrollmentsAdditional.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                      З абонплатою ({subscriptionEnrollmentsAdditional.length})
+                    </span>
+                    <ul className="divide-y divide-gray-100">{subscriptionEnrollmentsAdditional.map(renderEnrollmentRow)}</ul>
+                  </div>
+                )}
+                {payPerLessonEnrollmentsAdditional.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                      Оплата по факту ({payPerLessonEnrollmentsAdditional.length})
+                    </span>
+                    <ul className="divide-y divide-gray-100">{payPerLessonEnrollmentsAdditional.map(renderEnrollmentRow)}</ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1658,6 +1704,23 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
     attendanceCountMap[a.activity_id] = a
   }
 
+  const { data: childEnrollments = [] } = useQuery({
+    queryKey: ['enrollments', childId],
+    queryFn: () => enrollmentsApi.listByChild(childId),
+  })
+
+  const isMainAccount = (accId: string) => {
+    return childEnrollments.some((e) => e.account_id === accId && e.is_main)
+  }
+
+  const overallBalanceTotal = activeAccounts.reduce((sum, b) => sum + Number(b.balance), 0)
+  const mainBalanceTotal = activeAccounts
+    .filter((b) => isMainAccount(b.account_id))
+    .reduce((sum, b) => sum + Number(b.balance), 0)
+  const additionalBalanceTotal = activeAccounts
+    .filter((b) => !isMainAccount(b.account_id))
+    .reduce((sum, b) => sum + Number(b.balance), 0)
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
       {/* Header */}
@@ -1691,40 +1754,85 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
       ) : activeAccounts.length === 0 ? (
         <p className="text-sm text-gray-400">Немає підписок</p>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
-          {activeAccounts.map((b) => {
-            const num = Number(b.balance)
-            const color = num > 0 ? 'text-green-700' : num < 0 ? 'text-red-600' : 'text-gray-500'
-            return (
-              <div key={b.account_id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs text-gray-500 mb-1">{b.account_name}</p>
-                <p className={`text-lg font-semibold ${color}`}>
-                  {num > 0 ? '+' : ''}{num.toFixed(2)} грн
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">{num > 0 ? 'аванс' : num < 0 ? 'борг' : 'нуль'}</p>
-                {(Number(b.initial_balance) !== 0 || b.initial_balance_note) && (
-                  <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs text-gray-500">Поч. залишок: </span>
-                      <span className="text-xs font-medium text-gray-700">{Number(b.initial_balance).toFixed(2)}</span>
-                    </div>
-                    {canEdit && (
-                      <button 
-                        onClick={() => {
-                          setInitForm({ account_id: b.account_id, amount: String(b.initial_balance), note: b.initial_balance_note ?? '' })
-                          setShowInitForm(true)
-                          setShowPayForm(false)
-                        }}
-                        className="text-xs text-iris-600 hover:text-iris-700 transition-colors"
-                      >
-                        Ред.
-                      </button>
-                    )}
+        <div className="space-y-3">
+          {/* Top Summary Banner Cards */}
+          <div className="grid grid-cols-3 gap-3">
+            {/* Total Overall Balance */}
+            <div className="rounded-xl border border-iris-200 bg-gradient-to-br from-iris-50 to-white p-3.5 shadow-sm">
+              <p className="text-[11px] font-bold text-iris-800 uppercase tracking-wide">Загальний баланс</p>
+              <p className={`text-xl font-bold mt-1 ${overallBalanceTotal > 0 ? 'text-green-700' : overallBalanceTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {overallBalanceTotal > 0 ? '+' : ''}{overallBalanceTotal.toFixed(2)} грн
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{overallBalanceTotal > 0 ? 'загальний аванс' : overallBalanceTotal < 0 ? 'загальний борг' : 'нуль'}</p>
+            </div>
+
+            {/* Main Activities Balance */}
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3.5">
+              <p className="text-[11px] font-semibold text-blue-900 uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                Основні послуги
+              </p>
+              <p className={`text-lg font-bold mt-1 ${mainBalanceTotal > 0 ? 'text-green-700' : mainBalanceTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {mainBalanceTotal > 0 ? '+' : ''}{mainBalanceTotal.toFixed(2)} грн
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{mainBalanceTotal > 0 ? 'аванс' : mainBalanceTotal < 0 ? 'борг' : 'нуль'}</p>
+            </div>
+
+            {/* Additional Activities Balance */}
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3.5">
+              <p className="text-[11px] font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                Додаткові послуги
+              </p>
+              <p className={`text-lg font-bold mt-1 ${additionalBalanceTotal > 0 ? 'text-green-700' : additionalBalanceTotal < 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                {additionalBalanceTotal > 0 ? '+' : ''}{additionalBalanceTotal.toFixed(2)} грн
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">{additionalBalanceTotal > 0 ? 'аванс' : additionalBalanceTotal < 0 ? 'борг' : 'нуль'}</p>
+            </div>
+          </div>
+
+          {/* Account breakdown cards */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            {activeAccounts.map((b) => {
+              const num = Number(b.balance)
+              const color = num > 0 ? 'text-green-700' : num < 0 ? 'text-red-600' : 'text-gray-500'
+              const isMain = isMainAccount(b.account_id)
+              return (
+                <div key={b.account_id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-gray-700 truncate">{b.account_name}</p>
+                    <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded shrink-0 ${isMain ? 'bg-iris-50 text-iris-700 border border-iris-200' : 'bg-gray-200 text-gray-600'}`}>
+                      {isMain ? 'Основна' : 'Додаткова'}
+                    </span>
                   </div>
-                )}
-              </div>
-            )
-          })}
+                  <p className={`text-base font-semibold ${color}`}>
+                    {num > 0 ? '+' : ''}{num.toFixed(2)} грн
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">{num > 0 ? 'аванс' : num < 0 ? 'борг' : 'нуль'}</p>
+                  {(Number(b.initial_balance) !== 0 || b.initial_balance_note) && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-xs text-gray-500">Поч. залишок: </span>
+                        <span className="text-xs font-medium text-gray-700">{Number(b.initial_balance).toFixed(2)}</span>
+                      </div>
+                      {canEdit && (
+                        <button 
+                          onClick={() => {
+                            setInitForm({ account_id: b.account_id, amount: String(b.initial_balance), note: b.initial_balance_note ?? '' })
+                            setShowInitForm(true)
+                            setShowPayForm(false)
+                          }}
+                          className="text-xs text-iris-600 hover:text-iris-700 transition-colors"
+                        >
+                          Ред.
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -2155,115 +2263,182 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                         <span className="font-mono">{pastDebt.toFixed(2)} грн</span>
                       </div>
                     )}
-                    {/* Accruals grouped by activity — with before→after for adjusted ones */}
-                    {(enriched.length > 0 || zeroActivities.length > 0) && (
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <p className="font-bold text-red-500">Нарахування</p>
-                          {enriched.length > 0 && (
-                            <span className="font-bold font-mono text-red-500">
-                              −{Object.values(byActivity).reduce((s, { eff }) => s + eff, 0).toFixed(2)}
-                            </span>
+                    {/* Accruals grouped by activity (categorized by main / additional) */}
+                    {(enriched.length > 0 || zeroActivities.length > 0) && (() => {
+                      const isMainAct = (actId: string | null) => actId ? childEnrollments.some(e => e.activity_id === actId && e.is_main) : false
+                      const mainAccruals = Object.entries(byActivity).filter(([_, d]) => isMainAct(d.activityId))
+                      const addAccruals  = Object.entries(byActivity).filter(([_, d]) => !isMainAct(d.activityId))
+                      const zeroMain = zeroActivities.filter(e => isMainAct(e.activity_id))
+                      const zeroAdd  = zeroActivities.filter(e => !isMainAct(e.activity_id))
+
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex justify-between mb-1">
+                            <p className="font-bold text-red-500">Нарахування</p>
+                            {enriched.length > 0 && (
+                              <span className="font-bold font-mono text-red-500">
+                                −{Object.values(byActivity).reduce((s, { eff }) => s + eff, 0).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Main activities accruals */}
+                          {(mainAccruals.length > 0 || zeroMain.length > 0) && (
+                            <div className="space-y-0.5 border-l-2 border-iris-300 pl-2 my-1">
+                              <p className="text-[10px] font-bold text-iris-800 uppercase tracking-wide">Основні послуги</p>
+                              {mainAccruals.map(([name, d]) => (
+                                <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="text-gray-600 truncate">{name}</span>
+                                    {d.activityId && activityFlagsMap[d.activityId] === false && (
+                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                                    )}
+                                    {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
+                                      <span className="text-gray-400 shrink-0">
+                                        {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
+                                        {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
+                                        {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-mono shrink-0 flex items-center gap-1">
+                                    {d.adjusted ? (
+                                      <>
+                                        <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
+                                        <span className="text-gray-400">→</span>
+                                        <span className="text-red-500">−{d.eff.toFixed(2)}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-red-500">−{d.orig.toFixed(2)}</span>
+                                    )}
+                                    {canEdit && d.activityId && (
+                                      <button onClick={() => {
+                                        const bm = d.billingMonth ?? selectedBillingMonth
+                                        if (d.isPerLesson) {
+                                          if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
+                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
+                                        } else {
+                                          const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
+                                          if (reason === null) return
+                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
+                                        }
+                                      }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                              {zeroMain.map((e) => (
+                                <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
+                                  <span className="truncate">{e.activity_name}</span>
+                                  <span className="font-mono text-gray-300">0.00</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Additional activities accruals */}
+                          {(addAccruals.length > 0 || zeroAdd.length > 0) && (
+                            <div className="space-y-0.5 border-l-2 border-gray-300 pl-2 my-1">
+                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Додаткові послуги</p>
+                              {addAccruals.map(([name, d]) => (
+                                <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="text-gray-600 truncate">{name}</span>
+                                    {d.activityId && activityFlagsMap[d.activityId] === false && (
+                                      <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
+                                    )}
+                                    {d.activityId && (attendanceCountMap[d.activityId]?.visit_count || attendanceCountMap[d.activityId]?.excused_count || attendanceCountMap[d.activityId]?.separate_billing_count) && (
+                                      <span className="text-gray-400 shrink-0">
+                                        {attendanceCountMap[d.activityId].visit_count > 0 ? `П:${attendanceCountMap[d.activityId].visit_count}` : ''}
+                                        {attendanceCountMap[d.activityId].excused_count > 0 ? ` В:${attendanceCountMap[d.activityId].excused_count}` : ''}
+                                        {attendanceCountMap[d.activityId].separate_billing_count > 0 ? ` ОР:${attendanceCountMap[d.activityId].separate_billing_count}` : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-mono shrink-0 flex items-center gap-1">
+                                    {d.adjusted ? (
+                                      <>
+                                        <span className="text-gray-400 line-through">{d.orig.toFixed(2)}</span>
+                                        <span className="text-gray-400">→</span>
+                                        <span className="text-red-500">−{d.eff.toFixed(2)}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-red-500">−{d.orig.toFixed(2)}</span>
+                                    )}
+                                    {canEdit && d.activityId && (
+                                      <button onClick={() => {
+                                        const bm = d.billingMonth ?? selectedBillingMonth
+                                        if (d.isPerLesson) {
+                                          if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?`)) return
+                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: true })
+                                        } else {
+                                          const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
+                                          if (reason === null) return
+                                          clearMonthMutation.mutate({ activityId: d.activityId!, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
+                                        }
+                                      }} disabled={clearMonthMutation.isPending} className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity">✕</button>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                              {zeroAdd.map((e) => (
+                                <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
+                                  <span className="truncate">{e.activity_name}</span>
+                                  <span className="font-mono text-gray-300">0.00</span>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                        {Object.entries(byActivity).map(([name, { orig, eff, adjusted, activityId, billingMonth, isPerLesson }]) => {
-                          const isArchived = activityId ? activityFlagsMap[activityId] === false : false
-                          const att = activityId ? attendanceCountMap[activityId] : undefined
-                          return (
-                          <div key={name} className="flex justify-between py-0.5 gap-2 group/accrual">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-gray-600 truncate">{name}</span>
-                              {isArchived && (
-                                <span className="text-xs px-1 py-0.5 rounded bg-gray-200 text-gray-400 shrink-0">архів</span>
-                              )}
-                              {(att?.visit_count || att?.excused_count || att?.separate_billing_count) && (
-                                <span className="text-gray-400 shrink-0">
-                                  {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
-                                  {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
-                                  {att.separate_billing_count > 0 ? ` ОР:${att.separate_billing_count}` : ''}
-                                </span>
-                              )}
-                            </div>
-                            <span className="font-mono shrink-0 flex items-center gap-1">
-                              {adjusted ? (
-                                <>
-                                  <span className="text-gray-400 line-through">{orig.toFixed(2)}</span>
-                                  <span className="text-gray-400">→</span>
-                                  <span className="text-red-500">−{eff.toFixed(2)}</span>
-                                </>
-                              ) : (
-                                <span className="text-red-500">−{orig.toFixed(2)}</span>
-                              )}
-                              {canEdit && activityId && (
-                                <button
-                                  onClick={() => {
-                                    const bm = billingMonth ?? selectedBillingMonth
-                                    if (isPerLesson) {
-                                      if (!window.confirm(`Скасувати всі нарахування по «${name}» за цей місяць?\nВсі відмітки в журналі за цей місяць будуть видалені.`)) return
-                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, isPerLesson: true })
-                                    } else {
-                                      const reason = window.prompt(`Причина скасування нарахування по «${name}»:`)
-                                      if (reason === null) return
-                                      clearMonthMutation.mutate({ activityId, billingMonth: bm, isPerLesson: false, reason: reason || undefined })
-                                    }
-                                  }}
-                                  disabled={clearMonthMutation.isPending}
-                                  className="ml-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/accrual:opacity-100 transition-opacity disabled:opacity-30"
-                                  title="Скасувати нарахування"
-                                >✕</button>
-                              )}
-                            </span>
-                          </div>
-                          )
-                        })}
-                        {/* Activities enrolled but with no accrual this month */}
-                        {zeroActivities.map((e) => {
-                          const att = attendanceCountMap[e.activity_id]
-                          const tariffLabel = e.effective_tariff_type
-                            ? (TARIFF_TYPE_LABEL as Record<string, string>)[e.effective_tariff_type] ?? e.effective_tariff_type
-                            : null
-                          return (
-                            <div key={e.activity_id} className="flex justify-between py-0.5 gap-2 text-gray-400">
-                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                                <span className="truncate">{e.activity_name}</span>
-                                {(att?.visit_count || att?.excused_count || att?.separate_billing_count) && (
-                                  <span className="shrink-0">
-                                    {att.visit_count > 0 ? `П:${att.visit_count}` : ''}
-                                    {att.excused_count > 0 ? ` В:${att.excused_count}` : ''}
-                                    {att.separate_billing_count > 0 ? ` ОР:${att.separate_billing_count}` : ''}
-                                  </span>
-                                )}
-                                {tariffLabel && e.effective_tariff_price != null && (
-                                  <span className={`shrink-0 text-xs ${e.has_individual_tariff ? 'text-iris-400' : 'text-gray-300'}`}>
-                                    {tariffLabel} · {e.effective_tariff_price.toFixed(0)} грн
-                                  </span>
-                                )}
-                              </div>
-                              <span className="font-mono text-gray-300">0.00</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                      )
+                    })()}
 
-                    {/* Refunds grouped by activity */}
-                    {(group?.refunds ?? []).length > 0 && (
-                      <div>
-                        <p className="font-bold text-green-500 mb-1">Повернення</p>
-                        {Object.entries(
-                          (group?.refunds ?? []).reduce<Record<string, number>>((acc, tx) => {
-                            const key = tx.activity_name ?? tx.note ?? '—'
-                            acc[key] = (acc[key] ?? 0) + Number(tx.amount)
-                            return acc
-                          }, {})
-                        ).map(([name, total]) => (
-                          <div key={name} className="flex justify-between py-0.5">
-                            <span className="text-gray-600">{name}</span>
-                            <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {/* Refunds grouped by activity and categorized by main / additional */}
+                    {(group?.refunds ?? []).length > 0 && (() => {
+                      const isRefMain = (tx: LedgerEntry) => {
+                        if (tx.activity_is_main != null) return tx.activity_is_main
+                        if (tx.activity_id) return childEnrollments.some(e => e.activity_id === tx.activity_id && e.is_main)
+                        return false
+                      }
+                      const mainRefunds = (group?.refunds ?? []).filter(isRefMain)
+                      const addRefunds  = (group?.refunds ?? []).filter(tx => !isRefMain(tx))
+
+                      const groupRefunds = (list: LedgerEntry[]) => Object.entries(list.reduce<Record<string, number>>((acc, tx) => {
+                        const key = tx.activity_name ?? tx.note ?? '—'
+                        acc[key] = (acc[key] ?? 0) + Number(tx.amount)
+                        return acc
+                      }, {}))
+
+                      return (
+                        <div className="space-y-2 pt-1 border-t border-gray-100">
+                          <p className="font-bold text-green-500 mb-1">Повернення</p>
+
+                          {mainRefunds.length > 0 && (
+                            <div className="space-y-0.5 border-l-2 border-iris-300 pl-2 my-1">
+                              <p className="text-[10px] font-bold text-iris-800 uppercase tracking-wide">Основна послуга</p>
+                              {groupRefunds(mainRefunds).map(([name, total]) => (
+                                <div key={name} className="flex justify-between py-0.5">
+                                  <span className="text-gray-600">{name}</span>
+                                  <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {addRefunds.length > 0 && (
+                            <div className="space-y-0.5 border-l-2 border-gray-300 pl-2 my-1">
+                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Додаткові послуги</p>
+                              {groupRefunds(addRefunds).map(([name, total]) => (
+                                <div key={name} className="flex justify-between py-0.5">
+                                  <span className="text-gray-600">{name}</span>
+                                  <span className="font-mono text-green-500">+{total.toFixed(2)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Unlinked adjustments only */}
                     {unlinkedAdjs.length > 0 && (

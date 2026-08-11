@@ -28,7 +28,7 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
           'e.id', 'e.child_id', 'e.status', 'e.start_date', 'e.end_date',
           'e.frozen_from', 'e.frozen_to', 'e.note', 'e.created_at',
           'a.id as activity_id', 'a.name as activity_name',
-          'a.tariff_type', 'a.is_rigid',
+          'a.tariff_type', 'a.is_rigid', 'a.is_main',
           'ac.id as account_id', 'ac.name as account_name',
           't.base_fee', 't.valid_from as current_tariff_valid_from', 't_first.first_valid_from as tariff_valid_from',
         ])

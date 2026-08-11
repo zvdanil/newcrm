@@ -303,7 +303,7 @@ export async function childrenRoutes(app: FastifyInstance) {
           't.id', 't.type', 't.amount', 't.transaction_date', 't.billing_month',
           't.note', 't.is_deleted', 't.deleted_at', 't.created_at',
           't.account_id', 'a.name as account_name',
-          't.activity_id', 'act.name as activity_name',
+          't.activity_id', 'act.name as activity_name', 'act.is_main as activity_is_main',
           't.enrollment_id', 't.metadata_json',
           'cu.email as created_by_email',
           'du.email as deleted_by_email',

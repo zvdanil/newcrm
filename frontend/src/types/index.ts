@@ -160,6 +160,7 @@ export interface Enrollment {
   account_name: string
   tariff_type: 'monthly' | 'per_lesson' | 'smart'
   is_rigid: boolean
+  is_main?: boolean
   status: 'active' | 'frozen' | 'archived'
   start_date: string
   end_date: string | null
