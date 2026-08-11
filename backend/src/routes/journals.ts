@@ -496,14 +496,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           .where('sr.rate_category', '=', 'auto')
           .where('sr.rate_type', 'in', ['group_lesson', 'per_lesson', 'per_child', 'individual_per_child', 'smart', 'smart_per_child'])
           .where('sr.valid_from', '<=', castAsDate(to))
-          .where((eb) => eb.or([
-            eb('sr.valid_to', 'is', null),
-            eb('sr.valid_to', '>=', castAsDate(new Date().toISOString().slice(0, 10))),
-          ]))
-          .where((eb) => eb.or([
-            eb('sr.valid_to', 'is', null),
-            eb('sr.valid_to', '>=', castAsDate(from)),
-          ]))
+          .where('sr.valid_to', 'is', null)
           .orderBy('sr.created_at', 'desc')
           .execute(),
       ])
