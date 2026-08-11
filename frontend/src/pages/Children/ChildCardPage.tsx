@@ -1,5 +1,5 @@
 import { BankPayersBlock } from './BankPayersBlock'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { InvoiceTab } from '../Cabinet/CabinetPage'
@@ -29,6 +29,7 @@ function toDateInputValue(iso: string | null) {
 
 export function ChildCardPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const canEdit = useCanAccess('owner', 'admin', 'manager')
   const canEditBankPayers = useCanAccess('owner', 'admin')
