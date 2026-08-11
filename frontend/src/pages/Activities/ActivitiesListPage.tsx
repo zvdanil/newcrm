@@ -65,10 +65,15 @@ export function ActivitiesListPage() {
                     <Link to={`/activities/${activity.id}`} className="font-medium text-gray-900 hover:text-iris-600 transition-colors">
                       {activity.name}
                     </Link>
-                    {activity.is_rigid && <span className="ml-2 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">жорсткий</span>}
+                    {activity.is_main ? (
+                      <span className="ml-2 text-xs font-medium text-iris-700 bg-iris-50 border border-iris-200 px-1.5 py-0.5 rounded">Основна</span>
+                    ) : (
+                      <span className="ml-2 text-xs font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">Додаткова</span>
+                    )}
+                    {activity.is_rigid && <span className="ml-1.5 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">жорсткий</span>}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
-                    {activity.tariff_type === 'monthly' ? 'Місячний' : 'За заняття'}
+                    {activity.tariff_type === 'monthly' ? 'Місячний' : activity.tariff_type === 'per_lesson' ? 'За заняття' : 'Смарт'}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{activity.account_name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-900 hidden md:table-cell">

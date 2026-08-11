@@ -13,6 +13,7 @@ export function ActivityCreatePage() {
     account_id: '',
     tariff_type: 'monthly' as 'monthly' | 'per_lesson',
     is_rigid: false,
+    is_main: false,
     base_fee: '',
     note: '',
   })
@@ -26,6 +27,7 @@ export function ActivityCreatePage() {
       account_id: form.account_id || undefined,
       tariff_type: form.tariff_type,
       is_rigid: form.is_rigid,
+      is_main: form.is_main,
       base_fee: form.base_fee ? Number(form.base_fee) : undefined,
       note: form.note || undefined,
     }),
@@ -85,13 +87,24 @@ export function ActivityCreatePage() {
           <p className="mt-1 text-xs text-gray-400">Можна залишити порожнім і встановити пізніше</p>
         </div>
 
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.is_rigid} onChange={(e) => setForm({ ...form, is_rigid: e.target.checked })}
-              className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
-            <span className="text-sm font-medium text-gray-700">Жорсткий абонемент</span>
-          </label>
-          <p className="mt-1 ml-6 text-xs text-gray-400">Відсутність за поважною причиною не генерує повернення коштів</p>
+        <div className="space-y-3 pt-1 border-t border-gray-100">
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.is_main} onChange={(e) => setForm({ ...form, is_main: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-gray-700">Основна послуга</span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-gray-400">Визначає активність як основну послугу (інакше вона вважається додатковою)</p>
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.is_rigid} onChange={(e) => setForm({ ...form, is_rigid: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-gray-700">Жорсткий абонемент</span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-gray-400">Відсутність за поважною причиною не генерує повернення коштів</p>
+          </div>
         </div>
 
         <div>

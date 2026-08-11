@@ -84,10 +84,13 @@ function LinkedActivitiesBlock({
         <ul className="divide-y divide-gray-100 mb-3">
           {linked.map((la) => (
             <li key={la.id} className="py-2.5 flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-900">{la.name}</span>
-                <span className="ml-2 text-xs text-gray-400">
-                  {la.tariff_type === 'monthly' ? 'місячний' : la.tariff_type === 'per_lesson' ? 'за заняття' : 'смарт'}
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${la.is_main ? 'bg-iris-50 text-iris-700 border border-iris-200' : 'bg-gray-100 text-gray-500'}`}>
+                  {la.is_main ? 'Основна' : 'Додаткова'}
+                </span>
+                <span className="text-xs text-gray-400">
+                  ({la.tariff_type === 'monthly' ? 'місячний' : la.tariff_type === 'per_lesson' ? 'за заняття' : 'смарт'})
                 </span>
               </div>
               {canEdit && (
@@ -344,7 +347,7 @@ export function ActivityCardPage() {
   const canEdit = useCanAccess('owner', 'admin')
 
   const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, has_group_classes: false, auto_group_classes: false, note: '' })
+  const [editForm, setEditForm] = useState({ name: '', account_id: '', tariff_type: 'monthly' as 'monthly' | 'per_lesson' | 'smart', is_rigid: false, is_main: false, has_group_classes: false, auto_group_classes: false, note: '' })
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const [newTariff, setNewTariff] = useState({
@@ -495,7 +498,7 @@ export function ActivityCardPage() {
   if (!activity)  return <div className="py-12 text-center text-sm text-gray-400">Активність не знайдена</div>
 
   const startEdit = () => {
-    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type as 'monthly' | 'per_lesson' | 'smart', is_rigid: activity.is_rigid, has_group_classes: activity.has_group_classes, auto_group_classes: activity.auto_group_classes, note: activity.note ?? '' })
+    setEditForm({ name: activity.name, account_id: activity.account_id ?? '', tariff_type: activity.tariff_type as 'monthly' | 'per_lesson' | 'smart', is_rigid: activity.is_rigid, is_main: activity.is_main ?? false, has_group_classes: activity.has_group_classes, auto_group_classes: activity.auto_group_classes, note: activity.note ?? '' })
     setEditing(true)
     setSaveError(null)
   }
@@ -568,6 +571,13 @@ export function ActivityCardPage() {
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Рахунок</dt><dd className="mt-1 text-sm text-gray-900">{activity.account_name ?? '—'}</dd></div>
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Поточний тариф</dt>
               <dd className="mt-1 text-sm text-gray-900">{activity.current_tariff ? `${Number(activity.current_tariff.base_fee).toFixed(2)} грн` : '—'}</dd></div>
+            <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Тип послуги</dt>
+              <dd className="mt-1 text-sm">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${activity.is_main ? 'bg-iris-50 text-iris-700 border border-iris-200' : 'bg-gray-100 text-gray-600'}`}>
+                  {activity.is_main ? 'Основна послуга' : 'Додаткова послуга'}
+                </span>
+              </dd>
+            </div>
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Жорсткий абонемент</dt><dd className="mt-1 text-sm text-gray-900">{activity.is_rigid ? 'Так' : 'Ні'}</dd></div>
             <div><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Групові заняття</dt><dd className="mt-1 text-sm text-gray-900">{activity.has_group_classes ? (activity.auto_group_classes ? 'Так (авто)' : 'Так (вручну)') : 'Ні'}</dd></div>
             {activity.note && <div className="col-span-2"><dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Нотатка</dt><dd className="mt-1 text-sm text-gray-900">{activity.note}</dd></div>}
@@ -598,6 +608,11 @@ export function ActivityCardPage() {
                 </select>
               </div>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={editForm.is_main} onChange={(e) => setEditForm({ ...editForm, is_main: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-gray-700">Основна послуга</span>
+            </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={editForm.is_rigid} onChange={(e) => setEditForm({ ...editForm, is_rigid: e.target.checked })}
                 className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />

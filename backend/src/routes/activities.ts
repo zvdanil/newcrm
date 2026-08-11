@@ -14,7 +14,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
         .selectFrom('activities as a')
         .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
         .select([
-          'a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.is_active', 'a.has_group_classes', 'a.auto_group_classes', 'a.note', 'a.created_at',
+          'a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.is_main', 'a.is_active', 'a.has_group_classes', 'a.auto_group_classes', 'a.note', 'a.created_at',
           'ac.id as account_id', 'ac.name as account_name',
         ])
         .orderBy('a.name', 'asc')
@@ -47,7 +47,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
         .selectFrom('activities as a')
         .leftJoin('accounts as ac', 'ac.id', 'a.account_id')
         .select([
-          'a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.is_active', 'a.has_group_classes', 'a.auto_group_classes', 'a.note', 'a.created_at',
+          'a.id', 'a.name', 'a.tariff_type', 'a.is_rigid', 'a.is_main', 'a.is_active', 'a.has_group_classes', 'a.auto_group_classes', 'a.note', 'a.created_at',
           'ac.id as account_id', 'ac.name as account_name',
         ])
         .where('a.id', '=', req.params.id)
@@ -66,7 +66,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
       const linked = await db
         .selectFrom('linked_activities as la')
         .innerJoin('activities as a2', 'a2.id', 'la.child_activity_id')
-        .select(['a2.id', 'a2.name', 'a2.tariff_type'])
+        .select(['a2.id', 'a2.name', 'a2.tariff_type', 'a2.is_main'])
         .where('la.parent_activity_id', '=', req.params.id)
         .execute()
 
@@ -75,16 +75,16 @@ export async function activitiesRoutes(app: FastifyInstance) {
   )
 
   // POST /api/activities
-  app.post<{ Body: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson'; is_rigid?: boolean; has_group_classes?: boolean; auto_group_classes?: boolean; note?: string; base_fee?: number } }>(
+  app.post<{ Body: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson'; is_rigid?: boolean; is_main?: boolean; has_group_classes?: boolean; auto_group_classes?: boolean; note?: string; base_fee?: number } }>(
     '/',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {
-      const { name, account_id, tariff_type = 'monthly', is_rigid = false, has_group_classes = false, auto_group_classes = false, note, base_fee } = req.body
+      const { name, account_id, tariff_type = 'monthly', is_rigid = false, is_main = false, has_group_classes = false, auto_group_classes = false, note, base_fee } = req.body
       if (!name?.trim()) return reply.status(400).send({ error: 'BadRequest', message: 'name є обовʼязковим' })
 
       const activity = await db.transaction().execute(async (trx) => {
         const a = await trx.insertInto('activities')
-          .values({ name: name.trim(), account_id: account_id || null, tariff_type, is_rigid, has_group_classes, auto_group_classes, note: note || null })
+          .values({ name: name.trim(), account_id: account_id || null, tariff_type, is_rigid, is_main, has_group_classes, auto_group_classes, note: note || null })
           .returningAll()
           .executeTakeFirstOrThrow()
 
@@ -100,7 +100,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
   )
 
   // PUT /api/activities/:id
-  app.put<{ Params: { id: string }; Body: { name?: string; account_id?: string | null; tariff_type?: 'monthly' | 'per_lesson'; is_rigid?: boolean; is_active?: boolean; has_group_classes?: boolean; auto_group_classes?: boolean; note?: string } }>(
+  app.put<{ Params: { id: string }; Body: { name?: string; account_id?: string | null; tariff_type?: 'monthly' | 'per_lesson'; is_rigid?: boolean; is_main?: boolean; is_active?: boolean; has_group_classes?: boolean; auto_group_classes?: boolean; note?: string } }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin') },
     async (req, reply) => {

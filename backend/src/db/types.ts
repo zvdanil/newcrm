@@ -96,6 +96,7 @@ export interface ActivitiesTable {
   account_id:  string | null
   tariff_type: Generated<'monthly' | 'per_lesson' | 'smart'>
   is_rigid:    Generated<boolean>
+  is_main:     Generated<boolean>
   is_active:   Generated<boolean>
   has_group_classes: Generated<boolean>
   auto_group_classes: Generated<boolean>

@@ -12,12 +12,12 @@ export const activitiesApi = {
     return data
   },
 
-  create: async (payload: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson' | 'smart'; is_rigid?: boolean; note?: string; base_fee?: number }) => {
+  create: async (payload: { name: string; account_id?: string; tariff_type?: 'monthly' | 'per_lesson' | 'smart'; is_rigid?: boolean; is_main?: boolean; has_group_classes?: boolean; auto_group_classes?: boolean; note?: string; base_fee?: number }) => {
     const { data } = await apiClient.post<Activity>('/activities', payload)
     return data
   },
 
-  update: async (id: string, payload: Partial<Pick<Activity, 'name' | 'account_id' | 'tariff_type' | 'is_rigid' | 'is_active' | 'note'>>) => {
+  update: async (id: string, payload: Partial<Pick<Activity, 'name' | 'account_id' | 'tariff_type' | 'is_rigid' | 'is_main' | 'is_active' | 'has_group_classes' | 'auto_group_classes' | 'note'>>) => {
     const { data } = await apiClient.put<Activity>(`/activities/${id}`, payload)
     return data
   },

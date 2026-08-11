@@ -131,13 +131,14 @@ export interface Activity {
   account_name: string | null
   tariff_type: 'monthly' | 'per_lesson' | 'smart'
   is_rigid: boolean
+  is_main: boolean
   is_active: boolean
   has_group_classes: boolean
   auto_group_classes: boolean
   note: string | null
   created_at: string
   current_tariff?: Tariff | null
-  linked_activities?: { id: string; name: string; tariff_type: 'monthly' | 'per_lesson' | 'smart' }[]
+  linked_activities?: { id: string; name: string; tariff_type: 'monthly' | 'per_lesson' | 'smart'; is_main?: boolean }[]
 }
 
 export interface RefundConfig {
