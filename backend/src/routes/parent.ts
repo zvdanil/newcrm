@@ -341,6 +341,7 @@ export async function parentRoutes(app: FastifyInstance) {
             activity_id: a.activity_id,
             activity_name: a.activity_name,
             activity_is_active: a.activity_is_active,
+            activity_is_main: a.activity_is_main,
             activity_tariff_type: a.activity_tariff_type,
             enrollment_status: a.enrollment_status,
             accrual_total: a.accrual_total,
