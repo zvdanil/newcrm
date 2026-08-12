@@ -1785,10 +1785,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
                         const cellOrCount = !isCellHourly ? cellTxs.reduce((s, t) => {
                           const meta = t.metadata_json as Record<string, unknown> | null
-                          if (meta) {
-                            if (typeof meta.special_count === 'number') return s + meta.special_count
-                            if (Array.isArray(meta.special_children)) return s + meta.special_children.length
-                          }
+                          if (meta && typeof meta.or_count === 'number') return s + meta.or_count
                           return s
                         }, 0) : 0
                         rowOrTotal += cellOrCount

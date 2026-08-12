@@ -423,31 +423,33 @@ async function computeGross(
   presentCount: number,
   groupLessonCount: number = 1,
   specialCount: number = 0,
-  specialChildren: string[] = []
+  specialChildren: string[] = [],
+  orCount: number = 0
 ): Promise<{ gross: number; meta: Record<string, unknown> }> {
   const rv = Number(rate.rate_value)
   const specMeta = specialCount > 0 ? { special_count: specialCount, special_children: specialChildren } : {}
+  const orMeta = orCount > 0 ? { or_count: orCount } : {}
 
   if (rate.value_mode === 'percent_of_revenue') {
     const revenue = await revenueForActivityDate(activityId, dateObj)
     const gross   = Math.round(revenue * rv / 100 * 100) / 100
-    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, quantity: presentCount, revenue, rate_pct: rv, ...specMeta } }
+    return { gross, meta: { source: `auto_${rate.rate_type}_pct`, quantity: presentCount, revenue, rate_pct: rv, ...specMeta, ...orMeta } }
   }
 
   if (rate.rate_type === 'per_lesson') {
-    return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv, ...specMeta } }
+    return { gross: rv, meta: { source: 'auto_per_lesson', quantity: 1, rate_value: rv, ...specMeta, ...orMeta } }
   }
   if (rate.rate_type === 'group_lesson') {
-    return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv, ...specMeta } }
+    return { gross: Math.round(rv * groupLessonCount * 100) / 100, meta: { source: 'auto_group_lesson', quantity: groupLessonCount, rate_value: rv, ...specMeta, ...orMeta } }
   }
   if (rate.rate_type === 'individual_per_child') {
     const gross = Math.round(rv * specialCount * 100) / 100
-    return { gross, meta: { source: 'auto_individual_per_child', quantity: specialCount, rate_value: rv, ...specMeta } }
+    return { gross, meta: { source: 'auto_individual_per_child', quantity: specialCount, rate_value: rv, ...specMeta, ...orMeta } }
   }
 
-  // per_child
+  // per_child — separate_billing excluded from count, but or_count stored for display
   const gross = Math.round(rv * presentCount * 100) / 100
-  return { gross, meta: { source: 'auto_per_child', quantity: presentCount, rate_value: rv, ...specMeta } }
+  return { gross, meta: { source: 'auto_per_child', quantity: presentCount, rate_value: rv, ...specMeta, ...orMeta } }
 }
 
 /**
@@ -507,7 +509,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', activityId)
     .where('date', '=', castAsDate(date))
-    .where('status', 'in', ['present', 'special', 'separate_billing'])
+    .where('status', 'in', ['present', 'special'])
     .where((eb) => eb.or([
       eb('is_individual_class', 'is', null),
       eb('is_individual_class', '=', false),
@@ -528,6 +530,17 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
 
   const specialChildrenNames = specialChildren.map(c => c.full_name)
   const specialCount = specialChildrenNames.length
+
+  // Count separate_billing marks separately — for display only (not counted in per_child salary)
+  const orResult = await db
+    .selectFrom('attendance_logs')
+    .select((eb) => eb.fn.countAll<number>().as('cnt'))
+    .where('activity_id', '=', activityId)
+    .where('date', '=', castAsDate(date))
+    .where('status', '=', 'separate_billing')
+    .executeTakeFirst()
+
+  const orCount = Number(orResult?.cnt ?? 0)
 
   const groupLogs = await db
     .selectFrom('group_lesson_logs')
@@ -570,7 +583,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     const groupConducted = teacherGroupLog?.status === 'conducted'
     const groupLessonCount = teacherGroupLog?.lessons_count ?? 1
 
-    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount, specialChildrenNames)
+    const { gross: newAmount, meta } = await computeGross(rate, activityId, dateObj, presentCount, groupLessonCount, specialCount, specialChildrenNames, orCount)
     let hasLesson = false
     if (rate.rate_type === 'group_lesson') {
       hasLesson = groupConducted || rate.value_mode === 'percent_of_revenue'
