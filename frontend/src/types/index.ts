@@ -192,6 +192,7 @@ export interface AttendanceLog {
   note: string | null
   attributed_notes?: AttributedNote[]
   has_note?: boolean
+  is_individual_class?: boolean
   created_by: string | null
   created_at: string
   updated_at: string

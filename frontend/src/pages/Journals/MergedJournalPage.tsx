@@ -158,6 +158,11 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       {(log.has_note ?? !!log.note) && (
         <div className="absolute top-0 right-0 w-1 h-1 bg-red-500 rounded-full border border-white" />
       )}
+      {log.is_individual_class && (
+        <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
+          ІЗ
+        </span>
+      )}
     </button>
   )
 })
@@ -179,6 +184,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
+  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(log?.is_individual_class ?? false)
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
@@ -213,6 +219,20 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
             ))}
           </div>
         )}
+
+        <div className="flex items-center gap-2 px-1 py-1 bg-purple-50/60 border border-purple-100 rounded-xl">
+          <input
+            type="checkbox"
+            id="isIndividualClassCheckMerged"
+            checked={isIndividualClass}
+            onChange={(e) => setIsIndividualClass(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer ml-1"
+          />
+          <label htmlFor="isIndividualClassCheckMerged" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
+            "ІЗ" Індивідуальне заняття
+          </label>
+        </div>
+
         {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума (грн)</label>
@@ -241,7 +261,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
         </div>
         <div className="flex gap-3 pt-2">
           {log && !isLockedSpecial && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
-          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note })}
+          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note, is_individual_class: isIndividualClass })}
             className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all transform active:scale-95">Зберегти</button>
         </div>
       </div>
@@ -282,8 +302,8 @@ export function MergedJournalPage() {
 
   const markMutation = useMutation({
     mutationFn: async (p: any) => {
-      if (p.logId) return attendanceApi.update(p.logId, { status: p.status, custom_amount: p.amount, note: p.note })
-      return attendanceApi.mark({ enrollment_id: p.enrollmentId, date: p.dateStr, status: p.status, custom_amount: p.amount, note: p.note })
+      if (p.logId) return attendanceApi.update(p.logId, { status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class })
+      return attendanceApi.mark({ enrollment_id: p.enrollmentId, date: p.dateStr, status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class })
     },
     onSuccess: () => { invalidate(); setDialogTarget(null) },
   })

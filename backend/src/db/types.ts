@@ -176,8 +176,9 @@ export interface AttendanceLogsTable {
   custom_amount: ColumnType<string | null, number | string | null, number | string | null>
   note:          string | null
   notes_json:    ColumnType<unknown, string | object | undefined, string | object>
-  created_by:    string | null
-  created_at:    Generated<Date>
+  created_by:          string | null
+  is_individual_class: Generated<boolean>
+  created_at:          Generated<Date>
   updated_at:    Generated<Date>
 }
 

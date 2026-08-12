@@ -172,6 +172,12 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       {(log.has_note ?? !!log.note) && (
         <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
+
+      {log.is_individual_class && (
+        <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
+          ІЗ
+        </span>
+      )}
     </div>
   )
 })
@@ -183,7 +189,7 @@ interface AttendanceDialogProps {
   dateStr: string
   openContext: 'edit' | 'note'
   isDutyAdmin: boolean
-  onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null }) => void
+  onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean }) => void
   onDelete: (logId: string) => void
   onClose: () => void
 }
@@ -193,6 +199,7 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
+  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(log?.is_individual_class ?? false)
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
@@ -203,7 +210,8 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
       logId: log?.id ?? null,
       status,
       amount: (!isDutyAdmin && status === 'special') ? (amount === '' ? 0 : Number(amount)) : null,
-      note: note.trim() || null
+      note: note.trim() || null,
+      is_individual_class: isIndividualClass,
     })
   }
 
@@ -246,6 +254,19 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
             ))}
           </div>
         )}
+
+        <div className="flex items-center gap-2 px-1 py-1 bg-purple-50/60 border border-purple-100 rounded-xl">
+          <input
+            type="checkbox"
+            id="isIndividualClassCheck"
+            checked={isIndividualClass}
+            onChange={(e) => setIsIndividualClass(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer ml-1"
+          />
+          <label htmlFor="isIndividualClassCheck" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
+            "ІЗ" Індивідуальне заняття
+          </label>
+        </div>
 
         {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
@@ -406,16 +427,17 @@ export function JournalPage() {
     }
   }, [data, groupTeachers, groupMarkMutation])
 
+
   const handleMarkQuick = useCallback((enrollmentId: string, dateStr: string) => {
     markMutation.mutate({ enrollment_id: enrollmentId, date: dateStr, status: 'present' })
     triggerAutoGroup(dateStr)
   }, [markMutation, triggerAutoGroup])
 
-  const handleDialogSave = (payload: any) => {
-    if (payload.logId) updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note } })
-    else markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note })
+  const handleDialogSave = (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean }) => {
+    if (payload.logId) updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class } })
+    else markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class })
     
-    if (payload.status === 'present' || payload.status === 'special') {
+    if (payload.status === 'present' || payload.status === 'special' || payload.is_individual_class) {
       triggerAutoGroup(payload.dateStr)
     }
     setDialogTarget(null)

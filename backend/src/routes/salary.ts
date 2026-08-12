@@ -98,7 +98,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .select(['al.activity_id', 'al.date', 'c.full_name'])
         .where('al.date', '>=', castAsDate(billingStart))
         .where('al.date', '<', castAsDate(billingEnd))
-        .where('al.status', '=', 'special')
+        .where('al.is_individual_class', '=', true)
         .execute()
 
       const specialMap = new Map<string, string[]>()
@@ -191,7 +191,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         .innerJoin('children as c', 'c.id', 'al.child_id')
         .select(['c.full_name'])
         .where('al.date', '=', castAsDate(date))
-        .where('al.status', '=', 'special')
+        .where('al.is_individual_class', '=', true)
 
       if (activity_id) {
         q = q.where('al.activity_id', '=', activity_id)

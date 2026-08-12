@@ -508,6 +508,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .where('activity_id', '=', activityId)
     .where('date', '=', castAsDate(date))
     .where('status', 'in', ['present', 'special', 'separate_billing'])
+    .where((eb) => eb.or([
+      eb('is_individual_class', 'is', null),
+      eb('is_individual_class', '=', false),
+    ]))
     .executeTakeFirst()
 
   const presentCount = Number(presentResult?.cnt ?? 0)
@@ -518,7 +522,8 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select(['c.full_name'])
     .where('al.activity_id', '=', activityId)
     .where('al.date', '=', castAsDate(date))
-    .where('al.status', '=', 'special')
+    .where('al.status', 'in', ['present', 'special', 'separate_billing'])
+    .where('al.is_individual_class', '=', true)
     .execute()
 
   const specialChildrenNames = specialChildren.map(c => c.full_name)
