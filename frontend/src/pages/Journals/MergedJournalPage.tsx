@@ -136,7 +136,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
 
   // Resolve border color in one place to avoid Tailwind class conflicts
   const borderColor = isIndividual
-    ? 'border-purple-600 ring-1 ring-purple-400'
+    ? 'border-purple-600 ring-2 ring-purple-300'
     : (isSpecialMasked
       ? 'border-green-600'
       : (isHighlighted ? 'border-iris-300' : 'border-transparent'))
@@ -145,10 +145,6 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     ? 'bg-green-100 text-green-700 hover:bg-green-200'
     : STATUS_STYLE[log.status as AttendanceStatus]
 
-  const hatchPattern = isIndividual
-    ? 'bg-[repeating-linear-gradient(135deg,rgba(147,51,234,0.25)_0,rgba(147,51,234,0.25)_4px,transparent_4px,transparent_8px)] text-purple-950 font-black'
-    : ''
-
   return (
     <button
       onClick={() => onOpenDialog(enrollmentId, dateStr, 'edit')}
@@ -156,7 +152,8 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
-      className={`relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${borderColor} font-bold disabled:opacity-40 ${cellBg} ${hatchPattern}`}
+      style={isIndividual ? { backgroundImage: 'repeating-linear-gradient(135deg, rgba(147, 51, 234, 0.35) 0px, rgba(147, 51, 234, 0.35) 4px, transparent 4px, transparent 8px)' } : undefined}
+      className={`relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${borderColor} font-bold disabled:opacity-40 ${cellBg}`}
     >
       {isSpecialMasked ? (
         'П'
@@ -235,13 +232,14 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
           </div>
         )}
 
-        <div className="flex items-center gap-2 px-1 py-1 bg-purple-50/60 border border-purple-100 rounded-xl">
+        <div className="flex items-center gap-2 px-3 py-2 bg-purple-50/80 border border-purple-200 rounded-xl cursor-pointer hover:bg-purple-100/80 transition-colors" onClick={() => setIsIndividualClass(!isIndividualClass)}>
           <input
             type="checkbox"
             id="isIndividualClassCheckMerged"
             checked={isIndividualClass}
             onChange={(e) => setIsIndividualClass(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer ml-1"
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
           />
           <label htmlFor="isIndividualClassCheckMerged" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
             "ІЗ" Індивідуальне заняття
