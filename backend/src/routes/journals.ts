@@ -773,7 +773,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             status,
             custom_amount: safeCustomAmount,
             notes_json: buildNotesJsonUpsert(putUserId, putUserRole, putUserName, note ?? null),
-            ...(is_individual_class !== undefined ? { is_individual_class } : {}),
+            is_individual_class: is_individual_class ?? false,
           })
           .where('id', '=', req.params.id)
           .returningAll()

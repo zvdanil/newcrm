@@ -131,15 +131,23 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     )
   }
 
+  const isIndividual = Boolean(log.is_individual_class)
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
 
   // Resolve border color in one place to avoid Tailwind class conflicts
-  const borderColor = isSpecialMasked
-    ? 'border-green-600'
-    : (isHighlighted ? 'border-iris-300' : 'border-transparent')
+  const borderColor = isIndividual
+    ? 'border-purple-600 ring-1 ring-purple-400'
+    : (isSpecialMasked
+      ? 'border-green-600'
+      : (isHighlighted ? 'border-iris-300' : 'border-transparent'))
+
   const cellBg = isSpecialMasked
     ? 'bg-green-100 text-green-700 hover:bg-green-200'
     : STATUS_STYLE[log.status as AttendanceStatus]
+
+  const hatchPattern = isIndividual
+    ? 'bg-[repeating-linear-gradient(135deg,rgba(147,51,234,0.25)_0,rgba(147,51,234,0.25)_4px,transparent_4px,transparent_8px)] text-purple-950 font-black'
+    : ''
 
   return (
     <button
@@ -148,7 +156,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onMouseEnter={() => onHover(dateStr)}
       onMouseLeave={() => onHover(null)}
       disabled={pending}
-      className={`relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${borderColor} font-bold disabled:opacity-40 ${cellBg}`}
+      className={`relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${borderColor} font-bold disabled:opacity-40 ${cellBg} ${hatchPattern}`}
     >
       {isSpecialMasked ? (
         'П'
@@ -158,7 +166,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       {(log.has_note ?? !!log.note) && (
         <div className="absolute top-0 right-0 w-1 h-1 bg-red-500 rounded-full border border-white" />
       )}
-      {log.is_individual_class && (
+      {isIndividual && (
         <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
           ІЗ
         </span>
@@ -184,7 +192,14 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
-  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(log?.is_individual_class ?? false)
+  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(Boolean(log?.is_individual_class))
+
+  useEffect(() => {
+    setStatus(log?.status ?? 'present')
+    setAmount(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
+    setNote(log?.note ?? '')
+    setIsIndividualClass(Boolean(log?.is_individual_class))
+  }, [log])
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
@@ -665,6 +680,7 @@ export function MergedJournalPage() {
 
       {dialogTarget && (
         <MergedAttendanceDialog
+          key={`${dialogTarget.enrollmentId}-${dialogTarget.dateStr}-${dialogTarget.log?.updated_at ?? 'new'}`}
           enrollmentId={dialogTarget.enrollmentId}
           dateStr={dialogTarget.dateStr}
           log={dialogTarget.log}

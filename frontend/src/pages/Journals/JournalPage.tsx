@@ -137,15 +137,23 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
     )
   }
 
+  const isIndividual = Boolean(log.is_individual_class)
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
 
   // Resolve border color in one place to avoid Tailwind class conflicts
-  const borderColor = isSpecialMasked
-    ? 'border-green-600'
-    : (isHighlightedDate ? 'border-iris-300' : 'border-transparent')
+  const borderColor = isIndividual
+    ? 'border-purple-600 ring-1 ring-purple-400'
+    : (isSpecialMasked
+      ? 'border-green-600'
+      : (isHighlightedDate ? 'border-iris-300' : 'border-transparent'))
+
   const cellBg = isSpecialMasked
     ? 'bg-green-100 text-green-700 hover:bg-green-200'
     : STATUS_STYLE[log.status]
+
+  const hatchPattern = isIndividual
+    ? 'bg-[repeating-linear-gradient(135deg,rgba(147,51,234,0.25)_0,rgba(147,51,234,0.25)_4px,transparent_4px,transparent_8px)] text-purple-950 font-black'
+    : ''
 
   const baseClassesNoB = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
     compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
@@ -157,7 +165,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
       onContextMenu={handleContextMenu}
       onMouseEnter={() => onHoverDate(dateStr)}
       onMouseLeave={() => onHoverDate(null)}
-      className={`${baseClassesNoB} ${borderColor} font-bold ${cellBg}`}
+      className={`${baseClassesNoB} ${borderColor} font-bold ${cellBg} ${hatchPattern}`}
     >
       {isSpecialMasked ? (
         <span className="text-[10px]">П</span>
@@ -173,7 +181,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
         <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
       )}
 
-      {log.is_individual_class && (
+      {isIndividual && (
         <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
           ІЗ
         </span>
@@ -199,7 +207,14 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
   const [status, setStatus] = useState<AttendanceStatus>(log?.status ?? 'present')
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
-  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(log?.is_individual_class ?? false)
+  const [isIndividualClass, setIsIndividualClass] = useState<boolean>(Boolean(log?.is_individual_class))
+
+  useEffect(() => {
+    setStatus(log?.status ?? 'present')
+    setAmount(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
+    setNote(log?.note ?? '')
+    setIsIndividualClass(Boolean(log?.is_individual_class))
+  }, [log])
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
 
@@ -747,7 +762,7 @@ export function JournalPage() {
             </tbody>
           </table>
         </div>
-      {dialogTarget && <AttendanceDialog row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} isDutyAdmin={isDutyAdmin} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
+      {dialogTarget && <AttendanceDialog key={`${dialogTarget.row.enrollment_id}-${dialogTarget.dateStr}-${dialogTarget.row.logs[dialogTarget.dateStr]?.updated_at ?? 'new'}`} row={dialogTarget.row} dateStr={dialogTarget.dateStr} openContext={dialogTarget.context} isDutyAdmin={isDutyAdmin} onSave={handleDialogSave} onDelete={(id) => { removeMutation.mutate(id); setDialogTarget(null) }} onClose={() => setDialogTarget(null)} />}
       {groupPopupTarget && (
         <GroupPopup
           log={groupPopupTarget.log}
