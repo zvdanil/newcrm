@@ -518,7 +518,7 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select(['c.full_name'])
     .where('al.activity_id', '=', activityId)
     .where('al.date', '=', castAsDate(date))
-    .where('al.status', 'in', ['special', 'separate_billing'])
+    .where('al.status', '=', 'special')
     .execute()
 
   const specialChildrenNames = specialChildren.map(c => c.full_name)
