@@ -16,7 +16,7 @@ export const attendanceApi = {
     note?: string | null
     is_individual_class?: boolean
   }) => {
-    const { data } = await apiClient.post<AttendanceLog>('/attendance', payload)
+    const { data } = await apiClient.post<AttendanceLog>('/journals/attendance', payload)
     return data
   },
 
@@ -26,7 +26,7 @@ export const attendanceApi = {
     note?: string | null
     is_individual_class?: boolean
   }) => {
-    const { data } = await apiClient.put<AttendanceLog>(`/attendance/${id}`, payload)
+    const { data } = await apiClient.put<AttendanceLog>(`/journals/attendance/${id}`, payload)
     return data
   },
 
