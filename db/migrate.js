@@ -4,10 +4,9 @@ import { fileURLToPath } from 'url'
 import pg from 'pg'
 import { config } from 'dotenv'
 
-config({ path: '../.env' })
-
-const { Pool } = pg
 const __dir = dirname(fileURLToPath(import.meta.url))
+config({ path: join(__dir, '..', '.env') })
+const Pool = pg.Pool || pg.default?.Pool
 
 async function migrate() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL })
