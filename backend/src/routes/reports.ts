@@ -1062,4 +1062,276 @@ export async function reportsRoutes(app: FastifyInstance) {
       }
     }
   )
+
+  // GET /api/reports/osv/child/:childId
+  app.get<{
+    Params: { childId: string }
+    Querystring: {
+      start_date?: string
+      end_date?: string
+      account_id?: string
+    }
+  }>(
+    '/osv/child/:childId',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { childId } = request.params
+      const { start_date, end_date, account_id } = request.query
+
+      const child = await db
+        .selectFrom('children as c')
+        .leftJoin('groups as g', 'g.id', 'c.group_id')
+        .select(['c.id', 'c.full_name', 'g.name as group_name'])
+        .where('c.id', '=', childId)
+        .executeTakeFirst()
+
+      if (!child) return reply.status(404).send({ error: 'ChildNotFound' })
+
+      const currentYear = new Date().getFullYear()
+      const startDateStr = start_date || `${currentYear}-01-01`
+      const endDateStr = end_date || `${currentYear}-12-31`
+
+      const accounts = await db
+        .selectFrom('accounts')
+        .select(['id', 'name'])
+        .execute()
+      const accountMap = new Map(accounts.map((a) => [a.id, a.name]))
+
+      let priorTxQuery = db
+        .selectFrom('transactions')
+        .select(['type', 'amount'])
+        .where('child_id', '=', childId)
+        .where('is_deleted', '=', false)
+        .where(sql<SqlBool>`transaction_date < ${startDateStr}`)
+
+      if (account_id) {
+        priorTxQuery = priorTxQuery.where('account_id', '=', account_id)
+      }
+      const priorTxs = await priorTxQuery.execute()
+
+      let openingBalance = 0
+      for (const tx of priorTxs) {
+        const amt = Number(tx.amount)
+        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+          openingBalance += amt
+        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+          openingBalance -= amt
+        }
+      }
+
+      let initBalQuery = db
+        .selectFrom('initial_balances')
+        .select('amount')
+        .where('child_id', '=', childId)
+      if (account_id) {
+        initBalQuery = initBalQuery.where('account_id', '=', account_id)
+      }
+      const initBals = await initBalQuery.execute()
+      for (const ib of initBals) {
+        openingBalance += Number(ib.amount)
+      }
+
+      let periodTxQuery = db
+        .selectFrom('transactions as t')
+        .leftJoin('accounts as a', 'a.id', 't.account_id')
+        .leftJoin('activities as act', 'act.id', 't.activity_id')
+        .select([
+          't.id',
+          't.type',
+          't.child_id',
+          't.account_id',
+          't.activity_id',
+          't.enrollment_id',
+          't.amount',
+          't.transaction_date',
+          't.created_at',
+          't.note',
+          't.metadata_json',
+          'a.name as account_name',
+          'act.name as activity_name',
+        ])
+        .where('t.child_id', '=', childId)
+        .where('t.is_deleted', '=', false)
+        .where(sql<SqlBool>`t.transaction_date >= ${startDateStr}`)
+        .where(sql<SqlBool>`t.transaction_date <= ${endDateStr}`)
+
+      if (account_id) {
+        periodTxQuery = periodTxQuery.where('t.account_id', '=', account_id)
+      }
+
+      const periodTxs = await periodTxQuery
+        .orderBy('t.transaction_date', 'asc')
+        .orderBy('t.created_at', 'asc')
+        .execute()
+
+      const startYM = startDateStr.slice(0, 7)
+      const endYM = endDateStr.slice(0, 7)
+      const monthsList: string[] = []
+
+      let [curY, curM] = startYM.split('-').map(Number)
+      const [endY, endM] = endYM.split('-').map(Number)
+
+      while (curY < endY || (curY === endY && curM <= endM)) {
+        monthsList.push(`${curY}-${String(curM).padStart(2, '0')}`)
+        curM++
+        if (curM > 12) {
+          curM = 1
+          curY++
+        }
+      }
+
+      const txByMonth = new Map<string, typeof periodTxs>()
+      for (const ym of monthsList) {
+        txByMonth.set(ym, [])
+      }
+      for (const tx of periodTxs) {
+        const txDateStr = typeof tx.transaction_date === 'string'
+          ? tx.transaction_date
+          : new Date(tx.transaction_date).toISOString().slice(0, 10)
+        const ym = txDateStr.slice(0, 7)
+        if (txByMonth.has(ym)) {
+          txByMonth.get(ym)!.push(tx)
+        }
+      }
+
+      const ukMonthNames = [
+        'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+        'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+      ]
+
+      let runningBalance = openingBalance
+      let periodTotalAccrual = 0
+      let periodTotalPayment = 0
+      let periodTotalRefund = 0
+
+      const monthsResult = monthsList.map((ym) => {
+        const [y, m] = ym.split('-').map(Number)
+        const monthLabel = `${ukMonthNames[m - 1]} ${y}`
+        const monthStartBalance = runningBalance
+
+        const txs = txByMonth.get(ym) || []
+
+        const accrualItems: Array<{
+          id: string
+          activity_name: string
+          amount: number
+          account_id: string
+          account_name: string
+          transaction_date: string
+          note: string | null
+        }> = []
+
+        const paymentItems: Array<{
+          id: string
+          transaction_date: string
+          created_at: string
+          amount: number
+          payment_method: string
+          account_id: string
+          account_name: string
+          note: string | null
+          receipt_url: string | null
+        }> = []
+
+        const refundItemsByAccount = new Map<string, { account_id: string; account_name: string; amount: number }>()
+
+        let monthAccrualSum = 0
+        let monthPaymentSum = 0
+        let monthRefundSum = 0
+
+        for (const tx of txs) {
+          const amt = Number(tx.amount)
+          const txDateStr = typeof tx.transaction_date === 'string'
+            ? tx.transaction_date
+            : new Date(tx.transaction_date).toISOString().slice(0, 10)
+          const accName = tx.account_name || accountMap.get(tx.account_id) || 'Невідомий рахунок'
+
+          if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+            monthAccrualSum += amt
+            const actName = tx.activity_name || tx.note || 'Нарахування'
+            accrualItems.push({
+              id: tx.id,
+              activity_name: actName,
+              amount: -amt,
+              account_id: tx.account_id,
+              account_name: accName,
+              transaction_date: txDateStr,
+              note: tx.note,
+            })
+          } else if (tx.type === 'PAYMENT') {
+            monthPaymentSum += amt
+            const meta = (tx.metadata_json as Record<string, any>) || {}
+            paymentItems.push({
+              id: tx.id,
+              transaction_date: txDateStr,
+              created_at: tx.created_at ? new Date(tx.created_at).toISOString() : txDateStr,
+              amount: amt,
+              payment_method: meta.payment_method || meta.method || 'Каса/Безготівковий',
+              account_id: tx.account_id,
+              account_name: accName,
+              note: tx.note,
+              receipt_url: meta.receipt_url || null,
+            })
+          } else if (tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+            monthRefundSum += amt
+            const cur = refundItemsByAccount.get(tx.account_id) || {
+              account_id: tx.account_id,
+              account_name: accName,
+              amount: 0,
+            }
+            cur.amount += amt
+            refundItemsByAccount.set(tx.account_id, cur)
+          }
+        }
+
+        const monthEndBalance = monthStartBalance + monthPaymentSum + monthRefundSum - monthAccrualSum
+        runningBalance = monthEndBalance
+
+        periodTotalAccrual += monthAccrualSum
+        periodTotalPayment += monthPaymentSum
+        periodTotalRefund += monthRefundSum
+
+        return {
+          month: ym,
+          month_label: monthLabel,
+          balance_start: monthStartBalance,
+          balance_end: monthEndBalance,
+          accruals: {
+            total: -monthAccrualSum,
+            items: accrualItems,
+          },
+          payments: {
+            total: monthPaymentSum,
+            items: paymentItems,
+          },
+          refunds: {
+            total: monthRefundSum,
+            items: Array.from(refundItemsByAccount.values()),
+          },
+        }
+      })
+
+      return {
+        child: {
+          id: child.id,
+          full_name: child.full_name,
+          group_name: child.group_name,
+        },
+        period: {
+          start_date: startDateStr,
+          end_date: endDateStr,
+        },
+        account_id: account_id || null,
+        opening_balance: openingBalance,
+        closing_balance: runningBalance,
+        totals: {
+          accruals: -periodTotalAccrual,
+          payments: periodTotalPayment,
+          refunds: periodTotalRefund,
+        },
+        months: monthsResult,
+      }
+    }
+  )
 }
+

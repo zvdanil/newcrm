@@ -1,11 +1,12 @@
 import { BankPayersBlock } from './BankPayersBlock'
+import { ChildOSVWidget } from './ChildOSVWidget'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { InvoiceTab } from '../Cabinet/CabinetPage'
 import { childrenApi } from '../../api/children.api'
 import type { IndividualTariff, IndTariffType, OpenAccrual, ChildMonthStats } from '../../api/children.api'
-import type { ChildParent, Child } from '../../types'
+import type { ChildParent, Child, Enrollment } from '../../types'
 import { groupsApi } from '../../api/groups.api'
 import { parentsApi } from '../../api/parents.api'
 import { activitiesApi } from '../../api/activities.api'
@@ -243,6 +244,9 @@ export function ChildCardPage() {
 
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} ym={ym} setYm={setYm} />}
+
+      {/* OSV / Statement of Account */}
+      {id && <ChildOSVWidget childId={id} childName={child.full_name} />}
 
       {/* Billing forecast */}
       {id && <BillingForecastBlock childId={id} />}
@@ -982,8 +986,8 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[e.status]}`}>
-                {STATUS_LABELS[e.status]}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${(STATUS_COLORS as Record<string, string>)[e.status] ?? ''}`}>
+                {(STATUS_LABELS as Record<string, string>)[e.status] ?? e.status}
               </span>
               <div className="flex gap-2 text-xs text-gray-400">
                 {canEditTariffs && (
@@ -1022,14 +1026,14 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                         <input
                           type="date"
                           value={archiveState.date}
-                          onChange={(ev) => setArchiveState({ ...archiveState, date: ev.target.value })}
+                          onChange={(ev) => setArchiveState(prev => prev ? { ...prev, date: ev.target.value } : null)}
                           className="border rounded px-1 py-0.5 text-xs text-gray-700"
                         />
                         <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={archiveState.cancelAccruals}
-                            onChange={(ev) => setArchiveState({ ...archiveState, cancelAccruals: ev.target.checked, recalculateSubscription: ev.target.checked ? archiveState.recalculateSubscription : false })}
+                            onChange={(ev) => setArchiveState(prev => prev ? { ...prev, cancelAccruals: ev.target.checked, recalculateSubscription: ev.target.checked ? prev.recalculateSubscription : false } : null)}
                           />
                           скасувати нарахування
                         </label>
@@ -1038,7 +1042,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                             <input
                               type="checkbox"
                               checked={archiveState.recalculateSubscription}
-                              onChange={(ev) => setArchiveState({ ...archiveState, recalculateSubscription: ev.target.checked })}
+                              onChange={(ev) => setArchiveState(prev => prev ? { ...prev, recalculateSubscription: ev.target.checked } : null)}
                             />
                             перерахувати абонплату
                           </label>
@@ -1047,7 +1051,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                           dummy
                         </label>
                         <button
-                          onClick={() => archiveMutation.mutate({
+                          onClick={() => archiveState && archiveMutation.mutate({
                             id: e.id,
                             endDate: archiveState.date,
                             cancelAccruals: archiveState.cancelAccruals,

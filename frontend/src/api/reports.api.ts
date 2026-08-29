@@ -129,6 +129,79 @@ export const reportsApi = {
     const { data } = await apiClient.get<PnL2Report>(`/reports/pnl2?${params}`)
     return data
   },
+
+  getChildOSV: async (childId: string, params?: { start_date?: string; end_date?: string; account_id?: string }) => {
+    const { data } = await apiClient.get<ChildOSVReportResponse>(`/reports/osv/child/${childId}`, { params })
+    return data
+  },
+}
+
+export interface OSVAccrualItem {
+  id: string
+  activity_name: string
+  amount: number
+  account_id: string
+  account_name: string
+  transaction_date: string
+  note: string | null
+}
+
+export interface OSVPaymentItem {
+  id: string
+  transaction_date: string
+  created_at: string
+  amount: number
+  payment_method: string
+  account_id: string
+  account_name: string
+  note: string | null
+  receipt_url: string | null
+}
+
+export interface OSVRefundItem {
+  account_id: string
+  account_name: string
+  amount: number
+}
+
+export interface OSVMonthData {
+  month: string
+  month_label: string
+  balance_start: number
+  balance_end: number
+  accruals: {
+    total: number
+    items: OSVAccrualItem[]
+  }
+  payments: {
+    total: number
+    items: OSVPaymentItem[]
+  }
+  refunds: {
+    total: number
+    items: OSVRefundItem[]
+  }
+}
+
+export interface ChildOSVReportResponse {
+  child: {
+    id: string
+    full_name: string
+    group_name: string | null
+  }
+  period: {
+    start_date: string
+    end_date: string
+  }
+  account_id: string | null
+  opening_balance: number
+  closing_balance: number
+  totals: {
+    accruals: number
+    payments: number
+    refunds: number
+  }
+  months: OSVMonthData[]
 }
 
 export interface PnL2ChildDetail {
