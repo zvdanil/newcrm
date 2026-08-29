@@ -18,6 +18,7 @@ function formatMoney(amount: number | null | undefined, showPlusSign = false) {
 }
 
 export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
+  const [open, setOpen] = useState(false)
   const currentYear = new Date().getFullYear()
   const [periodPreset, setPeriodPreset] = useState<'current_year' | 'last_year' | 'custom'>('current_year')
   const [startDate, setStartDate] = useState(`${currentYear}-01-01`)
@@ -45,7 +46,7 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
         end_date: endDate,
         account_id: selectedAccountId || undefined,
       }),
-    enabled: !!childId,
+    enabled: !!childId && open,
   })
 
   const handlePresetChange = (preset: 'current_year' | 'last_year' | 'custom') => {
@@ -210,51 +211,62 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden space-y-4 print:border-none print:shadow-none print:p-0 print:space-y-2">
-      {/* Header & Controls Bar */}
-      <div className="p-5 border-b border-gray-200 space-y-4 print:border-none print:p-0">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span>📊</span>
-              <span>Оборотно-сальдова ведомость (Акт сверки)</span>
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5 print:hidden">
-              Рух коштів за обраний період із деталізацією нарахувань, оплат та повернень.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 print:hidden">
-            <button
-              onClick={() => toggleAllMonths(true)}
-              className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-            >
-              ➕ Розгорнути все
-            </button>
-            <button
-              onClick={() => toggleAllMonths(false)}
-              className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-            >
-              ➖ Згорнути все
-            </button>
-
-            <button
-              onClick={handleExportExcel}
-              disabled={!data}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition-colors shadow-sm disabled:opacity-50"
-            >
-              <span>📥</span> Excel (.xlsx)
-            </button>
-
-            <button
-              onClick={handleExportPDF}
-              disabled={!data}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-iris-50 hover:bg-iris-100 text-iris-700 text-xs font-semibold rounded-lg border border-iris-200 transition-colors shadow-sm disabled:opacity-50"
-            >
-              <span>📄</span> Друк / PDF
-            </button>
-          </div>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden print:border-none print:shadow-none print:p-0">
+      {/* Collapsible Header */}
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50/80 transition-colors print:hidden"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-base">📊</span>
+          <span className="text-sm font-semibold text-gray-900">Оборотно-сальдова ведомость (Акт сверки)</span>
         </div>
+        <span className="text-gray-400 text-sm select-none">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Main OSV Body */}
+      <div className={open ? 'block space-y-4 border-t border-gray-100 print:border-none' : 'hidden print:block'}>
+        {/* Controls & Filter Bar */}
+        <div className="p-5 pb-0 space-y-4 print:p-0">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs text-gray-500 print:hidden">
+                Рух коштів за обраний період із деталізацією нарахувань, оплат та повернень.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 print:hidden">
+              <button
+                onClick={() => toggleAllMonths(true)}
+                className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              >
+                ➕ Розгорнути все
+              </button>
+              <button
+                onClick={() => toggleAllMonths(false)}
+                className="px-2.5 py-1 text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              >
+                ➖ Згорнути все
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={!data}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <span>📥</span> Excel (.xlsx)
+              </button>
+
+              <button
+                onClick={handleExportPDF}
+                disabled={!data}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-iris-50 hover:bg-iris-100 text-iris-700 text-xs font-semibold rounded-lg border border-iris-200 transition-colors shadow-sm disabled:opacity-50"
+              >
+                <span>📄</span> Друк / PDF
+              </button>
+            </div>
+          </div>
 
         {/* Filter Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100 print:bg-white print:border-none print:p-0">
@@ -447,6 +459,7 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

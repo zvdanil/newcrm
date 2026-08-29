@@ -245,9 +245,6 @@ export function ChildCardPage() {
       {/* Balances */}
       {id && <BalancesBlock childId={id} canEdit={isOwner} ym={ym} setYm={setYm} />}
 
-      {/* OSV / Statement of Account */}
-      {id && <ChildOSVWidget childId={id} childName={child.full_name} />}
-
       {/* Billing forecast */}
       {id && <BillingForecastBlock childId={id} />}
 
@@ -256,6 +253,9 @@ export function ChildCardPage() {
 
       {/* Enrollments (includes individual tariff management) */}
       {id && <EnrollmentsBlock childId={id} canEdit={canEdit} canEditTariffs={isOwner} viewedYm={ym} />}
+
+      {/* OSV / Statement of Account */}
+      {id && <ChildOSVWidget childId={id} childName={child.full_name} />}
     </div>
   )
 }
