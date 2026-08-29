@@ -1121,14 +1121,17 @@ export async function reportsRoutes(app: FastifyInstance) {
 
       let initBalQuery = db
         .selectFrom('initial_balances')
-        .select('amount')
+        .select(['amount', 'created_at'])
         .where('child_id', '=', childId)
       if (account_id) {
         initBalQuery = initBalQuery.where('account_id', '=', account_id)
       }
       const initBals = await initBalQuery.execute()
       for (const ib of initBals) {
-        openingBalance += Number(ib.amount)
+        const ibDateStr = ib.created_at ? new Date(ib.created_at).toISOString().slice(0, 10) : '1970-01-01'
+        if (ibDateStr < startDateStr) {
+          openingBalance += Number(ib.amount)
+        }
       }
 
       let periodTxQuery = db
@@ -1207,7 +1210,17 @@ export async function reportsRoutes(app: FastifyInstance) {
       const monthsResult = monthsList.map((ym) => {
         const [y, m] = ym.split('-').map(Number)
         const monthLabel = `${ukMonthNames[m - 1]} ${y}`
-        const monthStartBalance = runningBalance
+
+        // Add initial_balances created within this month
+        let monthInitAmount = 0
+        for (const ib of initBals) {
+          const ibDateStr = ib.created_at ? new Date(ib.created_at).toISOString().slice(0, 10) : '1970-01-01'
+          if (ibDateStr.startsWith(ym)) {
+            monthInitAmount += Number(ib.amount)
+          }
+        }
+
+        const monthStartBalance = runningBalance + monthInitAmount
 
         const txs = txByMonth.get(ym) || []
 
