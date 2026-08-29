@@ -130,8 +130,9 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
         if (expandedAccruals[m.month] && m.accruals.items.length > 0) {
           rows.push(['  ├─ Деталізація нарахувань:'])
           m.accruals.items.forEach((item) => {
+            const countStr = item.count && item.count > 1 ? ` (${item.count})` : ''
             rows.push([
-              `     • ${item.activity_name} (${item.account_name})`,
+              `     • ${item.activity_name}${countStr} (${item.account_name})`,
               '',
               item.amount,
               '',
@@ -593,7 +594,7 @@ function MonthRowGroup({
                       {m.accruals.items.map((item) => (
                         <div key={item.id} className="flex flex-wrap items-center justify-between text-gray-700 py-0.5 border-b border-gray-50 last:border-none">
                           <span className="font-medium text-gray-900">
-                            • {item.activity_name}
+                            • {item.activity_name} {item.count && item.count > 1 ? `(${item.count})` : ''}
                           </span>
                           <div className="flex items-center gap-3">
                             <span className="text-[11px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">

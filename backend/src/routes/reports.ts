@@ -1224,15 +1224,16 @@ export async function reportsRoutes(app: FastifyInstance) {
 
         const txs = txByMonth.get(ym) || []
 
-        const accrualItems: Array<{
+        const accrualItemsMap = new Map<string, {
           id: string
           activity_name: string
           amount: number
+          count: number
           account_id: string
           account_name: string
           transaction_date: string
           note: string | null
-        }> = []
+        }>()
 
         const paymentItems: Array<{
           id: string
@@ -1262,15 +1263,23 @@ export async function reportsRoutes(app: FastifyInstance) {
           if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
             monthAccrualSum += amt
             const actName = tx.activity_name || tx.note || 'Нарахування'
-            accrualItems.push({
-              id: tx.id,
-              activity_name: actName,
-              amount: -amt,
-              account_id: tx.account_id,
-              account_name: accName,
-              transaction_date: txDateStr,
-              note: tx.note,
-            })
+            const key = `${tx.account_id}::${actName}`
+            const existing = accrualItemsMap.get(key)
+            if (existing) {
+              existing.amount += (-amt)
+              existing.count += 1
+            } else {
+              accrualItemsMap.set(key, {
+                id: tx.id,
+                activity_name: actName,
+                amount: -amt,
+                count: 1,
+                account_id: tx.account_id,
+                account_name: accName,
+                transaction_date: txDateStr,
+                note: tx.note,
+              })
+            }
           } else if (tx.type === 'PAYMENT') {
             monthPaymentSum += amt
             const meta = (tx.metadata_json as Record<string, any>) || {}
@@ -1311,7 +1320,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           balance_end: monthEndBalance,
           accruals: {
             total: -monthAccrualSum,
-            items: accrualItems,
+            items: Array.from(accrualItemsMap.values()),
           },
           payments: {
             total: monthPaymentSum,
