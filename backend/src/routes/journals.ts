@@ -37,16 +37,18 @@ async function triggerRefund(
       .executeTakeFirst(),
   ])
 
-  if (!refundConfig?.refund_on_excused) return null
+  if (!refundConfig?.refund_on_excused && status !== 'absent_excused_30') return null
   if (activity?.is_rigid) return null  // жёсткий абонемент блокирует возврат основной услуги
 
   let R = 0
-  if (refundConfig.refund_amount !== null) {
-    R = parseFloat(refundConfig.refund_amount as string)
-  } else if (refundConfig.refund_pct !== null && tariff) {
-    const pct = parseFloat(refundConfig.refund_pct as string)
-    const base = parseFloat(tariff.base_fee as string)
-    R = Math.round(base * pct) / 100
+  if (refundConfig?.refund_on_excused) {
+    if (refundConfig.refund_amount !== null) {
+      R = parseFloat(refundConfig.refund_amount as string)
+    } else if (refundConfig.refund_pct !== null && tariff) {
+      const pct = parseFloat(refundConfig.refund_pct as string)
+      const base = parseFloat(tariff.base_fee as string)
+      R = Math.round(base * pct) / 100
+    }
   }
 
   let amount = R
@@ -84,7 +86,7 @@ async function triggerRefund(
     amount,
     transaction_date: date,
     note: `Повернення за пропуск ${date}`,
-    metadata_json: { refund_config: { amount: refundConfig.refund_amount, pct: refundConfig.refund_pct } },
+    metadata_json: { refund_config: { amount: refundConfig?.refund_amount ?? null, pct: refundConfig?.refund_pct ?? null } },
     created_by: createdBy,
   })
 }
@@ -390,6 +392,23 @@ export async function syncAttendanceFinancials(params: {
       }
     }
   } else if (effectiveTariffType === 'smart') {
+    const was30 = oldStatus === 'absent_excused_30'
+    const isNow30 = newStatus === 'absent_excused_30'
+    if (was30 && (!isNow30 || oldStatus !== newStatus)) {
+      await reverseRefund(enrollmentId, accountId, childId, date, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await reverseRefund(le.id, le.account_id, childId, date, userId)
+      }
+    }
+    if (isNow30 && (!was30 || oldStatus !== newStatus)) {
+      await triggerRefund(enrollmentId, childId, accountId, activityId, date, newStatus!, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await triggerRefund(le.id, childId, le.account_id, child_activity_id, date, newStatus!, userId)
+      }
+    }
+
     if (oldStatus !== newStatus || amountChanged || (wasExcused !== isNowExcused)) {
       const billingMonth = date.slice(0, 7) + '-01'
       await recalcSmartBenefit(enrollmentId, billingMonth)

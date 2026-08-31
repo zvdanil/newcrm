@@ -460,22 +460,29 @@ export async function recalcActivityAccruals(
 
         // Smart tariffs use recalcSmartBenefit for REFUND — don't create per-absence REFUNDs here
         const effectiveType = ind?.tariff_type ?? activity.tariff_type
-        if (shouldRefund && effectiveType !== 'smart') {
+        const canRefundStandard = shouldRefund && effectiveType !== 'smart'
+        const statusesToQuery: ('absent_excused' | 'absent_excused_30')[] = []
+        if (canRefundStandard) statusesToQuery.push('absent_excused', 'absent_excused_30')
+        else statusesToQuery.push('absent_excused_30')
+
+        if (statusesToQuery.length > 0 && !activity.is_rigid) {
           const absences = await db
             .selectFrom('attendance_logs')
             .select(['id', 'date', 'status'])
             .where('enrollment_id', '=', e.enrollment_id)
-            .where('status', 'in', ['absent_excused', 'absent_excused_30'])
+            .where('status', 'in', statusesToQuery)
             .where('date', '>=', castAsDate(monthStr))
             .where('date', '<=', castAsDate(monthLastDay))
             .execute()
 
           for (const abs of absences) {
             let R = 0
-            if (refundConfig!.refund_amount != null) {
-              R = parseFloat(refundConfig!.refund_amount as string)
-            } else if (refundConfig!.refund_pct != null) {
-              R = Math.round(price * parseFloat(refundConfig!.refund_pct as string) / 100 * 100) / 100
+            if (refundConfig?.refund_on_excused) {
+              if (refundConfig.refund_amount != null) {
+                R = parseFloat(refundConfig.refund_amount as string)
+              } else if (refundConfig.refund_pct != null) {
+                R = Math.round(price * parseFloat(refundConfig.refund_pct as string) / 100 * 100) / 100
+              }
             }
 
             let refundAmount = R
