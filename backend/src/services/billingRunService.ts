@@ -477,7 +477,7 @@ export async function recalcActivityAccruals(
 
           for (const abs of absences) {
             let R = 0
-            if (refundConfig?.refund_on_excused) {
+            if (refundConfig?.refund_on_excused && effectiveType !== 'smart') {
               if (refundConfig.refund_amount != null) {
                 R = parseFloat(refundConfig.refund_amount as string)
               } else if (refundConfig.refund_pct != null) {

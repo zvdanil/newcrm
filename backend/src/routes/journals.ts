@@ -26,7 +26,7 @@ async function triggerRefund(
   createdBy: string | null,
 ): Promise<string | null> {
   const [activity, refundConfig, tariff] = await Promise.all([
-    db.selectFrom('activities').select(['is_rigid']).where('id', '=', activityId).executeTakeFirst(),
+    db.selectFrom('activities').select(['tariff_type', 'is_rigid']).where('id', '=', activityId).executeTakeFirst(),
     db.selectFrom('refund_configs').selectAll().where('activity_id', '=', activityId).executeTakeFirst(),
     db.selectFrom('tariffs')
       .select('base_fee')
@@ -40,8 +40,11 @@ async function triggerRefund(
   if (!refundConfig?.refund_on_excused && status !== 'absent_excused_30') return null
   if (activity?.is_rigid) return null  // жёсткий абонемент блокирует возврат основной услуги
 
+  const ind = await getChildIndividualTariff(childId, activityId, date)
+  const effectiveTariffType = ind?.tariff_type ?? activity?.tariff_type
+
   let R = 0
-  if (refundConfig?.refund_on_excused) {
+  if (refundConfig?.refund_on_excused && effectiveTariffType !== 'smart') {
     if (refundConfig.refund_amount !== null) {
       R = parseFloat(refundConfig.refund_amount as string)
     } else if (refundConfig.refund_pct !== null && tariff) {
