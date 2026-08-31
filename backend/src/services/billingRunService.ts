@@ -2,6 +2,7 @@ import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { createTransaction, recalcBalance } from './balanceService.js'
 import { castAsDate, toDbDateStr } from './dateUtils.js'
+import { recalcSmartBenefit } from './smartTariffService.js'
 
 // Підрахунок робочих днів (пн–пт) у діапазоні [from, to] включно
 export function countWorkingDays(from: Date, to: Date): number {
@@ -720,6 +721,87 @@ export async function recalcForIndividualTariff(
           created_by: triggeredBy,
         })
       }
+
+      // Soft-delete existing auto REFUNDs for this enrollment+billing_month
+      await db.updateTable('transactions')
+        .set(softDeleteSet)
+        .where('enrollment_id', '=', enrollment.enrollment_id)
+        .where('type', '=', 'REFUND')
+        .where('is_deleted', '=', false)
+        .where('billing_month', '=', castAsDate(monthStr))
+        .execute()
+
+      const refundConfig = await db
+        .selectFrom('refund_configs')
+        .select(['refund_on_excused', 'refund_amount', 'refund_pct'])
+        .where('activity_id', '=', activityId)
+        .executeTakeFirst()
+
+      const activityRow = await db.selectFrom('activities').select('is_rigid').where('id', '=', activityId).executeTakeFirst()
+      const shouldRefund = !!(refundConfig?.refund_on_excused && !activityRow?.is_rigid)
+      const canRefundStandard = shouldRefund && ind.tariff_type !== 'smart'
+      const statusesToQuery: ('absent_excused' | 'absent_excused_30')[] = []
+      if (canRefundStandard) statusesToQuery.push('absent_excused', 'absent_excused_30')
+      else statusesToQuery.push('absent_excused_30')
+
+      if (statusesToQuery.length > 0 && !activityRow?.is_rigid) {
+        const absences = await db
+          .selectFrom('attendance_logs')
+          .select(['id', 'date', 'status'])
+          .where('enrollment_id', '=', enrollment.enrollment_id)
+          .where('status', 'in', statusesToQuery)
+          .where('date', '>=', castAsDate(monthStr))
+          .where('date', '<=', castAsDate(monthLastDay))
+          .execute()
+
+        for (const abs of absences) {
+          let R = 0
+          if (refundConfig?.refund_on_excused && ind.tariff_type !== 'smart') {
+            if (refundConfig.refund_amount != null) {
+              R = parseFloat(refundConfig.refund_amount as string)
+            } else if (refundConfig.refund_pct != null) {
+              R = Math.round(price * parseFloat(refundConfig.refund_pct as string) / 100 * 100) / 100
+            }
+          }
+
+          let refundAmount = R
+          if (abs.status === 'absent_excused_30') {
+            const firstDay = new Date(Date.UTC(billingDate.getUTCFullYear(), billingDate.getUTCMonth(), 1))
+            const lastDay  = new Date(Date.UTC(billingDate.getUTCFullYear(), billingDate.getUTCMonth() + 1, 0))
+            const W = countWorkingDays(firstDay, lastDay)
+            if (W > 0) {
+              const D = Math.round(price / W)
+              const diff = D - R
+              if (diff > 0) {
+                refundAmount = R + 0.3 * diff
+              }
+            }
+          }
+          refundAmount = Math.round(refundAmount * 100) / 100
+
+          if (refundAmount <= 0) continue
+
+          await createTransaction({
+            type: 'REFUND',
+            child_id: childId,
+            account_id: enrollment.account_id as string,
+            activity_id: activityId,
+            enrollment_id: enrollment.enrollment_id,
+            amount: refundAmount,
+            transaction_date: toDbDateStr(abs.date as Date),
+            billing_month: monthStr,
+            note: `Повернення за відсутність ${toDbDateStr(abs.date as Date)}`,
+            metadata_json: { source: 'individual_tariff_recalc', attendance_log_id: abs.id },
+            created_by: triggeredBy,
+          })
+        }
+      }
+
+      if (ind.tariff_type === 'smart') {
+        await recalcSmartBenefit(enrollment.enrollment_id, monthStr)
+      }
+
+      await recalcBalance(childId, enrollment.account_id as string)
 
     } else if (ind.tariff_type === 'per_lesson') {
       // Include separate_billing marks (числові відмітки) — they may have custom_amount set.
