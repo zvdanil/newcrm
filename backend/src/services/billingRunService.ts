@@ -472,7 +472,17 @@ export async function recalcActivityAccruals(
 
           for (const abs of absences) {
             let R = 0
-            if (refundConfig?.refund_on_excused && effectiveType !== 'smart') {
+            if (effectiveType === 'smart') {
+              const l2Refund = ind?.l2_refund_per_absence ?? (
+                await db.selectFrom('smart_tariff_configs')
+                  .select('l2_refund_per_absence')
+                  .where('activity_id', '=', activityId)
+                  .executeTakeFirst()
+              )?.l2_refund_per_absence
+              if (l2Refund != null) {
+                R = parseFloat(l2Refund as string)
+              }
+            } else if (refundConfig?.refund_on_excused) {
               if (refundConfig.refund_amount != null) {
                 R = parseFloat(refundConfig.refund_amount as string)
               } else if (refundConfig.refund_pct != null) {
@@ -762,7 +772,17 @@ export async function recalcForIndividualTariff(
 
         for (const abs of absences) {
           let R = 0
-          if (refundConfig?.refund_on_excused && ind.tariff_type !== 'smart') {
+          if (ind.tariff_type === 'smart') {
+            const l2Refund = ind?.l2_refund_per_absence ?? (
+              await db.selectFrom('smart_tariff_configs')
+                .select('l2_refund_per_absence')
+                .where('activity_id', '=', activityId)
+                .executeTakeFirst()
+            )?.l2_refund_per_absence
+            if (l2Refund != null) {
+              R = parseFloat(l2Refund as string)
+            }
+          } else if (refundConfig?.refund_on_excused) {
             if (refundConfig.refund_amount != null) {
               R = parseFloat(refundConfig.refund_amount as string)
             } else if (refundConfig.refund_pct != null) {
