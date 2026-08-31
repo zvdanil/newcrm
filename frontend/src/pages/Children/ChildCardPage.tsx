@@ -507,6 +507,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const [freezeForm, setFreezeForm]   = useState({ frozen_from: '', frozen_to: '' })
   const [tariffForm, setTariffForm]   = useState(EMPTY_TARIFF_FORM)
   const [tariffError, setTariffError] = useState<string | null>(null)
+  const [tariffSuccessMsg, setTariffSuccessMsg] = useState<string | null>(null)
   const [discountForm, setDiscountForm]   = useState({ discount_pct: '', valid_from: TODAY })
   const [showDiscountForm, setShowDiscountForm] = useState(false)
   const [discountError, setDiscountError]   = useState<string | null>(null)
@@ -560,6 +561,17 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
     if (validFrom <= viewedMonthDate && (validTo === null || validTo > viewedMonthDate)) {
       // Prefer the most-recent valid_from if multiple overlap (shouldn't happen in correct SCD2 data)
       if (!acc[t.activity_id] || new Date(acc[t.activity_id].valid_from) < validFrom) {
+        acc[t.activity_id] = t
+      }
+    }
+    return acc
+  }, {})
+
+  // Future scheduled tariff starting AFTER viewed month date
+  const futureTariffByActivity = individualTariffs.reduce<Record<string, IndividualTariff>>((acc, t) => {
+    const validFrom = new Date(t.valid_from)
+    if (validFrom > viewedMonthDate) {
+      if (!acc[t.activity_id] || new Date(acc[t.activity_id].valid_from) > validFrom) {
         acc[t.activity_id] = t
       }
     }
@@ -656,6 +668,9 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
       setTariffEnrollId(null)
       setTariffError(null)
+      const validFromFormatted = new Date(tariffForm.valid_from).toLocaleDateString('uk-UA')
+      setTariffSuccessMsg(`Індивідуальний тариф успішно збережено та заплановано з ${validFromFormatted}!`)
+      setTimeout(() => setTariffSuccessMsg(null), 6000)
     },
     onError:   () => setTariffError('Помилка збереження'),
   })
@@ -693,7 +708,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const archivedEnrollments = enrollments.filter((e) => e.status === 'archived')
 
   const getEffectiveTariffType = (e: Enrollment) => {
-    const ind = indTariffByActivity[e.activity_id]
+    const ind = indTariffByActivity[e.activity_id] || futureTariffByActivity[e.activity_id]
     if (ind?.tariff_type) return ind.tariff_type
     return e.tariff_type || 'monthly'
   }
@@ -720,7 +735,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   })
 
   const openTariffForm = (enrollmentId: string, activityId: string) => {
-    const existing = indTariffByActivity[activityId]
+    const existing = indTariffByActivity[activityId] || futureTariffByActivity[activityId]
     setTariffForm({
       tariff_type:           (existing?.tariff_type ?? 'monthly') as IndTariffType,
       price:                 existing ? String(Number(existing.price).toFixed(0)) : '',
@@ -738,6 +753,10 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
 
   const renderEnrollmentRow = (e: Enrollment) => {
     const indTariff = indTariffByActivity[e.activity_id]
+    const futureTariff = futureTariffByActivity[e.activity_id]
+    const activityTariffs = individualTariffs.filter((t) => t.activity_id === e.activity_id)
+    const pastTariffs = activityTariffs.filter((t) => t.valid_to && new Date(t.valid_to) <= viewedMonthDate)
+
     return (
       <li key={e.id} className="py-3">
         {/* Freeze form */}
@@ -863,6 +882,15 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
           <div className="space-y-3 p-3 bg-iris-50 border border-iris-200 rounded-lg">
             <p className="text-xs font-medium text-gray-700">Індивідуальний тариф · {e.activity_name}</p>
 
+            {futureTariff && (
+              <div className="p-2 bg-purple-50 border border-purple-200 rounded text-xs text-purple-800 flex items-center gap-1.5">
+                <span>ℹ️</span>
+                <span>
+                  Заплановано тариф з <strong>{new Date(futureTariff.valid_from).toLocaleDateString('uk-UA')}</strong> ({Number(futureTariff.price).toFixed(0)} грн). Збереження нового тарифу оновить цей запис.
+                </span>
+              </div>
+            )}
+
             {/* Tariff type */}
             <div className="flex gap-4">
               {(['monthly', 'per_lesson', 'smart'] as IndTariffType[]).map((t) => (
@@ -970,7 +998,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
               <p className="text-xs text-gray-400 flex items-center gap-1.5 flex-wrap">
                 <span>{e.account_name} · з {new Date(e.start_date).toLocaleDateString('uk-UA')}</span>
                 {indTariff ? (
-                  <span className="text-iris-500">
+                  <span className="text-iris-600 font-medium">
                     · (тариф з {new Date(indTariff.valid_from).toLocaleDateString('uk-UA')} {TARIFF_TYPE_LABEL[indTariff.tariff_type]} · {Number(indTariff.price).toFixed(0)} грн)
                   </span>
                 ) : e.base_fee ? (
@@ -984,6 +1012,23 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                   <span>· заморожена до {new Date(e.frozen_to).toLocaleDateString('uk-UA')}</span>
                 )}
               </p>
+
+              {/* Scheduled future tariff badge */}
+              {futureTariff && (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded text-xs font-medium"
+                        title={`Запланований тариф з ${new Date(futureTariff.valid_from).toLocaleDateString('uk-UA')}`}>
+                    <span>📅</span> Заплановано з {new Date(futureTariff.valid_from).toLocaleDateString('uk-UA')}: {Number(futureTariff.price).toFixed(0)} грн ({TARIFF_TYPE_LABEL[futureTariff.tariff_type]})
+                  </span>
+                </div>
+              )}
+
+              {/* Past archive tariffs badge if no current indTariff but past tariffs exist */}
+              {!indTariff && pastTariffs.length > 0 && (
+                <div className="mt-0.5 text-[11px] text-gray-400 italic">
+                  ⏳ Минулий тариф (до {new Date(pastTariffs[0].valid_to!).toLocaleDateString('uk-UA')}): {Number(pastTariffs[0].price).toFixed(0)} грн (в архіві)
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${(STATUS_COLORS as Record<string, string>)[e.status] ?? ''}`}>
@@ -994,7 +1039,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                   <>
                     <button onClick={() => openTariffForm(e.id, e.activity_id)}
                       className="hover:text-iris-600 transition-colors">
-                      {indTariff ? 'тариф' : '+ тариф'}
+                      {indTariff || futureTariff ? 'тариф' : '+ тариф'}
                     </button>
                     {indTariff && (
                       <button
@@ -1095,6 +1140,16 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
           )}
         </div>
       </div>
+
+      {tariffSuccessMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800 flex items-center justify-between transition-all">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-600 text-sm font-bold">✓</span>
+            <span>{tariffSuccessMsg}</span>
+          </div>
+          <button onClick={() => setTariffSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-800 text-xs font-bold">✕</button>
+        </div>
+      )}
 
       {/* Global discount form */}
       {showDiscountForm && (
