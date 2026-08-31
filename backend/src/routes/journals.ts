@@ -80,6 +80,7 @@ async function triggerRefund(
   amount = Math.round(amount * 100) / 100
   if (amount <= 0) return null
 
+  const billingMonth = date.slice(0, 7) + '-01'
   return createTransaction({
     type: 'REFUND',
     child_id: childId,
@@ -88,6 +89,7 @@ async function triggerRefund(
     enrollment_id: enrollmentId,
     amount,
     transaction_date: date,
+    billing_month: billingMonth,
     note: `Повернення за пропуск ${date}`,
     metadata_json: { refund_config: { amount: refundConfig?.refund_amount ?? null, pct: refundConfig?.refund_pct ?? null } },
     created_by: createdBy,

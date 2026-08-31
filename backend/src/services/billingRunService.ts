@@ -728,7 +728,13 @@ export async function recalcForIndividualTariff(
         .where('enrollment_id', '=', enrollment.enrollment_id)
         .where('type', '=', 'REFUND')
         .where('is_deleted', '=', false)
-        .where('billing_month', '=', castAsDate(monthStr))
+        .where((eb) => eb.or([
+          eb('billing_month', '=', castAsDate(monthStr)),
+          eb.and([
+            eb('transaction_date', '>=', castAsDate(monthStr)),
+            eb('transaction_date', '<=', castAsDate(monthLastDay))
+          ])
+        ]))
         .execute()
 
       const refundConfig = await db
