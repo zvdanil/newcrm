@@ -409,12 +409,6 @@ export async function recalcActivityAccruals(
           await recalcBalance(e.child_id, e.account_id)
           continue
         }
-        // If effective type differs from activity type, the correct billing run handles it
-        // (e.g. monthly activity + individual smart → runSmartAccruals owns it)
-        if (effectiveIndType !== activity.tariff_type) {
-          await recalcBalance(e.child_id, e.account_id)
-          continue
-        }
 
         const price = ind
           ? Math.round(parseFloat(ind.price as string) * 100) / 100
@@ -519,6 +513,12 @@ export async function recalcActivityAccruals(
             refunded++
           }
         }
+
+        if (effectiveType === 'smart') {
+          await recalcSmartBenefit(e.enrollment_id, monthStr)
+        }
+
+        await recalcBalance(e.child_id, e.account_id)
       }
     }
 
