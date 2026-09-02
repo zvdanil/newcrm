@@ -45,6 +45,7 @@ export function ChildCardPage() {
     group_id: '',
     note: '',
     is_active: true,
+    deactivation_date: '',
   })
 
   const { data: child, isLoading } = useQuery({
@@ -81,6 +82,7 @@ export function ChildCardPage() {
       group_id:   child.group_id  ?? '',
       note:       child.note      ?? '',
       is_active:  child.is_active,
+      deactivation_date: toDateInputValue(child.deactivation_date ?? null) || todayStr(),
     })
     setEditing(true)
   }
@@ -90,12 +92,17 @@ export function ChildCardPage() {
       setSaveError('ПІБ є обовʼязковим полем')
       return
     }
+    if (!form.is_active && !form.deactivation_date) {
+      setSaveError('Будь ласка, вкажіть дату деактивації')
+      return
+    }
     updateMutation.mutate({
       full_name:  form.full_name.trim(),
       birth_date: form.birth_date || null,
       group_id:   form.group_id  || null,
       note:       form.note      || null,
       is_active:  form.is_active,
+      deactivation_date: !form.is_active ? form.deactivation_date : null,
     })
   }
 
@@ -122,7 +129,7 @@ export function ChildCardPage() {
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               child.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
             }`}>
-              {child.is_active ? 'Активна' : 'Архів'}
+              {child.is_active ? 'Активна' : `Неактивна ${child.deactivation_date ? `з ${formatDate(child.deactivation_date)}` : ''}`}
             </span>
             {canEdit && !editing && (
               <button
@@ -209,6 +216,18 @@ export function ChildCardPage() {
                 <span className="text-sm text-gray-700">Активна</span>
               </label>
             </Field>
+
+            {!form.is_active && (
+              <Field label="Дата деактивації (з якого числа неактивна)">
+                <input
+                  type="date"
+                  value={form.deactivation_date}
+                  onChange={(e) => setForm({ ...form, deactivation_date: e.target.value })}
+                  className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">З цього числа дитина стане неактивною, припиниться показ у журналах, а абонплати за неактивний період будуть автоматично списані.</p>
+              </Field>
+            )}
 
             {saveError && (
               <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{saveError}</div>

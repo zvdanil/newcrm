@@ -204,6 +204,7 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
       .innerJoin('children as c', 'c.id', 'e.child_id')
       .leftJoin('groups as g', 'g.id', 'c.group_id')
       .where('e.activity_id', 'in', activityIds)
+      .where('c.is_active', '=', true)
       .where(eb => eb.or([
         eb('e.status', '!=', 'archived'),
         eb('e.id', 'in',

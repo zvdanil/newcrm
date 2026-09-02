@@ -38,6 +38,7 @@ export interface Child {
   full_name: string
   birth_date: string | null
   is_active: boolean
+  deactivation_date?: string | null
   note: string | null
   created_at: string
   updated_at?: string

@@ -496,6 +496,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             'g.name as group_name'
           ])
           .where('e.activity_id', '=', activity_id)
+          .where('c.is_active', '=', true)
           .where(eb => eb.or([
             eb('e.status', '!=', 'archived'),
             eb('e.id', 'in',

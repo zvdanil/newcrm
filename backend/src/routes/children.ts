@@ -5,7 +5,7 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { toDbDateStr, castAsDate } from '../services/dateUtils.js'
 import { recalcBalance, createTransaction } from '../services/balanceService.js'
 import { recalcStaffAccruals, recalcSmartStaffBenefit } from '../services/salaryService.js'
-import { recalcActivityAccruals, recalcForIndividualTariff, getChildIndividualTariff, getEffectivePrice } from '../services/billingRunService.js'
+import { recalcActivityAccruals, recalcForIndividualTariff, getChildIndividualTariff, getEffectivePrice, recalcAccrualOnDeactivation } from '../services/billingRunService.js'
 import { recalcSmartBenefit } from '../services/smartTariffService.js'
 
 export async function childrenRoutes(app: FastifyInstance) {
@@ -36,7 +36,7 @@ export async function childrenRoutes(app: FastifyInstance) {
         .leftJoin('groups as g', 'g.id', 'c.group_id')
         .leftJoin('families as f', 'f.id', 'c.family_id')
         .select([
-          'c.id', 'c.full_name', 'c.birth_date', 'c.is_active',
+          'c.id', 'c.full_name', 'c.birth_date', 'c.is_active', 'c.deactivation_date',
           'c.note', 'c.created_at',
           'g.id as group_id', 'g.name as group_name',
           'f.id as family_id', 'f.name as family_name',
@@ -128,7 +128,7 @@ export async function childrenRoutes(app: FastifyInstance) {
         .leftJoin('families as f', 'f.id', 'c.family_id')
         .leftJoin('parents as p', 'p.id', 'f.primary_parent_id')
         .select([
-          'c.id', 'c.full_name', 'c.birth_date', 'c.is_active', 'c.note',
+          'c.id', 'c.full_name', 'c.birth_date', 'c.is_active', 'c.deactivation_date', 'c.note',
           'c.created_at', 'c.updated_at',
           'g.id as group_id', 'g.name as group_name',
           'f.id as family_id', 'f.name as family_name',
@@ -224,6 +224,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       group_id?: string | null
       effective_date?: string
       is_active?: boolean
+      deactivation_date?: string
       note?: string
     }
   }>(
@@ -231,14 +232,24 @@ export async function childrenRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
       const { id } = request.params
-      const { effective_date, ...updates } = request.body
+      const { effective_date, deactivation_date, ...updates } = request.body
 
       const existingChild = await db.selectFrom('children')
-        .select(['id', 'group_id'])
+        .select(['id', 'group_id', 'is_active', 'deactivation_date'])
         .where('id', '=', id)
         .executeTakeFirst()
 
       if (!existingChild) return reply.status(404).send({ error: 'NotFound' })
+
+      let deactDateToApply: string | null = null
+      const payloadToSet: Record<string, unknown> = { ...updates }
+
+      if (updates.is_active === false) {
+        deactDateToApply = deactivation_date ? toDbDateStr(deactivation_date) : toDbDateStr(new Date())
+        payloadToSet.deactivation_date = deactDateToApply
+      } else if (updates.is_active === true) {
+        payloadToSet.deactivation_date = null
+      }
 
       const updated = await db.transaction().execute(async (trx) => {
         if (updates.group_id !== undefined && updates.group_id !== existingChild.group_id) {
@@ -278,11 +289,15 @@ export async function childrenRoutes(app: FastifyInstance) {
 
         return trx
           .updateTable('children')
-          .set(updates)
+          .set(payloadToSet)
           .where('id', '=', id)
           .returningAll()
           .executeTakeFirst()
       })
+
+      if (updates.is_active === false && deactDateToApply) {
+        await recalcAccrualOnDeactivation(id, deactDateToApply, request.user.sub)
+      }
 
       return updated
     }

@@ -886,3 +886,103 @@ export async function recalcForIndividualTariff(
     cur.setMonth(cur.getMonth() + 1)
   }
 }
+
+/**
+ * Recalculates/adjusts monthly accruals for a child upon deactivation from `deactivationDateStr`.
+ * Deactivation is effective starting 00:00:00 of `deactivationDateStr`.
+ * Adjusts monthly ACCRUAL transactions for the month containing `deactivationDateStr`
+ * by creating an ADJUSTMENT transaction for the unused portion of the month.
+ */
+export async function recalcAccrualOnDeactivation(
+  childId: string,
+  deactivationDateStr: string,
+  triggeredBy: string | null = null
+): Promise<void> {
+  const deactivationDate = new Date(deactivationDateStr + 'T00:00:00Z')
+  const billingMonth = deactivationDateStr.slice(0, 7) + '-01'
+
+  const enrollments = await db
+    .selectFrom('enrollments as e')
+    .innerJoin('activities as a', 'a.id', 'e.activity_id')
+    .select(['e.id as enrollment_id', 'e.account_id', 'e.activity_id', 'a.tariff_type'])
+    .where('e.child_id', '=', childId)
+    .execute()
+
+  for (const e of enrollments) {
+    const ind = await getChildIndividualTariff(childId, e.activity_id, deactivationDateStr)
+    const effectiveTariffType = ind?.tariff_type ?? e.tariff_type
+
+    if (effectiveTariffType !== 'monthly' && effectiveTariffType !== 'smart') {
+      continue
+    }
+
+    const mainAccrual = await db
+      .selectFrom('transactions')
+      .select(['id', 'amount', 'account_id', 'activity_id'])
+      .where('enrollment_id', '=', e.enrollment_id)
+      .where('type', '=', 'ACCRUAL')
+      .where('billing_month', '=', castAsDate(billingMonth))
+      .where('is_deleted', '=', false)
+      .executeTakeFirst()
+
+    if (!mainAccrual) continue
+
+    const baseAmount = parseFloat(mainAccrual.amount as string)
+    if (baseAmount <= 0) continue
+
+    const [yStr, mStr] = billingMonth.split('-')
+    const year = parseInt(yStr, 10)
+    const monthIndex = parseInt(mStr, 10) - 1
+
+    const firstDay = new Date(Date.UTC(year, monthIndex, 1))
+    const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0))
+
+    const totalWorkDays = countWorkingDays(firstDay, lastDay)
+    if (totalWorkDays <= 0) continue
+
+    const effectiveDeactDate = deactivationDate < firstDay ? firstDay : deactivationDate
+    const unusedWorkDays = deactivationDate > lastDay ? 0 : countWorkingDays(effectiveDeactDate, lastDay)
+
+    let unusedAmount = 0
+    if (deactivationDate <= firstDay) {
+      unusedAmount = baseAmount
+    } else if (unusedWorkDays > 0) {
+      unusedAmount = Math.round((baseAmount * (unusedWorkDays / totalWorkDays)) * 100) / 100
+    }
+
+    if (unusedAmount <= 0) continue
+
+    const prevAdjustments = await db
+      .selectFrom('transactions')
+      .select('id')
+      .where('enrollment_id', '=', e.enrollment_id)
+      .where('type', '=', 'ADJUSTMENT')
+      .where('billing_month', '=', castAsDate(billingMonth))
+      .where('is_deleted', '=', false)
+      .execute()
+
+    for (const pa of prevAdjustments) {
+      await db
+        .updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: triggeredBy })
+        .where('id', '=', pa.id)
+        .execute()
+    }
+
+    await createTransaction({
+      type: 'ADJUSTMENT',
+      child_id: childId,
+      account_id: mainAccrual.account_id,
+      activity_id: mainAccrual.activity_id,
+      enrollment_id: e.enrollment_id,
+      amount: -unusedAmount,
+      transaction_date: deactivationDateStr,
+      billing_month: billingMonth,
+      note: `Списання абонплати за неактивний період з ${deactivationDateStr}`,
+      metadata_json: { deactivation_adjustment: true, unused_amount: unusedAmount, deactivation_date: deactivationDateStr },
+      created_by: triggeredBy,
+    })
+
+    await recalcBalance(childId, mainAccrual.account_id)
+  }
+}

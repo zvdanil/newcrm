@@ -74,6 +74,7 @@ export interface ChildrenTable {
   family_id: string | null
   group_id: string | null
   is_active: Generated<boolean>
+  deactivation_date: ColumnType<Date | null, string | null, string | null>
   note: string | null
   created_at: Generated<Date>
   updated_at: Generated<Date>
