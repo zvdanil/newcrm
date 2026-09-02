@@ -92,6 +92,7 @@ interface CellProps {
   dateStr:      string
   log:          any
   frozen:       boolean
+  locked?:      boolean
   isHighlighted: boolean
   isDutyAdmin:  boolean
   onMark:       (enrollmentId: string, dateStr: string) => void
@@ -100,7 +101,7 @@ interface CellProps {
   pending:      boolean
 }
 
-const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted, isDutyAdmin, onMark, onOpenDialog, onHover, pending }: CellProps) => {
+const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHighlighted, isDutyAdmin, onMark, onOpenDialog, onHover, pending }: CellProps) => {
   const baseClasses = `relative w-6 h-6 mx-auto rounded border transition-all select-none cursor-pointer group flex items-center justify-center text-[10px] ${
     isHighlighted ? 'border-iris-300' : 'border-transparent'
   }`
@@ -108,6 +109,12 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     onOpenDialog(enrollmentId, dateStr, 'note')
+  }
+
+  if (locked) {
+    return (
+      <div className={`${baseClasses} border-gray-100 bg-gray-100/60 text-gray-300 cursor-not-allowed`} title="Дата поза межами перебування в цій групі">—</div>
+    )
   }
 
   if (frozen) {
@@ -374,6 +381,8 @@ export function MergedJournalPage() {
     rows.forEach(r => {
       Object.entries(r.logs).forEach(([d, log]: [string, any]) => {
         if (!totals[d]) return
+        if (r.effective_start && d < r.effective_start) return
+        if (r.effective_end && d > r.effective_end) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') totals[d].present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') totals[d].excused++
         else if (log.status === 'absent_unexcused') totals[d].unexcused++
@@ -389,13 +398,16 @@ export function MergedJournalPage() {
       let excused = 0
       let unexcused = 0
       dates.forEach(d => {
+        if (r.effective_start && d < r.effective_start) return
+        if (r.effective_end && d > r.effective_end) return
         const log = r.logs[d]
         if (!log) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') excused++
         else if (log.status === 'absent_unexcused') unexcused++
       })
-      totals[r.enrollment_id] = { present, excused, unexcused }
+      const rowKey = `${r.enrollment_id}_${r.history_id || 'def'}`
+      totals[rowKey] = { present, excused, unexcused }
     })
     return totals
   }, [dates, rows])
@@ -409,6 +421,8 @@ export function MergedJournalPage() {
       groupRows.forEach(r => {
         Object.entries(r.logs).forEach(([d, log]: [string, any]) => {
           if (!result[key][d]) return
+          if (r.effective_start && d < r.effective_start) return
+          if (r.effective_end && d > r.effective_end) return
           if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') result[key][d].present++
           else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') result[key][d].excused++
           else if (log.status === 'absent_unexcused') result[key][d].unexcused++
@@ -573,13 +587,14 @@ export function MergedJournalPage() {
                     </tr>
                   )}
                   {group.rows.map(row => {
-                    const isRowHovered = hoveredRowId === row.enrollment_id
+                    const rowKey = `${row.enrollment_id}_${row.history_id || 'def'}`
+                    const isRowHovered = hoveredRowId === rowKey
                     const actColor = activityColorMap.get(row.activity_id) ?? ACTIVITY_COLORS[0]
                     const actName  = activities.find(a => a.id === row.activity_id)?.name ?? ''
 
                     return (
-                      <tr key={row.enrollment_id}
-                        onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
+                      <tr key={rowKey}
+                        onMouseEnter={() => setHoveredRowId(rowKey)}
                         onMouseLeave={() => setHoveredRowId(null)}
                         className={`transition-colors ${isRowHovered ? 'bg-iris-100/50' : ''}`}>
 
@@ -588,8 +603,8 @@ export function MergedJournalPage() {
                           <Link to={`/children/${row.child_id}`} className="text-[12px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
                             {row.child_name}
                           </Link>
-                          {groupMode === 'alphabetical' && row.group_name && (
-                            <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                          {(groupMode === 'alphabetical' || row.history_id) && row.group_name && (
+                            <div className="text-[7px] font-bold text-gray-400 uppercase leading-none mt-0.5">{row.group_name}</div>
                           )}
                           {row.status === 'frozen' && (
                             <div className="text-[7px] font-bold text-blue-400 leading-none mt-0.5">❄ Заморожено</div>
@@ -608,9 +623,14 @@ export function MergedJournalPage() {
                           const isColHover = hoveredDate === dateStr
                           const isCross    = isRowHovered && isColHover
                           const isWeekend  = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
+                          const isLocked   = Boolean(
+                            (row.effective_start && dateStr < row.effective_start) ||
+                            (row.effective_end && dateStr > row.effective_end)
+                          )
 
                           let bg = ''
-                          if (isCross)        bg = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
+                          if (isLocked)        bg = 'bg-gray-100/40'
+                          else if (isCross)    bg = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
                           else if (isColHover) bg = isWeekend ? 'bg-amber-100'   : 'bg-iris-100'
                           else if (isWeekend)  bg = 'bg-amber-50/30'
                           else if (isRowHovered) bg = ''
@@ -623,6 +643,7 @@ export function MergedJournalPage() {
                                 dateStr={dateStr}
                                 log={row.logs[dateStr]}
                                 frozen={isFrozen(row.status, row.frozen_from, row.frozen_to, dateStr)}
+                                locked={isLocked}
                                 isHighlighted={isCross}
                                 isDutyAdmin={isDutyAdmin}
                                 onMark={handleQuickMark}
@@ -634,7 +655,7 @@ export function MergedJournalPage() {
                           )
                         })}
                         {(() => {
-                          const t = rowTotals[row.enrollment_id] ?? { present: 0, excused: 0, unexcused: 0 }
+                          const t = rowTotals[rowKey] ?? { present: 0, excused: 0, unexcused: 0 }
                           return (
                             <td className="px-1 py-0.5 text-center border-r border-b border-gray-200 min-w-[45px] transition-colors">
                               <div className="flex flex-col items-center leading-none text-[11px] font-bold">

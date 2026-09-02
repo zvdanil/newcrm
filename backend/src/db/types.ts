@@ -79,6 +79,16 @@ export interface ChildrenTable {
   updated_at: Generated<Date>
 }
 
+export interface ChildGroupHistoryTable {
+  id: Generated<string>
+  child_id: string
+  group_id: string
+  start_date: ColumnType<Date, string, string>
+  end_date: ColumnType<Date | null, string | null, string | null>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 export interface AccountsTable {
   id:              Generated<string>
   name:            string
@@ -630,6 +640,7 @@ export interface Database {
   account_income:             AccountIncomeTable
   account_corrections:        AccountCorrectionsTable
   expense_advance_usages:     ExpenseAdvanceUsagesTable
+  child_group_history:        ChildGroupHistoryTable
 }
 
 export interface EquityParticipantsTable {

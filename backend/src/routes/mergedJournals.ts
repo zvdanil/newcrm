@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { sql } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
-import { toDbDateStr } from '../services/dateUtils.js'
+import { toDbDateStr, castAsDate } from '../services/dateUtils.js'
 
 function toDateStr(d: Date | string): string {
   return toDbDateStr(d)
@@ -223,14 +223,42 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
       .orderBy('c.full_name', 'asc')
       .execute()
 
+    const childIds = Array.from(new Set(enrollments.map(e => e.child_id)))
+    const historyRows = childIds.length > 0
+      ? await db.selectFrom('child_group_history as cgh')
+          .leftJoin('groups as g', 'g.id', 'cgh.group_id')
+          .select([
+            'cgh.id as history_id',
+            'cgh.child_id',
+            'cgh.group_id',
+            'cgh.start_date',
+            'cgh.end_date',
+            'g.name as group_name',
+          ])
+          .where('cgh.child_id', 'in', childIds)
+          .where('cgh.start_date', '<=', castAsDate(to))
+          .where(eb => eb.or([
+            eb('cgh.end_date', 'is', null),
+            eb('cgh.end_date', '>=', castAsDate(from))
+          ]))
+          .orderBy('cgh.start_date', 'asc')
+          .execute()
+      : []
+
+    const historyMap = new Map<string, typeof historyRows>()
+    for (const h of historyRows) {
+      if (!historyMap.has(h.child_id)) historyMap.set(h.child_id, [])
+      historyMap.get(h.child_id)!.push(h)
+    }
+
     const enrollmentIds = enrollments.map(e => e.enrollment_id)
 
     const logs = enrollmentIds.length > 0
       ? await db.selectFrom('attendance_logs')
           .selectAll()
           .where('enrollment_id', 'in', enrollmentIds)
-          .where('date', '>=', new Date(from))
-          .where('date', '<=', new Date(to))
+          .where('date', '>=', castAsDate(from))
+          .where('date', '<=', castAsDate(to))
           .execute()
       : []
 
@@ -244,7 +272,8 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
       logsIndex[log.enrollment_id][toDateStr(log.date as unknown as Date)] = log
     }
 
-    const rows = enrollments.map(e => {
+    const rows = enrollments.flatMap(e => {
+      const childHistories = historyMap.get(e.child_id) ?? []
       const rowLogs = logsIndex[e.enrollment_id] ?? {}
       const maskedLogs = Object.fromEntries(
         Object.entries(rowLogs).map(([d, l]) => {
@@ -259,17 +288,47 @@ export async function mergedJournalsRoutes(app: FastifyInstance) {
           }]
         })
       )
-      return {
-        enrollment_id: e.enrollment_id,
-        child_id:      e.child_id,
-        child_name:    e.child_name,
-        activity_id:   e.activity_id,
-        group_id:      e.group_id,
-        group_name:    e.group_name,
-        status:        e.status,
-        frozen_from:   e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
-        frozen_to:     e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
-        logs:          maskedLogs,
+
+      if (childHistories.length > 0) {
+        return childHistories.map(h => {
+          const hStart = toDateStr(h.start_date as unknown as Date)
+          const hEnd = h.end_date ? toDateStr(h.end_date as unknown as Date) : null
+
+          const effective_start = hStart > from ? hStart : from
+          const effective_end = (hEnd && hEnd < to) ? hEnd : to
+
+          return {
+            enrollment_id: e.enrollment_id,
+            history_id:    h.history_id,
+            child_id:      e.child_id,
+            child_name:    e.child_name,
+            activity_id:   e.activity_id,
+            group_id:      h.group_id,
+            group_name:    h.group_name ?? e.group_name ?? null,
+            effective_start,
+            effective_end,
+            status:        e.status,
+            frozen_from:   e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+            frozen_to:     e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+            logs:          maskedLogs,
+          }
+        })
+      } else {
+        return [{
+          enrollment_id: e.enrollment_id,
+          history_id:    `default_${e.child_id}`,
+          child_id:      e.child_id,
+          child_name:    e.child_name,
+          activity_id:   e.activity_id,
+          group_id:      e.group_id ?? null,
+          group_name:    e.group_name ?? null,
+          effective_start: from,
+          effective_end:   to,
+          status:        e.status,
+          frozen_from:   e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+          frozen_to:     e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+          logs:          maskedLogs,
+        }]
       }
     })
 

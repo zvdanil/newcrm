@@ -492,7 +492,7 @@ export async function journalsRoutes(app: FastifyInstance) {
           .leftJoin('groups as g', 'g.id', 'c.group_id')
           .select([
             'e.id as enrollment_id', 'e.status', 'e.frozen_from', 'e.frozen_to', 'e.note as enrollment_note',
-            'c.id as child_id', 'c.full_name as child_name',
+            'c.id as child_id', 'c.full_name as child_name', 'c.group_id',
             'g.name as group_name'
           ])
           .where('e.activity_id', '=', activity_id)
@@ -536,6 +536,34 @@ export async function journalsRoutes(app: FastifyInstance) {
       ])
 
       if (!activity) return reply.status(404).send({ error: 'NotFound' })
+
+      const childIds = Array.from(new Set(enrollments.map(e => e.child_id)))
+      const historyRows = childIds.length > 0
+        ? await db.selectFrom('child_group_history as cgh')
+            .leftJoin('groups as g', 'g.id', 'cgh.group_id')
+            .select([
+              'cgh.id as history_id',
+              'cgh.child_id',
+              'cgh.group_id',
+              'cgh.start_date',
+              'cgh.end_date',
+              'g.name as group_name',
+            ])
+            .where('cgh.child_id', 'in', childIds)
+            .where('cgh.start_date', '<=', castAsDate(to))
+            .where(eb => eb.or([
+              eb('cgh.end_date', 'is', null),
+              eb('cgh.end_date', '>=', castAsDate(from))
+            ]))
+            .orderBy('cgh.start_date', 'asc')
+            .execute()
+        : []
+
+      const historyMap = new Map<string, typeof historyRows>()
+      for (const h of historyRows) {
+        if (!historyMap.has(h.child_id)) historyMap.set(h.child_id, [])
+        historyMap.get(h.child_id)!.push(h)
+      }
 
       const requestUserId = req.user.sub
       const requestRole   = req.user.role
@@ -582,7 +610,8 @@ export async function journalsRoutes(app: FastifyInstance) {
       return {
         activity: { ...activity, refund_config: refundConfig ?? null },
         dates: generateDates(from, to),
-        rows: enrollments.map((e) => {
+        rows: enrollments.flatMap((e) => {
+          const childHistories = historyMap.get(e.child_id) ?? []
           const rowLogs = logsIndex[e.enrollment_id] ?? {}
           const maskedLogs = Object.fromEntries(
             Object.entries(rowLogs).map(([d, l]) => {
@@ -597,15 +626,45 @@ export async function journalsRoutes(app: FastifyInstance) {
               }]
             })
           )
-          return {
-            enrollment_id: e.enrollment_id,
-            child_id: e.child_id,
-            child_name: e.child_name,
-            group_name: e.group_name,
-            status: e.status,
-            frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
-            frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
-            logs: maskedLogs,
+
+          if (childHistories.length > 0) {
+            return childHistories.map(h => {
+              const hStart = toDateStr(h.start_date as unknown as Date)
+              const hEnd = h.end_date ? toDateStr(h.end_date as unknown as Date) : null
+
+              const effective_start = hStart > from ? hStart : from
+              const effective_end = (hEnd && hEnd < to) ? hEnd : to
+
+              return {
+                enrollment_id: e.enrollment_id,
+                history_id: h.history_id,
+                child_id: e.child_id,
+                child_name: e.child_name,
+                group_id: h.group_id,
+                group_name: h.group_name ?? e.group_name ?? null,
+                effective_start,
+                effective_end,
+                status: e.status,
+                frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+                frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+                logs: maskedLogs,
+              }
+            })
+          } else {
+            return [{
+              enrollment_id: e.enrollment_id,
+              history_id: `default_${e.child_id}`,
+              child_id: e.child_id,
+              child_name: e.child_name,
+              group_id: e.group_id ?? null,
+              group_name: e.group_name ?? null,
+              effective_start: from,
+              effective_end: to,
+              status: e.status,
+              frozen_from: e.frozen_from ? toDateStr(e.frozen_from as unknown as Date) : null,
+              frozen_to:   e.frozen_to   ? toDateStr(e.frozen_to   as unknown as Date) : null,
+              logs: maskedLogs,
+            }]
           }
         }),
         group_logs: groupLogsIndex,

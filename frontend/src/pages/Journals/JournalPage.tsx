@@ -93,6 +93,7 @@ interface CellProps {
   dateStr: string
   log: AttendanceLog | null
   frozen: boolean
+  locked?: boolean
   isHighlightedDate: boolean
   isDutyAdmin: boolean
   onMarkQuick: (enrollmentId: string, dateStr: string) => void
@@ -103,7 +104,7 @@ interface CellProps {
 }
 
 // Memoized to prevent re-renders of the whole grid
-const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlightedDate, isDutyAdmin, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
+const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHighlightedDate, isDutyAdmin, onMarkQuick, onOpenDialog, onHoverDate, compact, row }: CellProps) => {
   const baseClasses = `relative flex items-center justify-center rounded border transition-all select-none cursor-pointer group ${
     compact ? 'h-6 w-6' : 'h-7 px-1.5 min-w-[1.75rem]'
   } ${isHighlightedDate ? 'border-iris-300' : 'border-transparent'}`
@@ -111,6 +112,14 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, isHighlighted
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     onOpenDialog(row, dateStr, 'note')
+  }
+
+  if (locked) {
+    return (
+      <div className={`${baseClasses} border-gray-100 bg-gray-100/60 text-gray-300 cursor-not-allowed`} title="Дата поза межами перебування в цій групі">
+        <span className="text-[10px] text-gray-300">-</span>
+      </div>
+    )
   }
 
   if (frozen) {
@@ -479,6 +488,8 @@ export function JournalPage() {
     rows.forEach(r => {
       Object.entries(r.logs).forEach(([d, log]) => {
         if (!totals[d]) return
+        if (r.effective_start && d < r.effective_start) return
+        if (r.effective_end && d > r.effective_end) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') totals[d].present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') totals[d].excused++
         else if (log.status === 'absent_unexcused') totals[d].unexcused++
@@ -494,13 +505,16 @@ export function JournalPage() {
       let excused = 0
       let unexcused = 0
       dates.forEach(d => {
+        if (r.effective_start && d < r.effective_start) return
+        if (r.effective_end && d > r.effective_end) return
         const log = r.logs[d]
         if (!log) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') excused++
         else if (log.status === 'absent_unexcused') unexcused++
       })
-      totals[r.enrollment_id] = { present, excused, unexcused }
+      const rowKey = `${r.enrollment_id}_${r.history_id || 'def'}`
+      totals[rowKey] = { present, excused, unexcused }
     })
     return totals
   }, [dates, rows])
@@ -689,10 +703,11 @@ export function JournalPage() {
                     </tr>
                   )}
                   {group.rows.map((row) => {
-                    const isRowHovered = hoveredRowId === row.enrollment_id
+                    const rowKey = `${row.enrollment_id}_${row.history_id || 'def'}`
+                    const isRowHovered = hoveredRowId === rowKey
                     return (
-                      <tr key={row.enrollment_id} 
-                        onMouseEnter={() => setHoveredRowId(row.enrollment_id)}
+                      <tr key={rowKey} 
+                        onMouseEnter={() => setHoveredRowId(rowKey)}
                         onMouseLeave={() => setHoveredRowId(null)}
                         className={`transition-colors group ${isRowHovered ? 'bg-iris-100/50' : ''}`}>
                         <td className={`sticky left-0 z-10 px-3 py-1 whitespace-nowrap border-r border-b border-gray-200 shadow-[1px_0_0_0_rgba(0,0,0,0.03)] transition-colors min-w-[180px] ${isRowHovered ? 'bg-iris-100' : 'bg-white'}`}>
@@ -701,8 +716,8 @@ export function JournalPage() {
                               <Link to={`/children/${row.child_id}`} className="text-[11px] font-bold text-gray-800 hover:text-iris-600 truncate block transition-colors leading-tight">
                                 {row.child_name}
                               </Link>
-                              {groupMode === 'alphabetical' && row.group_name && (
-                                <div className="text-[7px] font-bold text-gray-300 uppercase leading-none mt-0.5">{row.group_name}</div>
+                              {(groupMode === 'alphabetical' || row.history_id) && row.group_name && (
+                                <div className="text-[7px] font-bold text-gray-400 uppercase leading-none mt-0.5">{row.group_name}</div>
                               )}
                             </div>
                             {row.status === 'frozen' && (
@@ -716,9 +731,14 @@ export function JournalPage() {
                           const isColHovered = hoveredDate === dateStr
                           const isCrosshair = isRowHovered && isColHovered
                           const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
+                          const isLocked = Boolean(
+                            (row.effective_start && dateStr < row.effective_start) ||
+                            (row.effective_end && dateStr > row.effective_end)
+                          )
                           
                           let bgClass = ''
-                          if (isCrosshair) bgClass = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
+                          if (isLocked) bgClass = 'bg-gray-100/40'
+                          else if (isCrosshair) bgClass = isWeekend ? 'bg-amber-200/60' : 'bg-iris-200/60'
                           else if (isColHovered) bgClass = isWeekend ? 'bg-amber-100' : 'bg-iris-100'
                           else if (isWeekend) bgClass = 'bg-amber-50/30'
 
@@ -730,6 +750,7 @@ export function JournalPage() {
                                 dateStr={dateStr}
                                 log={row.logs[dateStr]}
                                 frozen={isFrozenOn(row, dateStr)}
+                                locked={isLocked}
                                 isHighlightedDate={isCrosshair}
                                 isDutyAdmin={isDutyAdmin}
                                 onMarkQuick={handleMarkQuick}
@@ -741,7 +762,7 @@ export function JournalPage() {
                           )
                         })}
                         {(() => {
-                          const t = rowTotals[row.enrollment_id] ?? { present: 0, excused: 0, unexcused: 0 }
+                          const t = rowTotals[rowKey] ?? { present: 0, excused: 0, unexcused: 0 }
                           return (
                             <td className="px-1 py-0.5 text-center border-r border-b border-gray-200 min-w-[45px] transition-colors">
                               <div className="flex flex-col items-center leading-none text-[11px] font-bold">

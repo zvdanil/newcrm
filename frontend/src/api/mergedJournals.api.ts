@@ -17,16 +17,19 @@ export interface MergedJournalActivity {
 }
 
 export interface MergedJournalRow {
-  enrollment_id: string
-  child_id:      string
-  child_name:    string
-  activity_id:   string
-  group_id:      string | null
-  group_name:    string | null
-  status:        string
-  frozen_from:   string | null
-  frozen_to:     string | null
-  logs:          Record<string, {
+  enrollment_id:   string
+  history_id?:     string | null
+  child_id:        string
+  child_name:      string
+  activity_id:     string
+  group_id:        string | null
+  group_name:      string | null
+  effective_start?: string
+  effective_end?:   string
+  status:          string
+  frozen_from:     string | null
+  frozen_to:       string | null
+  logs:            Record<string, {
     id: string
     status: string
     custom_amount: string | null

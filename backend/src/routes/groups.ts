@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
+import { toDbDateStr, castAsDate } from '../services/dateUtils.js'
 
 export async function groupsRoutes(app: FastifyInstance) {
   // GET /api/groups?include_archived=true
@@ -26,7 +27,7 @@ export async function groupsRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { name, sort_order = 0 } = request.body
       if (!name?.trim()) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'name є обовʼязковим' })
+        return reply.status(400).send({ error: 'BadRequest', message: 'name є обов\'язковим' })
       }
       const group = await db
         .insertInto('groups')
@@ -63,7 +64,7 @@ export async function groupsRoutes(app: FastifyInstance) {
   )
 
   // DELETE /api/groups/:id — archive (soft delete)
-  // Automatically clears group_id for all children in this group
+  // Automatically clears group_id for all children in this group and closes active history
   app.delete<{ Params: { id: string } }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin') },
@@ -71,6 +72,18 @@ export async function groupsRoutes(app: FastifyInstance) {
       const { id } = request.params
 
       const archived = await db.transaction().execute(async (trx) => {
+        const todayStr = toDbDateStr(new Date())
+        const yesterday = new Date(todayStr)
+        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterdayStr = toDbDateStr(yesterday)
+
+        await trx
+          .updateTable('child_group_history')
+          .set({ end_date: yesterdayStr, updated_at: new Date().toISOString() as unknown as Date })
+          .where('group_id', '=', id)
+          .where('end_date', 'is', null)
+          .execute()
+
         await trx
           .updateTable('children')
           .set({ group_id: null })

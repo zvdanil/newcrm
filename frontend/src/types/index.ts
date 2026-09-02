@@ -211,12 +211,16 @@ export interface GroupLessonLog {
 
 export interface JournalRow {
   enrollment_id: string
+  history_id?: string | null
   child_id: string
   child_name: string
   status: 'active' | 'frozen' | 'archived'
   frozen_from: string | null
   frozen_to: string | null
+  group_id?: string | null
   group_name?: string | null
+  effective_start?: string
+  effective_end?: string
   logs: Record<string, AttendanceLog>
 }
 

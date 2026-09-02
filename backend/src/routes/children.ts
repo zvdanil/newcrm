@@ -190,11 +190,25 @@ export async function childrenRoutes(app: FastifyInstance) {
     '/',
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
-      const child = await db
-        .insertInto('children')
-        .values(request.body)
-        .returningAll()
-        .executeTakeFirstOrThrow()
+      const child = await db.transaction().execute(async (trx) => {
+        const created = await trx
+          .insertInto('children')
+          .values(request.body)
+          .returningAll()
+          .executeTakeFirstOrThrow()
+
+        if (request.body.group_id) {
+          const startDate = toDbDateStr(new Date())
+          await trx.insertInto('child_group_history').values({
+            child_id: created.id,
+            group_id: request.body.group_id,
+            start_date: startDate,
+            end_date: null,
+          }).execute()
+        }
+
+        return created
+      })
 
       return reply.status(201).send(child)
     }
@@ -207,7 +221,8 @@ export async function childrenRoutes(app: FastifyInstance) {
       full_name?: string
       birth_date?: string
       family_id?: string
-      group_id?: string
+      group_id?: string | null
+      effective_date?: string
       is_active?: boolean
       note?: string
     }
@@ -215,14 +230,60 @@ export async function childrenRoutes(app: FastifyInstance) {
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
-      const updated = await db
-        .updateTable('children')
-        .set(request.body)
-        .where('id', '=', request.params.id)
-        .returningAll()
+      const { id } = request.params
+      const { effective_date, ...updates } = request.body
+
+      const existingChild = await db.selectFrom('children')
+        .select(['id', 'group_id'])
+        .where('id', '=', id)
         .executeTakeFirst()
 
-      if (!updated) return reply.status(404).send({ error: 'NotFound' })
+      if (!existingChild) return reply.status(404).send({ error: 'NotFound' })
+
+      const updated = await db.transaction().execute(async (trx) => {
+        if (updates.group_id !== undefined && updates.group_id !== existingChild.group_id) {
+          const todayStr = toDbDateStr(new Date())
+          const effectiveStart = effective_date ? toDbDateStr(effective_date) : todayStr
+
+          const currentActive = await trx.selectFrom('child_group_history')
+            .selectAll()
+            .where('child_id', '=', id)
+            .where('end_date', 'is', null)
+            .executeTakeFirst()
+
+          if (currentActive) {
+            const activeStartDate = toDbDateStr(currentActive.start_date as unknown as Date)
+            let closeDate = new Date(effectiveStart)
+            closeDate.setDate(closeDate.getDate() - 1)
+            let closeDateStr = toDbDateStr(closeDate)
+            if (closeDateStr < activeStartDate) {
+              closeDateStr = activeStartDate
+            }
+
+            await trx.updateTable('child_group_history')
+              .set({ end_date: closeDateStr, updated_at: new Date().toISOString() as unknown as Date })
+              .where('id', '=', currentActive.id)
+              .execute()
+          }
+
+          if (updates.group_id) {
+            await trx.insertInto('child_group_history').values({
+              child_id: id,
+              group_id: updates.group_id,
+              start_date: effectiveStart,
+              end_date: null,
+            }).execute()
+          }
+        }
+
+        return trx
+          .updateTable('children')
+          .set(updates)
+          .where('id', '=', id)
+          .returningAll()
+          .executeTakeFirst()
+      })
+
       return updated
     }
   )
