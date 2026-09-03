@@ -95,7 +95,7 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     .selectFrom('attendance_logs')
     .select((eb) => eb.fn.count<string>('id').as('count'))
     .where('enrollment_id', '=', enrollmentId)
-    .where('status', 'in', ['absent_excused', 'absent_excused_30'])
+    .where('status', '=', 'absent_excused')
     .where('date', '>=', castAsDate(billingMonth))
     .where('date', '<', castAsDate(nextMonthStr))
     .executeTakeFirstOrThrow()
@@ -129,31 +129,7 @@ export async function recalcSmartBenefit(enrollmentId: string, billingMonth: str
     benefitL2 = Math.min(absenceCount, config.l2_max_refunds) * parseFloat(config.l2_refund_per_absence)
   }
 
-  // Deduct per-absence refunds already credited for this month so smart benefit doesn't double-refund
-  const perAbsenceSumResult = await db
-    .selectFrom('transactions')
-    .select((eb) => eb.fn.sum<string>('amount').as('sum'))
-    .where('enrollment_id', '=', enrollmentId)
-    .where('type', '=', 'REFUND')
-    .where('is_deleted', '=', false)
-    .where((eb) => eb.or([
-      eb('billing_month', '=', castAsDate(billingMonth)),
-      eb.and([
-        eb('transaction_date', '>=', castAsDate(billingMonth)),
-        eb('transaction_date', '<', castAsDate(nextMonthStr))
-      ])
-    ]))
-    .where((eb) => eb.or([
-      eb(sql`metadata_json->>'source'`, 'is', null),
-      eb(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
-    ]))
-    .executeTakeFirst()
-
-  const perAbsenceSum = Number(perAbsenceSumResult?.sum ?? 0)
-
-  const netBenefitL1 = Math.max(0, benefitL1 - perAbsenceSum)
-  const netBenefitL2 = Math.max(0, benefitL2 - perAbsenceSum)
-  const benefit = Math.round(Math.max(netBenefitL1, netBenefitL2) * 100) / 100
+  const benefit = Math.round(Math.max(benefitL1, benefitL2) * 100) / 100
 
   const existing = await db
     .selectFrom('transactions')
