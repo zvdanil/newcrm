@@ -43,6 +43,7 @@ export function ChildCardPage() {
     full_name: '',
     birth_date: '',
     group_id: '',
+    effective_date: '',
     note: '',
     is_active: true,
     deactivation_date: '',
@@ -68,7 +69,10 @@ export function ChildCardPage() {
       setEditing(false)
       setSaveError(null)
     },
-    onError: () => setSaveError('Помилка при збереженні. Перевірте дані.'),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Помилка при збереженні. Перевірте дані.'
+      setSaveError(msg)
+    },
   })
 
   if (isLoading) return <div className="py-12 text-center text-sm text-gray-400">Завантаження...</div>
@@ -80,6 +84,7 @@ export function ChildCardPage() {
       full_name:  child.full_name,
       birth_date: toDateInputValue(child.birth_date),
       group_id:   child.group_id  ?? '',
+      effective_date: todayStr(),
       note:       child.note      ?? '',
       is_active:  child.is_active,
       deactivation_date: toDateInputValue(child.deactivation_date ?? null) || todayStr(),
@@ -96,10 +101,17 @@ export function ChildCardPage() {
       setSaveError('Будь ласка, вкажіть дату деактивації')
       return
     }
+    const isGroupChanged = form.group_id !== (child.group_id ?? '')
+    if (isGroupChanged && !form.effective_date) {
+      setSaveError('Будь ласка, вкажіть дату зміни групи')
+      return
+    }
+
     updateMutation.mutate({
       full_name:  form.full_name.trim(),
       birth_date: form.birth_date || null,
       group_id:   form.group_id  || null,
+      effective_date: isGroupChanged ? form.effective_date : undefined,
       note:       form.note      || null,
       is_active:  form.is_active,
       deactivation_date: !form.is_active ? form.deactivation_date : null,
@@ -195,6 +207,18 @@ export function ChildCardPage() {
                 ))}
               </select>
             </Field>
+
+            {form.group_id !== (child.group_id ?? '') && (
+              <Field label="Дата зміни групи (з якого числа вступає в силу) *">
+                <input
+                  type="date"
+                  value={form.effective_date}
+                  onChange={(e) => setForm({ ...form, effective_date: e.target.value })}
+                  className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">З цього числа дитина буде перебувати у новій групі (для історичного обліку).</p>
+              </Field>
+            )}
 
             <Field label="Нотатка">
               <textarea

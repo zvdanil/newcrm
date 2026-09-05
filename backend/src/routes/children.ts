@@ -244,8 +244,12 @@ export async function childrenRoutes(app: FastifyInstance) {
       let deactDateToApply: string | null = null
       const payloadToSet: Record<string, unknown> = { ...updates }
 
+      if (payloadToSet.birth_date === '') {
+        payloadToSet.birth_date = null
+      }
+
       if (updates.is_active === false) {
-        deactDateToApply = deactivation_date ? toDbDateStr(deactivation_date) : toDbDateStr(new Date())
+        deactDateToApply = (deactivation_date && deactivation_date.trim()) ? toDbDateStr(deactivation_date) : toDbDateStr(new Date())
         payloadToSet.deactivation_date = deactDateToApply
       } else if (updates.is_active === true) {
         payloadToSet.deactivation_date = null
@@ -254,7 +258,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       const updated = await db.transaction().execute(async (trx) => {
         if (updates.group_id !== undefined && updates.group_id !== existingChild.group_id) {
           const todayStr = toDbDateStr(new Date())
-          const effectiveStart = effective_date ? toDbDateStr(effective_date) : todayStr
+          const effectiveStart = (effective_date && effective_date.trim()) ? toDbDateStr(effective_date) : todayStr
 
           const currentActive = await trx.selectFrom('child_group_history')
             .selectAll()
