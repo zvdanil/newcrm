@@ -260,45 +260,31 @@ export async function childrenRoutes(app: FastifyInstance) {
           const todayStr = toDbDateStr(new Date())
           const effectiveStart = (effective_date && effective_date.trim()) ? toDbDateStr(effective_date) : todayStr
 
-          const currentActive = await trx.selectFrom('child_group_history')
+          let closeDate = new Date(effectiveStart)
+          closeDate.setDate(closeDate.getDate() - 1)
+          const prevCloseDateStr = toDbDateStr(closeDate)
+
+          const history = await trx.selectFrom('child_group_history')
             .selectAll()
             .where('child_id', '=', id)
-            .where('end_date', 'is', null)
-            .executeTakeFirst()
+            .orderBy('start_date', 'asc')
+            .execute()
 
-          if (currentActive) {
-            const activeStartDate = toDbDateStr(currentActive.start_date as unknown as Date)
-            let closeDate = new Date(effectiveStart)
-            closeDate.setDate(closeDate.getDate() - 1)
-            let closeDateStr = toDbDateStr(closeDate)
+          for (const h of history) {
+            const hStart = toDbDateStr(h.start_date as unknown as Date)
+            const hEnd = h.end_date ? toDbDateStr(h.end_date as unknown as Date) : null
 
-            if (closeDateStr < activeStartDate) {
-              if (updates.group_id) {
-                await trx.updateTable('child_group_history')
-                  .set({ group_id: updates.group_id, start_date: effectiveStart, updated_at: new Date().toISOString() as unknown as Date })
-                  .where('id', '=', currentActive.id)
-                  .execute()
-              } else {
-                await trx.deleteFrom('child_group_history')
-                  .where('id', '=', currentActive.id)
-                  .execute()
-              }
-            } else {
+            if (hStart >= effectiveStart) {
+              await trx.deleteFrom('child_group_history').where('id', '=', h.id).execute()
+            } else if (!hEnd || hEnd >= effectiveStart) {
               await trx.updateTable('child_group_history')
-                .set({ end_date: closeDateStr, updated_at: new Date().toISOString() as unknown as Date })
-                .where('id', '=', currentActive.id)
+                .set({ end_date: prevCloseDateStr, updated_at: new Date().toISOString() as unknown as Date })
+                .where('id', '=', h.id)
                 .execute()
-
-              if (updates.group_id) {
-                await trx.insertInto('child_group_history').values({
-                  child_id: id,
-                  group_id: updates.group_id,
-                  start_date: effectiveStart,
-                  end_date: null,
-                }).execute()
-              }
             }
-          } else if (updates.group_id) {
+          }
+
+          if (updates.group_id) {
             await trx.insertInto('child_group_history').values({
               child_id: id,
               group_id: updates.group_id,
