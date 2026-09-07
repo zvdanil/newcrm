@@ -41,7 +41,7 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
     .where('cit.child_id', '=', childId)
     .where('cit.activity_id', '=', activityId)
     .where('cit.valid_from', '<=', castAsDate(date))
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', castAsDate(date))]))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(date))]))
     .orderBy('cit.valid_from', 'desc')
     .executeTakeFirst()
 }
@@ -261,7 +261,7 @@ export async function runBilling(billingMonthStr: string, triggeredBy: string | 
       .where('act.tariff_type', '!=', 'monthly')
       .where('e.status', 'in', ['active', 'frozen'])
       .where('cit.valid_from', '<=', castAsDate(billingMonthStr))
-      .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', castAsDate(billingMonthStr))]))
+      .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(billingMonthStr))]))
       .execute()
 
     for (const e of individualMonthly) {

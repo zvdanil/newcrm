@@ -223,7 +223,7 @@ export async function runSmartAccruals(
     .where('act.tariff_type', '!=', 'smart')
     .where('e.status', '=', 'active')
     .where('cit.valid_from', '<=', castAsDate(billingMonthStr))
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>=', castAsDate(billingMonthStr))]))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(billingMonthStr))]))
     .execute()
 
   for (const e of individualSmart) {
