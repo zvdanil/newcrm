@@ -923,11 +923,16 @@ export async function triggerRetroAccruals(staffId: string, activityId: string |
     await recalcStaffAccruals(activityId!, dateStr)
   }
 
-  // 3. Если это фиксированный оклад (activityId === null или специфика rate_type),
-  // нужно также проверить 1-е числа месяцев.
-  // Но recalcStaffAccruals уже вызывается внутри цикла выше.
-  // Если ставка глобальная (activityId === null), логика сложнее, 
-  // но в текущей архитектуре авто-ставки всегда привязаны к активности.
+  // 3. Очищаем устаревшие записи retro_correction, чтобы избежать двойного учёта с пересчитанными ACCRUAL
+  await db.updateTable('salary_transactions')
+    .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .where('staff_id', '=', staffId)
+    .where('type', '=', 'CORRECTION')
+    .where('is_deleted', '=', false)
+    .where(sql`metadata_json->>'source'`, '=', 'retro_correction')
+    .where('transaction_date', '>=', castAsDate(fromStr))
+    .where('transaction_date', '<=', castAsDate(toStr))
+    .execute()
 }
 
 /**

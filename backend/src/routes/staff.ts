@@ -350,7 +350,7 @@ export async function staffRoutes(app: FastifyInstance) {
       const todayObj    = new Date(today)
       todayObj.setHours(0, 0, 0, 0)
 
-      if (overlappingRates.length > 0 && fromDateObj < todayObj) {
+      if (rate_category !== 'auto' && overlappingRates.length > 0 && fromDateObj < todayObj) {
         for (const oldRate of overlappingRates) {
           await recalcRetroAccruals(
             req.params.id,
