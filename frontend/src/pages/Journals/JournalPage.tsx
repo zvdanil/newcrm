@@ -293,8 +293,8 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
         {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума спец. тарифу (грн)</label>
-            <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
-              placeholder="0.00"
+            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus
+              placeholder="150 або -150 (компенсація)"
               className="w-full rounded-xl border-gray-200 text-sm font-medium shadow-sm focus:border-iris-500 focus:ring-iris-500" />
           </div>
         )}

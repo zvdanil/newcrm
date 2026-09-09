@@ -132,6 +132,103 @@ async function reverseRefund(enrollmentId: string, accountId: string, childId: s
 }
 
 /**
+ * Creates a REFUND transaction for a special mark with custom_amount < 0 ("Спец компенсація").
+ */
+async function triggerSpecRefund(
+  enrollmentId: string,
+  childId: string,
+  accountId: string,
+  activityId: string,
+  date: string,
+  customAmount: number,
+  createdBy: string | null,
+): Promise<string | null> {
+  const absAmount = Math.abs(customAmount)
+  if (absAmount <= 0) return null
+
+  const existingTxs = await db
+    .selectFrom('transactions')
+    .select(['id', 'amount'])
+    .where('enrollment_id', '=', enrollmentId)
+    .where('type', '=', 'REFUND')
+    .where('transaction_date', '=', castAsDate(date))
+    .where('is_deleted', '=', false)
+    .execute()
+
+  if (existingTxs.length > 0) {
+    const matching = existingTxs.find(tx => Math.abs(parseFloat(tx.amount as string) - absAmount) < 0.01)
+    if (matching) {
+      const duplicates = existingTxs.filter(tx => tx.id !== matching.id)
+      for (const dup of duplicates) {
+        await db.updateTable('transactions')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: createdBy })
+          .where('id', '=', dup.id)
+          .execute()
+      }
+      if (duplicates.length > 0) {
+        await recalcBalance(childId, accountId)
+      }
+      return matching.id
+    }
+    for (const tx of existingTxs) {
+      await db.updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: createdBy })
+        .where('id', '=', tx.id)
+        .execute()
+    }
+  }
+
+  const billingMonth = date.slice(0, 7) + '-01'
+  return createTransaction({
+    type: 'REFUND',
+    child_id: childId,
+    account_id: accountId,
+    activity_id: activityId,
+    enrollment_id: enrollmentId,
+    amount: absAmount,
+    transaction_date: date,
+    billing_month: billingMonth,
+    note: 'Спец компенсація',
+    metadata_json: { spec_compensation: true, custom_amount: customAmount },
+    created_by: createdBy,
+  })
+}
+
+/**
+ * Soft-deletes an existing Spec REFUND transaction for a given enrollment+date.
+ */
+async function reverseSpecRefund(
+  enrollmentId: string,
+  accountId: string,
+  childId: string,
+  date: string,
+  deletedBy: string | null
+): Promise<void> {
+  const existing = await db
+    .selectFrom('transactions')
+    .select(['id', 'metadata_json'])
+    .where('enrollment_id', '=', enrollmentId)
+    .where('type', '=', 'REFUND')
+    .where('transaction_date', '=', castAsDate(date))
+    .where('is_deleted', '=', false)
+    .execute()
+
+  if (existing.length === 0) return
+
+  for (const tx of existing) {
+    const meta = tx.metadata_json as any
+    if (meta?.spec_compensation) {
+      await db.updateTable('transactions')
+        .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: deletedBy })
+        .where('id', '=', tx.id)
+        .execute()
+    }
+  }
+
+  await recalcBalance(childId, accountId)
+}
+
+/**
  * Создаёт ACCRUAL для одного занятия (per_lesson активность).
  * Вызывается при отметке present / special.
  * custom_amount — сумма из ячейки журнала (спецтариф), иначе берётся текущий тариф.
@@ -148,7 +245,8 @@ async function triggerPerLessonAccrual(
 ): Promise<string | null> {
   let amount: number
 
-  if (customAmount !== null && customAmount > 0) {
+  if (customAmount !== null) {
+    if (customAmount <= 0) return null
     amount = customAmount
   } else if (overridePrice !== null) {
     // Individual tariff applies even when price = 0 (free lesson)
@@ -375,6 +473,26 @@ export async function syncAttendanceFinancials(params: {
   const amountChanged = oldAmt !== newAmt
 
   const linked = await db.selectFrom('linked_activities').select('child_activity_id').where('parent_activity_id', '=', activityId).execute()
+
+  // Handle Spec Compensation Refunds (custom_amount < 0) for all tariff types
+  const wasSpecNegative = oldStatus === 'special' && oldAmt !== null && oldAmt < 0
+  const isNowSpecNegative = newStatus === 'special' && newAmt !== null && newAmt < 0
+
+  if (wasSpecNegative && (!isNowSpecNegative || amountChanged)) {
+    await reverseSpecRefund(enrollmentId, accountId, childId, date, userId)
+    for (const { child_activity_id } of linked) {
+      const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+      if (le) await reverseSpecRefund(le.id, le.account_id, childId, date, userId)
+    }
+  }
+
+  if (isNowSpecNegative && (!wasSpecNegative || amountChanged)) {
+    await triggerSpecRefund(enrollmentId, childId, accountId, activityId, date, newAmt!, userId)
+    for (const { child_activity_id } of linked) {
+      const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+      if (le) await triggerSpecRefund(le.id, childId, le.account_id, child_activity_id, date, newAmt!, userId)
+    }
+  }
 
   if (effectiveTariffType === 'per_lesson') {
     if (wasChargeable && !isNowChargeable) {

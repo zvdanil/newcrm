@@ -90,7 +90,14 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .where('al.activity_id', '=', rate.activity_id!)
     .where('al.date', '>=', castAsDate(billingStart))
     .where('al.date', '<', castAsDate(billingEnd))
-    .where('al.status', 'in', ['present', 'special', 'separate_billing'])
+    .where((eb) => eb.or([
+      eb('al.status', '=', 'present'),
+      eb('al.status', '=', 'separate_billing'),
+      eb.and([
+        eb('al.status', '=', 'special'),
+        sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
+      ]),
+    ]))
     .execute()
 
   // Group by child and date to ensure we count distinct visits (days attended)
@@ -509,7 +516,13 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select((eb) => eb.fn.countAll<number>().as('cnt'))
     .where('activity_id', '=', activityId)
     .where('date', '=', castAsDate(date))
-    .where('status', 'in', ['present', 'special'])
+    .where((eb) => eb.or([
+      eb('status', '=', 'present'),
+      eb.and([
+        eb('status', '=', 'special'),
+        sql<boolean>`(${eb.ref('custom_amount')} IS NULL OR ${eb.ref('custom_amount')}::numeric >= 0)`,
+      ]),
+    ]))
     .where((eb) => eb.or([
       eb('is_individual_class', 'is', null),
       eb('is_individual_class', '=', false),
@@ -524,7 +537,14 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     .select(['c.full_name'])
     .where('al.activity_id', '=', activityId)
     .where('al.date', '=', castAsDate(date))
-    .where('al.status', 'in', ['present', 'special', 'separate_billing'])
+    .where((eb) => eb.or([
+      eb('al.status', '=', 'present'),
+      eb('al.status', '=', 'separate_billing'),
+      eb.and([
+        eb('al.status', '=', 'special'),
+        sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
+      ]),
+    ]))
     .where('al.is_individual_class', '=', true)
     .execute()
 
