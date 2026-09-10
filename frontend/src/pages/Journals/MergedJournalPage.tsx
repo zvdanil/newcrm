@@ -318,7 +318,11 @@ export function MergedJournalPage() {
     enabled:  !!id,
   })
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['merged-journal', id, from, to] })
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['merged-journal', id, from, to] })
+    qc.invalidateQueries({ queryKey: ['ledger'] })
+    qc.invalidateQueries({ queryKey: ['child-balances'] })
+  }
 
   const markMutation = useMutation({
     mutationFn: async (p: any) => {

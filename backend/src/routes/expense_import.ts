@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { requireRole } from '../plugins/authenticate.js'
+import { toDbDateStr } from '../services/dateUtils.js'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ export interface ExpenseBankRow {
 }
 
 export interface ExpensePreviewRow extends ExpenseBankRow {
-  status:               'matched' | 'unmatched' | 'skip' | 'duplicate'
+  status:               'matched' | 'unmatched' | 'skip' | 'duplicate' | 'possible_salary_duplicate'
   match_method:         'edrpou_keyword' | 'iban_keyword' | 'edrpou' | 'iban' | 'keyword' | null
   matched_rule_id:      string | null
   matched_category_id:  string | null
@@ -25,6 +26,9 @@ export interface ExpensePreviewRow extends ExpenseBankRow {
   bank_ref:             string
   is_duplicate:         boolean
   duplicate_expense_id: string | null
+  matched_salary_id?:   string | null
+  matched_staff_name?:  string | null
+  matched_salary_date?: string | null
 }
 
 interface ApplyExpenseRow {
@@ -45,6 +49,8 @@ interface ApplyExpenseRow {
   rule_iban?:        string | null
   rule_keyword_pattern?: string | null
   is_skip_rule?:     boolean
+  action?:           'import' | 'skip' | 'link_salary'
+  salary_tx_id?:     string | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -297,6 +303,19 @@ export async function expenseImportRoutes(app: FastifyInstance) {
         .where('is_deleted', '=', false)
         .execute()
 
+      // Load salary transactions for cross-checking
+      const existingSalaries = await db
+        .selectFrom('salary_transactions as st')
+        .innerJoin('staff as s', 's.id', 'st.staff_id')
+        .select([
+          'st.id', 'st.gross_amount', 'st.transaction_date', 'st.metadata_json',
+          's.full_name as staff_name'
+        ])
+        .where('st.account_id', '=', account_id)
+        .where('st.type', '=', 'PAYMENT')
+        .where('st.is_deleted', '=', false)
+        .execute()
+
       const bankRefSet = new Map<string, string>()
       for (const e of existingRefs) {
         if (e.note && e.note.startsWith('bank_ref:')) {
@@ -347,6 +366,33 @@ export async function expenseImportRoutes(app: FastifyInstance) {
             matched_category_name: null,
             is_duplicate: true,
             duplicate_expense_id: dupByCombo.id,
+          })
+          continue
+        }
+
+        // Check duplicate by salary_transactions match (date +- 3 days, amount match, unlinked)
+        const salaryMatch = existingSalaries.find(st => {
+          const meta = (st.metadata_json as Record<string, unknown> | null) ?? {}
+          if (meta.bank_ref || meta.linked_expense_id) return false
+          const sDate = toDbDateStr(st.transaction_date)
+          const daysDiff = Math.abs((new Date(accrualDate).getTime() - new Date(sDate).getTime()) / (1000 * 3600 * 24))
+          const sAmount = parseFloat(String(st.gross_amount))
+          return daysDiff <= 3 && Math.abs(sAmount - row.amount) < 0.01
+        })
+        if (salaryMatch) {
+          previewRows.push({
+            ...row,
+            bank_ref,
+            status: 'possible_salary_duplicate',
+            match_method: null,
+            matched_rule_id: null,
+            matched_category_id: null,
+            matched_category_name: null,
+            is_duplicate: false,
+            duplicate_expense_id: null,
+            matched_salary_id: salaryMatch.id,
+            matched_staff_name: salaryMatch.staff_name,
+            matched_salary_date: toDbDateStr(salaryMatch.transaction_date),
           })
           continue
         }
@@ -437,6 +483,33 @@ export async function expenseImportRoutes(app: FastifyInstance) {
 
       for (const row of rows) {
         try {
+          if (row.action === 'skip') {
+            continue
+          }
+
+          if (row.action === 'link_salary' && row.salary_tx_id) {
+            const st = await db.selectFrom('salary_transactions')
+              .select(['id', 'metadata_json'])
+              .where('id', '=', row.salary_tx_id)
+              .executeTakeFirst()
+
+            if (st) {
+              const existingMeta = (st.metadata_json as Record<string, unknown> | null) ?? {}
+              await db.updateTable('salary_transactions')
+                .set({
+                  metadata_json: {
+                    ...existingMeta,
+                    bank_ref: row.bank_ref,
+                    bank_imported_at: new Date().toISOString(),
+                  }
+                })
+                .where('id', '=', row.salary_tx_id)
+                .execute()
+            }
+            imported.push(row.row_index)
+            continue
+          }
+
           // Create instant expense
           await db
             .insertInto('expenses')

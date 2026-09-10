@@ -422,7 +422,11 @@ export function JournalPage() {
     enabled: !!activityId,
   })
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['journal', activityId, from, to] })
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['journal', activityId, from, to] })
+    queryClient.invalidateQueries({ queryKey: ['ledger'] })
+    queryClient.invalidateQueries({ queryKey: ['child-balances'] })
+  }
 
   const markMutation = useMutation({ mutationFn: attendanceApi.mark, onSuccess: invalidate })
   const updateMutation = useMutation({ mutationFn: ({ id, payload }: any) => attendanceApi.update(id, payload), onSuccess: invalidate })

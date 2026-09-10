@@ -13,7 +13,7 @@ export interface ExpenseBankRow {
 }
 
 export interface ExpensePreviewRow extends ExpenseBankRow {
-  status:                'matched' | 'unmatched' | 'skip' | 'duplicate'
+  status:                'matched' | 'unmatched' | 'skip' | 'duplicate' | 'possible_salary_duplicate'
   match_method:          'edrpou_keyword' | 'iban_keyword' | 'edrpou' | 'iban' | 'keyword' | null
   matched_rule_id:       string | null
   matched_category_id:   string | null
@@ -21,6 +21,9 @@ export interface ExpensePreviewRow extends ExpenseBankRow {
   bank_ref:              string
   is_duplicate:          boolean
   duplicate_expense_id:  string | null
+  matched_salary_id?:    string | null
+  matched_staff_name?:   string | null
+  matched_salary_date?:  string | null
 }
 
 export interface ApplyExpenseRow {
@@ -42,6 +45,8 @@ export interface ApplyExpenseRow {
   rule_iban?:             string | null
   rule_keyword_pattern?:  string | null
   is_skip_rule?:          boolean
+  action?:                'import' | 'skip' | 'link_salary'
+  salary_tx_id?:          string | null
 }
 
 export interface ExpenseImportRule {

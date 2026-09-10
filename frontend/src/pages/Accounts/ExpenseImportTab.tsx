@@ -472,12 +472,13 @@ function TemplateEditorView({
 
 function StatusBadge({ status }: { status: ExpensePreviewRow['status'] }) {
   const map: Record<ExpensePreviewRow['status'], { label: string; cls: string }> = {
-    matched:   { label: 'Класифіковано',  cls: 'bg-green-100 text-green-800' },
-    unmatched: { label: 'Не розпізнано',  cls: 'bg-gray-100 text-gray-600' },
-    skip:      { label: 'Пропустити',     cls: 'bg-blue-100 text-blue-700' },
-    duplicate: { label: 'Дублікат',       cls: 'bg-amber-100 text-amber-800' },
+    matched:                   { label: 'Класифіковано',      cls: 'bg-green-100 text-green-800' },
+    possible_salary_duplicate: { label: 'Можливий дубль ЗП', cls: 'bg-yellow-100 text-yellow-800 border border-yellow-300 font-semibold' },
+    unmatched:                 { label: 'Не розпізнано',      cls: 'bg-gray-100 text-gray-600' },
+    skip:                      { label: 'Пропустити',         cls: 'bg-blue-100 text-blue-700' },
+    duplicate:                 { label: 'Дублікат',           cls: 'bg-amber-100 text-amber-800' },
   }
-  const { label, cls } = map[status]
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600' }
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
 }
 
@@ -732,6 +733,7 @@ export function ExpenseImportTab({ accountId }: Props) {
   const [previewRows, setPreviewRows] = useState<ExpensePreviewRow[] | null>(null)
   const [checked, setChecked]         = useState<Set<number>>(new Set())
   const [overrides, setOverrides]     = useState<Map<number, ClassifyState>>(new Map())
+  const [salaryActions, setSalaryActions] = useState<Map<number, 'link_salary' | 'import' | 'skip'>>(new Map())
   const [classifyRow, setClassifyRow] = useState<ExpensePreviewRow | null>(null)
   const [result, setResult]           = useState<{ imported: number; errors: { row_index: number; message: string }[] } | null>(null)
   const [scanRows, setScanRows]       = useState<{ rowIdx: number; headers: string[] }[] | null>(null)
@@ -757,8 +759,17 @@ export function ExpenseImportTab({ accountId }: Props) {
       const rows = resp.rows
       setPreviewRows(rows)
       const defaultChecked = new Set<number>()
-      for (const r of rows) if (r.status === 'matched') defaultChecked.add(r.row_index)
+      const defaultSalaryActions = new Map<number, 'link_salary' | 'import' | 'skip'>()
+      for (const r of rows) {
+        if (r.status === 'matched' || r.status === 'possible_salary_duplicate') {
+          defaultChecked.add(r.row_index)
+        }
+        if (r.status === 'possible_salary_duplicate') {
+          defaultSalaryActions.set(r.row_index, 'link_salary')
+        }
+      }
       setChecked(defaultChecked)
+      setSalaryActions(defaultSalaryActions)
       setOverrides(new Map())
       setResult(null)
     },
@@ -830,6 +841,23 @@ export function ExpenseImportTab({ accountId }: Props) {
     const applyRows: ApplyExpenseRow[] = []
     for (const row of previewRows) {
       if (!checked.has(row.row_index)) continue
+
+      if (row.status === 'possible_salary_duplicate') {
+        const salaryAct = salaryActions.get(row.row_index) ?? 'link_salary'
+        if (salaryAct === 'skip') continue
+        if (salaryAct === 'link_salary') {
+          applyRows.push({
+            row_index: row.row_index, date: row.date, amount: row.amount,
+            counterparty_name: row.counterparty_name, edrpou: row.edrpou, iban: row.iban,
+            description: row.description, doc_number: row.doc_number, bank_reference: row.bank_reference,
+            bank_ref: row.bank_ref, category_id: null,
+            action: 'link_salary',
+            salary_tx_id: row.matched_salary_id,
+          })
+          continue
+        }
+      }
+
       const eff = getEffective(row)
       if (eff.isSkip) continue
       applyRows.push({
@@ -843,6 +871,7 @@ export function ExpenseImportTab({ accountId }: Props) {
         rule_iban:            eff.ruleIban || null,
         rule_keyword_pattern: eff.ruleKeywords || null,
         is_skip_rule: false,
+        action: 'import',
       })
     }
     if (applyRows.length === 0) return
@@ -1029,11 +1058,11 @@ export function ExpenseImportTab({ accountId }: Props) {
         {previewRows && (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-3 text-xs">
-              {(['matched', 'unmatched', 'skip', 'duplicate'] as const).map(s => {
+              {(['matched', 'possible_salary_duplicate', 'unmatched', 'skip', 'duplicate'] as const).map(s => {
                 const count = previewRows.filter(r => r.status === s).length
                 if (count === 0) return null
-                const labels = { matched: 'Класифіковано', unmatched: 'Не розпізнано', skip: 'Пропустити', duplicate: 'Дублікати' }
-                const colors = { matched: 'text-green-700', unmatched: 'text-gray-600', skip: 'text-blue-600', duplicate: 'text-amber-700' }
+                const labels = { matched: 'Класифіковано', possible_salary_duplicate: 'Можливі дублі ЗП', unmatched: 'Не розпізнано', skip: 'Пропустити', duplicate: 'Дублікати' }
+                const colors = { matched: 'text-green-700', possible_salary_duplicate: 'text-yellow-700 font-semibold', unmatched: 'text-gray-600', skip: 'text-blue-600', duplicate: 'text-amber-700' }
                 return <span key={s} className={colors[s]}>{labels[s]}: <b>{count}</b></span>
               })}
             </div>
@@ -1051,7 +1080,7 @@ export function ExpenseImportTab({ accountId }: Props) {
                       <th className="px-3 py-2 text-right text-gray-500 font-medium">Сума</th>
                       <th className="px-3 py-2 text-left text-gray-500 font-medium">Контрагент / Призначення</th>
                       <th className="px-3 py-2 text-left text-gray-500 font-medium">Статус</th>
-                      <th className="px-3 py-2 text-left text-gray-500 font-medium">Категорія</th>
+                      <th className="px-3 py-2 text-left text-gray-500 font-medium">Дія / Категорія</th>
                       <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
@@ -1059,11 +1088,12 @@ export function ExpenseImportTab({ accountId }: Props) {
                     {previewRows.map(row => {
                       const eff = getEffective(row)
                       const isDuplicate = row.status === 'duplicate'
+                      const isSalaryDup = row.status === 'possible_salary_duplicate'
                       const hasOverride = overrides.has(row.row_index)
                       const displayStatus = hasOverride ? (eff.isSkip ? 'skip' : 'matched') : row.status
 
                       return (
-                        <tr key={row.row_index} className={`${isDuplicate ? 'opacity-40' : 'hover:bg-gray-50'} transition-colors`}>
+                        <tr key={row.row_index} className={`${isDuplicate ? 'opacity-40' : isSalaryDup ? 'bg-yellow-50/50 hover:bg-yellow-50' : 'hover:bg-gray-50'} transition-colors`}>
                           <td className="px-3 py-2">
                             <input type="checkbox" checked={checked.has(row.row_index)} disabled={isDuplicate}
                               onChange={e => {
@@ -1083,29 +1113,47 @@ export function ExpenseImportTab({ accountId }: Props) {
                             {row.description && (
                               <div className="truncate text-gray-400 mt-0.5" title={row.description}>{row.description}</div>
                             )}
+                            {isSalaryDup && (
+                              <div className="text-[11px] text-yellow-800 bg-yellow-100/80 border border-yellow-300 rounded px-2 py-0.5 mt-1">
+                                💡 Знайдено виплату ЗП: <b>{row.matched_staff_name}</b> ({row.matched_salary_date})
+                              </div>
+                            )}
                           </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             <StatusBadge status={displayStatus} />
                           </td>
-                          <td className="px-3 py-2 text-gray-600 max-w-[140px]">
-                            {eff.isSkip
-                              ? <span className="text-blue-500">пропустити</span>
-                              : eff.categoryId
-                                ? <span className="truncate block">
-                                    {hasOverride
-                                      ? (() => {
-                                          const c = categories.find(c => c.id === eff.categoryId)
-                                          const p = c ? categories.find(p => p.id === c.parent_id) : null
-                                          return p ? `${p.name} → ${c?.name}` : c?.name ?? '—'
-                                        })()
-                                      : row.matched_category_name ?? '—'
-                                    }
-                                  </span>
-                                : <span className="text-gray-400">—</span>
-                            }
+                          <td className="px-3 py-2 text-gray-600 max-w-[200px]">
+                            {isSalaryDup ? (
+                              <select
+                                value={salaryActions.get(row.row_index) ?? 'link_salary'}
+                                onChange={e => {
+                                  const act = e.target.value as 'link_salary' | 'import' | 'skip'
+                                  setSalaryActions(prev => new Map(prev).set(row.row_index, act))
+                                }}
+                                className="text-xs border border-yellow-300 rounded px-2 py-1 bg-white text-yellow-900 font-medium focus:border-yellow-500">
+                                <option value="link_salary">🔗 Связать с ЗП (без дубля)</option>
+                                <option value="import">➕ Импортировать как отдельный расход</option>
+                                <option value="skip">⏭ Пропустить</option>
+                              </select>
+                            ) : eff.isSkip ? (
+                              <span className="text-blue-500">пропустити</span>
+                            ) : eff.categoryId ? (
+                              <span className="truncate block">
+                                {hasOverride
+                                  ? (() => {
+                                      const c = categories.find(c => c.id === eff.categoryId)
+                                      const p = c ? categories.find(p => p.id === c.parent_id) : null
+                                      return p ? `${p.name} → ${c?.name}` : c?.name ?? '—'
+                                    })()
+                                  : row.matched_category_name ?? '—'
+                                }
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
-                            {!isDuplicate && (
+                            {!isDuplicate && !isSalaryDup && (
                               <button onClick={() => setClassifyRow(row)}
                                 className="text-xs text-iris-600 hover:text-iris-800 whitespace-nowrap transition-colors">
                                 {row.status === 'unmatched' ? 'Класифікувати' : 'Змінити'}

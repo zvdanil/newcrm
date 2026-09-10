@@ -365,6 +365,59 @@ export async function salaryRoutes(app: FastifyInstance) {
     }
   )
 
+  // GET /api/staff/:id/salary/check-duplicate-expense
+  app.get<{
+    Params: { id: string }
+    Querystring: { account_id?: string; amount?: string; transaction_date?: string }
+  }>(
+    '/staff/:id/salary/check-duplicate-expense',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const { account_id, amount, transaction_date } = req.query
+      if (!account_id || !amount) return { matches: [] }
+      const numAmount = parseFloat(amount)
+      if (isNaN(numAmount)) return { matches: [] }
+      const txDate = transaction_date ?? new Date().toISOString().slice(0, 10)
+
+      const expenses = await db.selectFrom('expenses as e')
+        .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
+        .select(['e.id', 'e.amount', 'e.accrual_date', 'e.payment_date', 'e.note', 'c.name as category_name'])
+        .where('e.account_id', '=', account_id)
+        .where('e.is_deleted', '=', false)
+        .execute()
+
+      const linkedSalaries = await db.selectFrom('salary_transactions')
+        .select('metadata_json')
+        .where('is_deleted', '=', false)
+        .execute()
+
+      const linkedExpenseIds = new Set<string>()
+      for (const s of linkedSalaries) {
+        const meta = s.metadata_json as Record<string, any> | null
+        if (meta?.linked_expense_id) {
+          linkedExpenseIds.add(String(meta.linked_expense_id))
+        }
+      }
+
+      const matches = expenses.filter(e => {
+        if (linkedExpenseIds.has(e.id)) return false
+        const eAmt = parseFloat(String(e.amount))
+        if (Math.abs(eAmt - numAmount) >= 0.01) return false
+        const eDateStr = e.payment_date ? toDbDateStr(e.payment_date) : toDbDateStr(e.accrual_date)
+        const daysDiff = Math.abs((new Date(txDate).getTime() - new Date(eDateStr).getTime()) / (1000 * 3600 * 24))
+        return daysDiff <= 3
+      }).map(e => ({
+        id: e.id,
+        amount: Number(e.amount),
+        date: e.payment_date ? toDbDateStr(e.payment_date) : toDbDateStr(e.accrual_date),
+        note: e.note,
+        category_name: e.category_name,
+      }))
+
+      return { matches }
+    }
+  )
+
   // POST /api/staff/:id/salary/pay — salary payment
   app.post<{
     Params: { id: string }
@@ -375,12 +428,13 @@ export async function salaryRoutes(app: FastifyInstance) {
       account_id?: string
       note?: string
       commission?: number
+      linked_expense_id?: string
     }
   }>(
     '/staff/:id/salary/pay',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req, reply) => {
-      const { gross_amount, transaction_date, billing_month, account_id, note, commission } = req.body
+      const { gross_amount, transaction_date, billing_month, account_id, note, commission, linked_expense_id } = req.body
       if (!gross_amount || gross_amount <= 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
       }
@@ -396,6 +450,11 @@ export async function salaryRoutes(app: FastifyInstance) {
       const today   = new Date().toISOString().slice(0, 10)
       const txDate  = transaction_date ?? today
 
+      const metadata: Record<string, any> = { source: 'manual_payment' }
+      if (linked_expense_id) {
+        metadata.linked_expense_id = linked_expense_id
+      }
+
       const tx = await db.insertInto('salary_transactions').values({
         staff_id:         req.params.id,
         rate_id:          null,
@@ -407,7 +466,7 @@ export async function salaryRoutes(app: FastifyInstance) {
         transaction_date: txDate,
         billing_month:    billing_month ?? (txDate.slice(0, 7) + '-01'),
         note:             note ?? null,
-        metadata_json:    { source: 'manual_payment' },
+        metadata_json:    metadata,
         created_by:       req.user.sub,
       }).returningAll().executeTakeFirstOrThrow()
 

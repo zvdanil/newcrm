@@ -344,7 +344,7 @@ export async function expensesRoutes(app: FastifyInstance) {
               'st.id', 'st.staff_id', 's.full_name as staff_name',
               'st.account_id', 'ac.name as account_name',
               'st.gross_amount', 'st.transaction_date',
-              'st.note', 'st.is_dividend', 'st.created_at',
+              'st.note', 'st.is_dividend', 'st.created_at', 'st.metadata_json',
             ])
 
           if (req.query.account_id) sq = sq.where('st.account_id', '=', req.query.account_id)
@@ -355,8 +355,17 @@ export async function expensesRoutes(app: FastifyInstance) {
 
           const salaryRows = await sq.orderBy('st.transaction_date', 'desc').execute()
 
+          const existingExpenseIds = new Set((data as any[]).map(e => e.id))
+          const filteredSalaryRows = salaryRows.filter(sr => {
+            const meta = (sr.metadata_json as Record<string, unknown> | null) ?? {}
+            if (meta.linked_expense_id && existingExpenseIds.has(String(meta.linked_expense_id))) {
+              return false
+            }
+            return true
+          })
+
           // Map salary rows to Expense-like shape
-          const mappedSalary = salaryRows.map(sr => ({
+          const mappedSalary = filteredSalaryRows.map(sr => ({
             id:                      `salary:${sr.id}`,
             account_id:              sr.account_id,
             account_name:            sr.account_name ?? '—',

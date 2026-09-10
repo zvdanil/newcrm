@@ -2205,7 +2205,10 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                   return acc
                 }, {})
                 const archRefundByActivity = group.refunds.reduce<Record<string, number>>((acc, tx) => {
-                  const key = tx.activity_name ?? tx.note ?? '—'
+                  let key = tx.activity_name ?? tx.note ?? '—'
+                  if (tx.note && (tx.note.includes('Спец') || tx.note.includes('компенсац'))) {
+                    key = tx.activity_name ? `${tx.activity_name} (${tx.note})` : tx.note
+                  }
                   acc[key] = (acc[key] ?? 0) + Number(tx.amount)
                   return acc
                 }, {})
@@ -2387,7 +2390,10 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                     const addRefunds  = (group?.refunds ?? []).filter(tx => !isTxMain(tx))
 
                     const groupRefunds = (list: LedgerEntry[]) => Object.entries(list.reduce<Record<string, number>>((acc, tx) => {
-                      const key = tx.activity_name ?? tx.note ?? '—'
+                      let key = tx.activity_name ?? tx.note ?? '—'
+                      if (tx.note && (tx.note.includes('Спец') || tx.note.includes('компенсац'))) {
+                        key = tx.activity_name ? `${tx.activity_name} (${tx.note})` : tx.note
+                      }
                       acc[key] = (acc[key] ?? 0) + Number(tx.amount)
                       return acc
                     }, {}))

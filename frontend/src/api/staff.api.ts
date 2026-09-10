@@ -311,8 +311,16 @@ export const staffApi = {
     account_id?: string
     note?: string
     commission?: number
+    linked_expense_id?: string
   }): Promise<{ tx: SalaryTransaction; commission_expense: unknown | null }> => {
     const { data } = await apiClient.post<{ tx: SalaryTransaction; commission_expense: unknown | null }>(`/staff/${staffId}/salary/pay`, payload)
+    return data
+  },
+
+  checkDuplicateExpense: async (staffId: string, params: { account_id?: string; amount?: number; transaction_date?: string }): Promise<{
+    matches: Array<{ id: string; amount: number; date: string; note: string | null; category_name: string | null }>
+  }> => {
+    const { data } = await apiClient.get(`/staff/${staffId}/salary/check-duplicate-expense`, { params })
     return data
   },
 
