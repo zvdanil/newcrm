@@ -221,7 +221,121 @@ export async function activitiesRoutes(app: FastifyInstance) {
         return { ...newTariff, ...smartConfig }
       })
 
+      // Run retro recalculation starting from new tariff valid_from
+      const fromDate = new Date(from)
+      if (!isNaN(fromDate.getTime())) {
+        await recalcActivityAccruals(req.params.id, fromDate, new Date(), req.user.sub)
+      }
+
       return reply.status(201).send(result)
+    }
+  )
+
+  // PUT /api/activities/:id/tariffs/:tariffId — редактирование конкретной версии тарифа и её смарт-конфига
+  app.put<{
+    Params: { id: string; tariffId: string }
+    Body: {
+      base_fee?: number
+      valid_from?: string
+      valid_to?: string | null
+      base_lessons?: number
+      l1_threshold_absences?: number | null
+      l1_threshold_fee?: number | null
+      l1_min_attended_lessons?: number | null
+      l2_max_refunds?: number | null
+      l2_refund_per_absence?: number | null
+      rules_json?: unknown | null
+    }
+  }>(
+    '/:id/tariffs/:tariffId',
+    { preHandler: requireRole('owner', 'admin') },
+    async (req, reply) => {
+      const {
+        base_fee, valid_from, valid_to,
+        base_lessons, l1_threshold_absences, l1_threshold_fee,
+        l1_min_attended_lessons, l2_max_refunds, l2_refund_per_absence, rules_json
+      } = req.body
+
+      const existingTariff = await db
+        .selectFrom('tariffs')
+        .selectAll()
+        .where('id', '=', req.params.tariffId)
+        .where('activity_id', '=', req.params.id)
+        .executeTakeFirst()
+
+      if (!existingTariff) {
+        return reply.status(404).send({ error: 'NotFound', message: 'Тариф не знайдено' })
+      }
+
+      const updatedTariff = await db.transaction().execute(async (trx) => {
+        const setObj: Record<string, unknown> = {}
+        if (base_fee !== undefined) setObj.base_fee = base_fee
+        if (valid_from !== undefined) setObj.valid_from = valid_from
+        if (valid_to !== undefined) setObj.valid_to = valid_to
+
+        let tRow = existingTariff
+        if (Object.keys(setObj).length > 0) {
+          tRow = await trx
+            .updateTable('tariffs')
+            .set(setObj)
+            .where('id', '=', req.params.tariffId)
+            .returningAll()
+            .executeTakeFirstOrThrow()
+        }
+
+        let scRow = await trx
+          .selectFrom('smart_tariff_configs')
+          .selectAll()
+          .where('tariff_id', '=', req.params.tariffId)
+          .executeTakeFirst()
+
+        const scSet: Record<string, unknown> = {
+          updated_at: new Date().toISOString() as unknown as Date,
+        }
+        if (base_lessons !== undefined) scSet.base_lessons = base_lessons
+        if (l1_threshold_absences !== undefined) scSet.l1_threshold_absences = l1_threshold_absences
+        if (l1_threshold_fee !== undefined) scSet.l1_threshold_fee = l1_threshold_fee
+        if (l1_min_attended_lessons !== undefined) scSet.l1_min_attended_lessons = l1_min_attended_lessons
+        if (l2_max_refunds !== undefined) scSet.l2_max_refunds = l2_max_refunds
+        if (l2_refund_per_absence !== undefined) scSet.l2_refund_per_absence = l2_refund_per_absence
+        if (rules_json !== undefined) scSet.rules_json = rules_json
+
+        if (scRow) {
+          scRow = await trx
+            .updateTable('smart_tariff_configs')
+            .set(scSet)
+            .where('tariff_id', '=', req.params.tariffId)
+            .returningAll()
+            .executeTakeFirstOrThrow()
+        } else {
+          scRow = await trx
+            .insertInto('smart_tariff_configs')
+            .values({
+              tariff_id: req.params.tariffId,
+              activity_id: req.params.id,
+              base_lessons: base_lessons ?? 20,
+              l1_threshold_absences: l1_threshold_absences ?? null,
+              l1_threshold_fee: l1_threshold_fee ?? null,
+              l1_min_attended_lessons: l1_min_attended_lessons ?? null,
+              l2_max_refunds: l2_max_refunds ?? null,
+              l2_refund_per_absence: l2_refund_per_absence ?? null,
+              rules_json: rules_json ?? null,
+            })
+            .returningAll()
+            .executeTakeFirstOrThrow()
+        }
+
+        return { ...tRow, ...scRow }
+      })
+
+      // Run retro recalculation for the affected tariff period
+      const fromDate = new Date(updatedTariff.valid_from)
+      const toDate = updatedTariff.valid_to ? new Date(updatedTariff.valid_to) : new Date()
+      if (!isNaN(fromDate.getTime())) {
+        await recalcActivityAccruals(req.params.id, fromDate, toDate, req.user.sub)
+      }
+
+      return reply.send(updatedTariff)
     }
   )
 

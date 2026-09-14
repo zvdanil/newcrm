@@ -382,6 +382,21 @@ export function ActivityCardPage() {
   const [recalcFrom, setRecalcFrom] = useState(today())
   const [recalcResult, setRecalcResult] = useState<{ replaced: number; refunded: number } | null>(null)
 
+  const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
+  const [editTariffForm, setEditTariffForm] = useState({
+    base_fee: '',
+    valid_from: '',
+    valid_to: '',
+    base_lessons: 20,
+    l1_enabled: false,
+    l1_threshold_absences: '',
+    l1_threshold_fee: '',
+    l1_min_attended_lessons: '',
+    l2_enabled: false,
+    l2_max_refunds: '',
+    l2_refund_per_absence: '',
+  })
+
   const [refundForm, setRefundForm] = useState({
     refund_on_excused: false,
     mode: 'none' as 'none' | 'amount' | 'pct',
@@ -503,6 +518,60 @@ export function ActivityCardPage() {
     },
     onError: () => setRefundError('Помилка при збереженні'),
   })
+
+  const updateTariffVersionMutation = useMutation({
+    mutationFn: (tariffId: string) => {
+      if (activity?.tariff_type === 'smart') {
+        if (editTariffForm.l1_enabled && (!editTariffForm.l1_threshold_absences || !editTariffForm.l1_threshold_fee)) {
+          throw new Error('Для логіки 1 вкажіть поріг пропусків і суму')
+        }
+        if (editTariffForm.l2_enabled && (!editTariffForm.l2_max_refunds || !editTariffForm.l2_refund_per_absence)) {
+          throw new Error('Для логіки 2 вкажіть ліміт і суму за пропуск')
+        }
+      }
+      return activitiesApi.updateTariffVersion(id!, tariffId, {
+        base_fee: Number(editTariffForm.base_fee),
+        valid_from: editTariffForm.valid_from,
+        valid_to: editTariffForm.valid_to || null,
+        ...(activity?.tariff_type === 'smart' ? {
+          base_lessons: editTariffForm.base_lessons,
+          l1_threshold_absences: editTariffForm.l1_enabled && editTariffForm.l1_threshold_absences ? Number(editTariffForm.l1_threshold_absences) : null,
+          l1_threshold_fee: editTariffForm.l1_enabled && editTariffForm.l1_threshold_fee ? Number(editTariffForm.l1_threshold_fee) : null,
+          l1_min_attended_lessons: editTariffForm.l1_enabled && editTariffForm.l1_min_attended_lessons ? Number(editTariffForm.l1_min_attended_lessons) : null,
+          l2_max_refunds: editTariffForm.l2_enabled && editTariffForm.l2_max_refunds ? Number(editTariffForm.l2_max_refunds) : null,
+          l2_refund_per_absence: editTariffForm.l2_enabled && editTariffForm.l2_refund_per_absence ? Number(editTariffForm.l2_refund_per_absence) : null,
+        } : {})
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['activity', id] })
+      qc.invalidateQueries({ queryKey: ['activity-tariffs', id] })
+      qc.invalidateQueries({ queryKey: ['activity-smart-tariff', id] })
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['child-ledger'] })
+      setEditingTariffId(null)
+      setTariffError(null)
+    },
+    onError: (err: any) => setTariffError(err.message || 'Помилка при оновленні версії тарифу'),
+  })
+
+  const startEditHistoricalTariff = (t: Tariff) => {
+    setEditingTariffId(t.id)
+    setEditTariffForm({
+      base_fee: t.base_fee ? String(t.base_fee) : '',
+      valid_from: t.valid_from ? String(t.valid_from).slice(0, 10) : '',
+      valid_to: t.valid_to ? String(t.valid_to).slice(0, 10) : '',
+      base_lessons: t.base_lessons ?? 20,
+      l1_enabled: t.l1_threshold_absences != null,
+      l1_threshold_absences: t.l1_threshold_absences?.toString() ?? '',
+      l1_threshold_fee: t.l1_threshold_fee?.toString() ?? '',
+      l1_min_attended_lessons: t.l1_min_attended_lessons?.toString() ?? '',
+      l2_enabled: t.l2_max_refunds != null,
+      l2_max_refunds: t.l2_max_refunds?.toString() ?? '',
+      l2_refund_per_absence: t.l2_refund_per_absence?.toString() ?? '',
+    })
+    setTariffError(null)
+  }
 
   const toggleActiveMutation = useMutation({
     mutationFn: (is_active: boolean) => activitiesApi.update(id!, { is_active }),
@@ -894,32 +963,148 @@ export function ActivityCardPage() {
               <th className="text-left pb-2">Діє з</th>
               <th className="text-left pb-2">Діє до</th>
               {activity?.tariff_type === 'smart' && <th className="text-left pb-2">Смарт-логіки</th>}
+              {canEdit && <th className="text-right pb-2">Дії</th>}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {history.map((t) => (
-                <tr key={t.id} className={t.valid_to ? 'text-gray-400' : 'text-gray-900 font-medium'}>
-                  <td className="py-2">{Number(t.base_fee).toFixed(2)} грн</td>
-                  <td className="py-2">{formatDate(String(t.valid_from))}</td>
-                  <td className="py-2">{t.valid_to ? formatDate(String(t.valid_to)) : <span className="text-green-600 text-xs">поточний</span>}</td>
-                  {activity?.tariff_type === 'smart' && (
-                    <td className="py-2 text-xs">
-                      {t.l1_threshold_absences != null && (
-                        <div>
-                          Л1: ≥{t.l1_threshold_absences} пропусків → {Number(t.l1_threshold_fee).toFixed(2)} грн
-                          {t.l1_min_attended_lessons != null && (
-                            <span className="text-gray-400"> (якщо відвідано &lt; {t.l1_min_attended_lessons})</span>
-                          )}
+                editingTariffId === t.id ? (
+                  <tr key={t.id} className="bg-iris-50/50">
+                    <td colSpan={canEdit ? (activity?.tariff_type === 'smart' ? 5 : 4) : (activity?.tariff_type === 'smart' ? 4 : 3)} className="py-3 px-2">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-xs text-iris-900">Редагування версії тарифу ({formatDate(String(t.valid_from))})</span>
                         </div>
-                      )}
-                      {t.l2_max_refunds != null && (
-                        <div>Л2: перші {t.l2_max_refunds} пропусків по {Number(t.l2_refund_per_absence).toFixed(2)} грн</div>
-                      )}
-                      {t.l1_threshold_absences == null && t.l2_max_refunds == null && (
-                        <span className="text-gray-400">Без смарт-логік</span>
-                      )}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Сума (грн)</label>
+                            <input type="number" min="0" step="0.01" value={editTariffForm.base_fee}
+                              onChange={(e) => setEditTariffForm({ ...editTariffForm, base_fee: e.target.value })}
+                              className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Діє з</label>
+                            <input type="date" value={editTariffForm.valid_from}
+                              onChange={(e) => setEditTariffForm({ ...editTariffForm, valid_from: e.target.value })}
+                              className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Діє до</label>
+                            <input type="date" value={editTariffForm.valid_to}
+                              onChange={(e) => setEditTariffForm({ ...editTariffForm, valid_to: e.target.value })}
+                              placeholder="порожньо = поточний"
+                              className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                          </div>
+                        </div>
+
+                        {activity?.tariff_type === 'smart' && (
+                          <div className="border-t border-iris-200 pt-2 space-y-2">
+                            <div className="border border-iris-200 bg-white rounded p-2 space-y-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={editTariffForm.l1_enabled}
+                                  onChange={(e) => setEditTariffForm({ ...editTariffForm, l1_enabled: e.target.checked })}
+                                  className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                                <span className="text-xs font-medium text-gray-700">Логіка 1: знижена абонплата при порозі пропусків</span>
+                              </label>
+                              {editTariffForm.l1_enabled && (
+                                <div className="ml-5 grid grid-cols-3 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Поріг пропусків (≥)</label>
+                                    <input type="number" min="1" value={editTariffForm.l1_threshold_absences}
+                                      onChange={(e) => setEditTariffForm({ ...editTariffForm, l1_threshold_absences: e.target.value })}
+                                      className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Сума до нарахування (грн)</label>
+                                    <input type="number" min="0" step="0.01" value={editTariffForm.l1_threshold_fee}
+                                      onChange={(e) => setEditTariffForm({ ...editTariffForm, l1_threshold_fee: e.target.value })}
+                                      className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Мін. відвіданих (для повного)</label>
+                                    <input type="number" min="1" value={editTariffForm.l1_min_attended_lessons}
+                                      onChange={(e) => setEditTariffForm({ ...editTariffForm, l1_min_attended_lessons: e.target.value })}
+                                      className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="border border-iris-200 bg-white rounded p-2 space-y-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={editTariffForm.l2_enabled}
+                                  onChange={(e) => setEditTariffForm({ ...editTariffForm, l2_enabled: e.target.checked })}
+                                  className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+                                <span className="text-xs font-medium text-gray-700">Логіка 2: повернення за перші N пропусків</span>
+                              </label>
+                              {editTariffForm.l2_enabled && (
+                                <div className="ml-5 grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Макс. пропусків з поверненням</label>
+                                    <input type="number" min="1" value={editTariffForm.l2_max_refunds}
+                                      onChange={(e) => setEditTariffForm({ ...editTariffForm, l2_max_refunds: e.target.value })}
+                                      className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-600 mb-0.5">Повернення за пропуск (грн)</label>
+                                    <input type="number" min="0" step="0.01" value={editTariffForm.l2_refund_per_absence}
+                                      onChange={(e) => setEditTariffForm({ ...editTariffForm, l2_refund_per_absence: e.target.value })}
+                                      className="w-full rounded border-gray-300 text-xs shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {tariffError && <p className="text-xs text-red-600">{tariffError}</p>}
+
+                        <div className="flex gap-2">
+                          <button onClick={() => updateTariffVersionMutation.mutate(t.id)} disabled={updateTariffVersionMutation.isPending}
+                            className="text-xs px-3 py-1 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md transition-colors">
+                            {updateTariffVersionMutation.isPending ? 'Збереження...' : 'Зберегти версію та перерахувати'}
+                          </button>
+                          <button onClick={() => { setEditingTariffId(null); setTariffError(null) }} className="text-xs px-2 py-1 text-gray-500 hover:text-gray-900">
+                            Скасувати
+                          </button>
+                        </div>
+                      </div>
                     </td>
-                  )}
-                </tr>
+                  </tr>
+                ) : (
+                  <tr key={t.id} className={t.valid_to ? 'text-gray-400' : 'text-gray-900 font-medium'}>
+                    <td className="py-2">{Number(t.base_fee).toFixed(2)} грн</td>
+                    <td className="py-2">{formatDate(String(t.valid_from))}</td>
+                    <td className="py-2">{t.valid_to ? formatDate(String(t.valid_to)) : <span className="text-green-600 text-xs">поточний</span>}</td>
+                    {activity?.tariff_type === 'smart' && (
+                      <td className="py-2 text-xs">
+                        {t.l1_threshold_absences != null && (
+                          <div>
+                            Л1: ≥{t.l1_threshold_absences} пропусків → {Number(t.l1_threshold_fee).toFixed(2)} грн
+                            {t.l1_min_attended_lessons != null && (
+                              <span className="text-gray-400"> (якщо відвідано &lt; {t.l1_min_attended_lessons})</span>
+                            )}
+                          </div>
+                        )}
+                        {t.l2_max_refunds != null && (
+                          <div>Л2: перші {t.l2_max_refunds} пропусків по {Number(t.l2_refund_per_absence).toFixed(2)} грн</div>
+                        )}
+                        {t.l1_threshold_absences == null && t.l2_max_refunds == null && (
+                          <span className="text-gray-400">Без смарт-логік</span>
+                        )}
+                      </td>
+                    )}
+                    {canEdit && (
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => startEditHistoricalTariff(t)}
+                          className="text-xs text-iris-600 hover:text-iris-700 font-medium"
+                        >
+                          Редагувати
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )
               ))}
             </tbody>
           </table>

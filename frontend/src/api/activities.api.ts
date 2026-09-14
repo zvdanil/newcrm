@@ -41,6 +41,21 @@ export const activitiesApi = {
     return data
   },
 
+  updateTariffVersion: async (activityId: string, tariffId: string, payload: {
+    base_fee?: number
+    valid_from?: string
+    valid_to?: string | null
+    base_lessons?: number
+    l1_threshold_absences?: number | null
+    l1_threshold_fee?: number | null
+    l1_min_attended_lessons?: number | null
+    l2_max_refunds?: number | null
+    l2_refund_per_absence?: number | null
+  }) => {
+    const { data } = await apiClient.put(`/activities/${activityId}/tariffs/${tariffId}`, payload)
+    return data
+  },
+
   getRefundConfig: async (id: string) => {
     const { data } = await apiClient.get<RefundConfig | null>(`/activities/${id}/refund-config`)
     return data
