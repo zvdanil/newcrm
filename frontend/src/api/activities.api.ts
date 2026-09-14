@@ -71,6 +71,8 @@ export const activitiesApi = {
     l1_min_attended_lessons?: number | null
     l2_max_refunds?: number | null
     l2_refund_per_absence?: number | null
+    apply_to_all_versions?: boolean
+    valid_from?: string
   }): Promise<SmartTariffConfig> => {
     const { data } = await apiClient.put<SmartTariffConfig>(`/activities/${id}/smart-tariff`, payload)
     return data

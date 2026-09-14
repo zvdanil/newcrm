@@ -310,7 +310,7 @@ export async function activitiesRoutes(app: FastifyInstance) {
     }
   )
 
-  // PUT /api/activities/:id/smart-tariff — upsert smart config for active tariff
+  // PUT /api/activities/:id/smart-tariff — upsert smart config for active tariff or all versions
   app.put<{
     Params: { id: string }
     Body: {
@@ -321,6 +321,8 @@ export async function activitiesRoutes(app: FastifyInstance) {
       l2_max_refunds?: number | null
       l2_refund_per_absence?: number | null
       rules_json?: unknown | null
+      apply_to_all_versions?: boolean
+      valid_from?: string
     }
   }>(
     '/:id/smart-tariff',
@@ -328,7 +330,8 @@ export async function activitiesRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const {
         base_lessons = 20, l1_threshold_absences, l1_threshold_fee,
-        l1_min_attended_lessons, l2_max_refunds, l2_refund_per_absence, rules_json
+        l1_min_attended_lessons, l2_max_refunds, l2_refund_per_absence, rules_json,
+        apply_to_all_versions, valid_from
       } = req.body
 
       const l1hasThreshold = l1_threshold_absences != null
@@ -391,6 +394,38 @@ export async function activitiesRoutes(app: FastifyInstance) {
         )
         .returningAll()
         .executeTakeFirstOrThrow()
+
+      if (apply_to_all_versions) {
+        // Update all smart_tariff_configs for this activity across all historical tariff versions
+        await db
+          .updateTable('smart_tariff_configs')
+          .set({
+            base_lessons,
+            l1_threshold_absences: l1_threshold_absences ?? null,
+            l1_threshold_fee: l1_threshold_fee ?? null,
+            l1_min_attended_lessons: l1_min_attended_lessons ?? null,
+            l2_max_refunds: l2_max_refunds ?? null,
+            l2_refund_per_absence: l2_refund_per_absence ?? null,
+            rules_json: rules_json ?? null,
+            updated_at: new Date().toISOString() as unknown as Date,
+          })
+          .where('activity_id', '=', req.params.id)
+          .execute()
+
+        // Find earliest tariff valid_from or default to 3 months ago for retro recalculation
+        const earliestTariff = await db
+          .selectFrom('tariffs')
+          .select('valid_from')
+          .where('activity_id', '=', req.params.id)
+          .orderBy('valid_from', 'asc')
+          .executeTakeFirst()
+
+        const fromDate = valid_from
+          ? new Date(valid_from)
+          : (earliestTariff?.valid_from ? new Date(earliestTariff.valid_from) : new Date(Date.now() - 90 * 86400000))
+
+        await recalcActivityAccruals(req.params.id, fromDate, new Date(), req.user.sub)
+      }
 
       return config
     }

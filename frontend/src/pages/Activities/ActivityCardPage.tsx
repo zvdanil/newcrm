@@ -154,6 +154,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
     l2_enabled: false,
     l2_max_refunds: '',
     l2_refund_per_absence: '',
+    apply_to_all_versions: true,
   })
   const [error, setError] = useState<string | null>(null)
 
@@ -170,10 +171,13 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
       l1_min_attended_lessons: form.l1_enabled && form.l1_min_attended_lessons ? Number(form.l1_min_attended_lessons) : null,
       l2_max_refunds: form.l2_enabled && form.l2_max_refunds ? Number(form.l2_max_refunds) : null,
       l2_refund_per_absence: form.l2_enabled && form.l2_refund_per_absence ? Number(form.l2_refund_per_absence) : null,
+      apply_to_all_versions: form.apply_to_all_versions,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['activity-smart-tariff', activityId] })
       qc.invalidateQueries({ queryKey: ['activity-tariffs', activityId] })
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['child-ledger'] })
       setEditing(false)
       setError(null)
     },
@@ -190,6 +194,7 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
       l2_enabled: config?.l2_max_refunds != null,
       l2_max_refunds: config?.l2_max_refunds?.toString() ?? '',
       l2_refund_per_absence: config?.l2_refund_per_absence ?? '',
+      apply_to_all_versions: true,
     })
     setEditing(true)
     setError(null)
@@ -321,6 +326,16 @@ function SmartTariffConfigBlock({ activityId, canEdit }: { activityId: string; c
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="border border-iris-100 bg-iris-50/50 rounded-lg p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.apply_to_all_versions}
+                onChange={(e) => setForm({ ...form, apply_to_all_versions: e.target.checked })}
+                className="rounded border-gray-300 text-iris-600 focus:ring-iris-500" />
+              <span className="text-sm font-medium text-iris-900">Застосувати ретроспективно до всіх версій тарифу та перерахувати минулі місяці</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 ml-6">Синхронізує смарт-правила у минулих версіях та автоматично перераховує нарахування і пільги</p>
           </div>
 
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
