@@ -839,10 +839,7 @@ export function ActivityCardPage() {
         )}
       </div>
 
-      {/* Smart tariff config — visible only for smart tariff type */}
-      {activity.tariff_type === 'smart' && id && (
-        <SmartTariffConfigBlock activityId={id} canEdit={canEdit} />
-      )}
+      {/* Tariff history & Smart Rules */}
 
       {/* Tariff history */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
