@@ -1227,6 +1227,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         const accrualItemsMap = new Map<string, {
           id: string
           activity_name: string
+          gross_amount: number
+          refund_amount: number
           amount: number
           count: number
           account_id: string
@@ -1249,7 +1251,7 @@ export async function reportsRoutes(app: FastifyInstance) {
 
         const refundItemsByAccount = new Map<string, { account_id: string; account_name: string; amount: number }>()
 
-        let monthAccrualSum = 0
+        let monthGrossAccrualSum = 0
         let monthPaymentSum = 0
         let monthRefundSum = 0
 
@@ -1261,17 +1263,20 @@ export async function reportsRoutes(app: FastifyInstance) {
           const accName = tx.account_name || accountMap.get(tx.account_id) || 'Невідомий рахунок'
 
           if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
-            monthAccrualSum += amt
+            monthGrossAccrualSum += amt
             const actName = tx.activity_name || tx.note || 'Нарахування'
             const key = `${tx.account_id}::${actName}`
             const existing = accrualItemsMap.get(key)
             if (existing) {
+              existing.gross_amount += (-amt)
               existing.amount += (-amt)
               existing.count += 1
             } else {
               accrualItemsMap.set(key, {
                 id: tx.id,
                 activity_name: actName,
+                gross_amount: -amt,
+                refund_amount: 0,
                 amount: -amt,
                 count: 1,
                 account_id: tx.account_id,
@@ -1296,6 +1301,27 @@ export async function reportsRoutes(app: FastifyInstance) {
             })
           } else if (tx.type === 'REFUND' || tx.type === 'REVERSAL') {
             monthRefundSum += amt
+            const actName = tx.activity_name || 'Перерасчет / повернення'
+            const key = `${tx.account_id}::${actName}`
+            const existing = accrualItemsMap.get(key)
+            if (existing) {
+              existing.refund_amount += amt
+              existing.amount += amt
+            } else {
+              accrualItemsMap.set(key, {
+                id: tx.id,
+                activity_name: actName,
+                gross_amount: 0,
+                refund_amount: amt,
+                amount: amt,
+                count: 0,
+                account_id: tx.account_id,
+                account_name: accName,
+                transaction_date: txDateStr,
+                note: tx.note,
+              })
+            }
+
             const cur = refundItemsByAccount.get(tx.account_id) || {
               account_id: tx.account_id,
               account_name: accName,
@@ -1306,10 +1332,11 @@ export async function reportsRoutes(app: FastifyInstance) {
           }
         }
 
-        const monthEndBalance = monthStartBalance + monthPaymentSum + monthRefundSum - monthAccrualSum
+        const monthNetAccrual = -monthGrossAccrualSum + monthRefundSum
+        const monthEndBalance = monthStartBalance + monthPaymentSum + monthNetAccrual
         runningBalance = monthEndBalance
 
-        periodTotalAccrual += monthAccrualSum
+        periodTotalAccrual += monthNetAccrual
         periodTotalPayment += monthPaymentSum
         periodTotalRefund += monthRefundSum
 
@@ -1319,7 +1346,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           balance_start: monthStartBalance,
           balance_end: monthEndBalance,
           accruals: {
-            total: -monthAccrualSum,
+            total: monthNetAccrual,
             items: Array.from(accrualItemsMap.values()),
           },
           payments: {
@@ -1347,7 +1374,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         opening_balance: openingBalance,
         closing_balance: runningBalance,
         totals: {
-          accruals: -periodTotalAccrual,
+          accruals: periodTotalAccrual,
           payments: periodTotalPayment,
           refunds: periodTotalRefund,
         },

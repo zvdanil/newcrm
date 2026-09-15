@@ -111,7 +111,7 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
     rows.push([])
 
     // Table Column Headers
-    rows.push(['Період (місяць)', 'Баланс на 1-е число', 'Нараховано', 'Сплачено', 'Возврат', 'Баланс на кінець'])
+    rows.push(['Період (місяць)', 'Баланс на 1-е число', 'Нараховано', 'Сплачено', 'Баланс на кінець'])
 
     // Month Data Rows
     data.months.forEach((m) => {
@@ -120,7 +120,6 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
         m.balance_start,
         m.accruals.total,
         m.payments.total,
-        m.refunds.total,
         m.balance_end,
       ])
 
@@ -128,14 +127,17 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
       if (isMExpanded) {
         // Accruals Details
         if (expandedAccruals[m.month] && m.accruals.items.length > 0) {
-          rows.push(['  ├─ Деталізація нарахувань:'])
+          rows.push(['  ├─ Деталізація нарахувань (з урахуванням перерахунків/пільг):'])
           m.accruals.items.forEach((item) => {
             const countStr = item.count && item.count > 1 ? ` (${item.count})` : ''
+            const hasRecalc = (item.refund_amount ?? 0) > 0
+            const recalcStr = hasRecalc
+              ? ` [Нараховано: ${item.gross_amount ?? 0}, Смарт-пільга/перераховано: +${item.refund_amount}]`
+              : ''
             rows.push([
-              `     • ${item.activity_name}${countStr} (${item.account_name})`,
+              `     • ${item.activity_name}${countStr}${recalcStr} (${item.account_name})`,
               '',
               item.amount,
-              '',
               '',
               '',
             ])
@@ -154,22 +156,6 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
               '',
               item.amount,
               '',
-              '',
-            ])
-          })
-        }
-
-        // Refunds Details
-        if (expandedRefunds[m.month] && m.refunds.items.length > 0) {
-          rows.push(['  ├─ Деталізація повернень по рахунках:'])
-          m.refunds.items.forEach((item) => {
-            rows.push([
-              `     • Возврат по рахунку: ${item.account_name}`,
-              '',
-              '',
-              '',
-              item.amount,
-              '',
             ])
           })
         }
@@ -183,7 +169,6 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
       data.opening_balance,
       data.totals.accruals,
       data.totals.payments,
-      data.totals.refunds,
       data.closing_balance,
     ])
 
@@ -191,9 +176,8 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
 
     // Set column widths
     ws['!cols'] = [
-      { wch: 35 },
+      { wch: 45 },
       { wch: 20 },
-      { wch: 18 },
       { wch: 18 },
       { wch: 18 },
       { wch: 20 },
@@ -364,7 +348,7 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
           </div>
 
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 print:grid-cols-5 print:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:grid-cols-4 print:gap-2">
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
               <span className="block text-[11px] font-medium text-gray-500">Вхідний баланс</span>
               <span className={`text-sm font-bold ${data.opening_balance >= 0 ? 'text-green-700' : 'text-rose-600'}`}>
@@ -386,14 +370,7 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
               </span>
             </div>
 
-            <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 text-center">
-              <span className="block text-[11px] font-medium text-indigo-700">Возврат</span>
-              <span className="text-sm font-bold text-indigo-700">
-                {formatMoney(data.totals.refunds, true)}
-              </span>
-            </div>
-
-            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center col-span-2 sm:col-span-1">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
               <span className="block text-[11px] font-medium text-gray-500">Вихідний баланс</span>
               <span className={`text-sm font-bold ${data.closing_balance >= 0 ? 'text-green-700' : 'text-rose-600'}`}>
                 {formatMoney(data.closing_balance)}
@@ -410,7 +387,6 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
                   <th className="py-2.5 px-3 text-right">Баланс на 1 число</th>
                   <th className="py-2.5 px-3 text-right">Нараховано</th>
                   <th className="py-2.5 px-3 text-right">Сплачено</th>
-                  <th className="py-2.5 px-3 text-right">Возврат</th>
                   <th className="py-2.5 px-3 text-right">Баланс на кінець</th>
                 </tr>
               </thead>
@@ -425,16 +401,12 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
                       isExpanded={isExpanded}
                       accrualsExpanded={!!expandedAccruals[m.month]}
                       paymentsExpanded={!!expandedPayments[m.month]}
-                      refundsExpanded={!!expandedRefunds[m.month]}
                       onToggleMonth={() => toggleMonth(m.month)}
                       onToggleAccruals={() =>
                         setExpandedAccruals((prev) => ({ ...prev, [m.month]: !prev[m.month] }))
                       }
                       onTogglePayments={() =>
                         setExpandedPayments((prev) => ({ ...prev, [m.month]: !prev[m.month] }))
-                      }
-                      onToggleRefunds={() =>
-                        setExpandedRefunds((prev) => ({ ...prev, [m.month]: !prev[m.month] }))
                       }
                     />
                   )
@@ -449,9 +421,6 @@ export function ChildOSVWidget({ childId, childName }: ChildOSVWidgetProps) {
                   </td>
                   <td className="py-3 px-3 text-right text-emerald-300 print:text-emerald-800">
                     {formatMoney(data.totals.payments, true)}
-                  </td>
-                  <td className="py-3 px-3 text-right text-indigo-300 print:text-indigo-800">
-                    {formatMoney(data.totals.refunds, true)}
                   </td>
                   <td className="py-3 px-3 text-right">{formatMoney(data.closing_balance)}</td>
                 </tr>
@@ -470,11 +439,9 @@ interface MonthRowGroupProps {
   isExpanded: boolean
   accrualsExpanded: boolean
   paymentsExpanded: boolean
-  refundsExpanded: boolean
   onToggleMonth: () => void
   onToggleAccruals: () => void
   onTogglePayments: () => void
-  onToggleRefunds: () => void
 }
 
 function MonthRowGroup({
@@ -482,16 +449,13 @@ function MonthRowGroup({
   isExpanded,
   accrualsExpanded,
   paymentsExpanded,
-  refundsExpanded,
   onToggleMonth,
   onToggleAccruals,
   onTogglePayments,
-  onToggleRefunds,
 }: MonthRowGroupProps) {
   const m = monthData
   const hasAccruals = m.accruals.items.length > 0
   const hasPayments = m.payments.items.length > 0
-  const hasRefunds = m.refunds.items.length > 0
 
   return (
     <>
@@ -548,26 +512,6 @@ function MonthRowGroup({
           </div>
         </td>
 
-        {/* Refunds Column */}
-        <td className="py-2.5 px-3 text-right font-mono text-indigo-700">
-          <div className="flex items-center justify-end gap-1">
-            <span>{formatMoney(m.refunds.total, true)}</span>
-            {hasRefunds && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!isExpanded) onToggleMonth()
-                  onToggleRefunds()
-                }}
-                className="w-4 h-4 flex items-center justify-center text-[10px] text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded font-bold print:hidden"
-                title="Деталізація повернень"
-              >
-                {refundsExpanded && isExpanded ? '−' : '+'}
-              </button>
-            )}
-          </div>
-        </td>
-
         <td className={`py-2.5 px-3 text-right font-mono font-semibold ${m.balance_end >= 0 ? 'text-green-700' : 'text-rose-600'}`}>
           {formatMoney(m.balance_end)}
         </td>
@@ -576,7 +520,7 @@ function MonthRowGroup({
       {/* Expanded Details Row */}
       {isExpanded && (
         <tr className="bg-gray-50/70 border-b border-gray-200">
-          <td colSpan={6} className="p-3 pl-8">
+          <td colSpan={5} className="p-3 pl-8">
             <div className="space-y-3 bg-white p-3 rounded-lg border border-gray-200 text-xs shadow-inner">
               {/* Accruals Details Subtable */}
               {accrualsExpanded && (
@@ -591,21 +535,31 @@ function MonthRowGroup({
 
                   {m.accruals.items.length > 0 ? (
                     <div className="pl-3 space-y-1">
-                      {m.accruals.items.map((item) => (
-                        <div key={item.id} className="flex flex-wrap items-center justify-between text-gray-700 py-0.5 border-b border-gray-50 last:border-none">
-                          <span className="font-medium text-gray-900">
-                            • {item.activity_name} {item.count && item.count > 1 ? `(${item.count})` : ''}
-                          </span>
-                          <div className="flex items-center gap-3">
-                            <span className="text-[11px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                              Рахунок: {item.account_name}
-                            </span>
-                            <span className="font-mono font-semibold text-rose-600">
-                              {formatMoney(item.amount)}
-                            </span>
+                      {m.accruals.items.map((item) => {
+                        const hasRecalc = (item.refund_amount ?? 0) > 0
+                        return (
+                          <div key={item.id} className="flex flex-wrap items-center justify-between text-gray-700 py-1 border-b border-gray-50 last:border-none">
+                            <div className="space-y-0.5">
+                              <span className="font-medium text-gray-900">
+                                • {item.activity_name} {item.count && item.count > 1 ? `(${item.count})` : ''}
+                              </span>
+                              {hasRecalc && (
+                                <div className="text-[11px] text-emerald-700 pl-2 font-medium">
+                                  ↳ Нараховано: {formatMoney(item.gross_amount)}, Перераховано/Пільга: {formatMoney(item.refund_amount, true)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[11px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                                Рахунок: {item.account_name}
+                              </span>
+                              <span className="font-mono font-semibold text-rose-600">
+                                {formatMoney(item.amount)}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-gray-400 pl-3 italic text-[11px]">Немає нарахувань за цей місяць</div>
@@ -665,36 +619,6 @@ function MonthRowGroup({
                     </div>
                   ) : (
                     <div className="text-gray-400 pl-3 italic text-[11px]">Немає оплат за цей місяць</div>
-                  )}
-                </div>
-              )}
-
-              {/* Refunds Details Subtable */}
-              {refundsExpanded && (
-                <div className="space-y-1.5 pt-1">
-                  <div
-                    onClick={onToggleRefunds}
-                    className="flex items-center gap-2 font-bold text-indigo-700 cursor-pointer select-none border-b border-indigo-100 pb-1"
-                  >
-                    <span>{refundsExpanded ? '▾' : '▸'} Повернення коштів ({m.refunds.items.length}):</span>
-                    <span className="font-mono">{formatMoney(m.refunds.total, true)}</span>
-                  </div>
-
-                  {m.refunds.items.length > 0 ? (
-                    <div className="pl-3 space-y-1">
-                      {m.refunds.items.map((item, idx) => (
-                        <div key={idx} className="flex flex-wrap items-center justify-between text-gray-700 py-0.5 border-b border-gray-50 last:border-none">
-                          <span className="font-medium text-gray-900">
-                            • Повернення по рахунку: {item.account_name}
-                          </span>
-                          <span className="font-mono font-semibold text-indigo-700">
-                            {formatMoney(item.amount, true)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-gray-400 pl-3 italic text-[11px]">Немає повернень за цей місяць</div>
                   )}
                 </div>
               )}

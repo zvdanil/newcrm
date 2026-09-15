@@ -140,6 +140,8 @@ export interface OSVAccrualItem {
   id: string
   activity_name: string
   amount: number
+  gross_amount?: number
+  refund_amount?: number
   count?: number
   account_id: string
   account_name: string
