@@ -6,7 +6,8 @@ import { sql, RawBuilder } from 'kysely'
  */
 export function toDbDateStr(date: Date | string): string {
   if (typeof date === 'string') {
-    return date.slice(0, 10)
+    if (date.length === 10) return date
+    date = new Date(date)
   }
   
   // Database DATE fields are parsed as UTC midnight (00:00:00.000Z).

@@ -399,7 +399,7 @@ export async function recalcActivityAccruals(
           .where(sql`metadata_json->>'source'`, '!=', 'smart_benefit')
           .execute()
 
-        const startDate = new Date(String(e.start_date))
+        const startDate = new Date(toDbDateStr(e.start_date))
         const startMonthKey = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-01`
         const isMidMonthStart = startDate.getTime() > billingDate.getTime()
 
@@ -698,7 +698,7 @@ export async function recalcForIndividualTariff(
 
     // ── Create new ACCRUAL based on individual tariff type ──
     if (ind.tariff_type === 'monthly' || ind.tariff_type === 'smart') {
-      const startDate = new Date(String(enrollment.start_date))
+      const startDate = new Date(toDbDateStr(enrollment.start_date))
       const isMidMonthStart = startDate.getTime() > billingDate.getTime()
       const startMonthKey = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-01`
 
