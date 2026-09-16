@@ -30,6 +30,10 @@ interface RunResult {
  * When present, its tariff_type overrides the activity's tariff_type, and its price is used directly.
  */
 export async function getChildIndividualTariff(childId: string, activityId: string, date: Date | string) {
+  const dateStr = toDbDateStr(date)
+  const d = new Date(dateStr)
+  const monthEndStr = toDbDateStr(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)))
+
   return db
     .selectFrom('child_individual_tariffs as cit')
     .leftJoin('child_smart_tariff_configs as csc', 'csc.individual_tariff_id', 'cit.id')
@@ -40,8 +44,8 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
     ])
     .where('cit.child_id', '=', childId)
     .where('cit.activity_id', '=', activityId)
-    .where('cit.valid_from', '<=', castAsDate(date))
-    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(date))]))
+    .where('cit.valid_from', '<=', castAsDate(monthEndStr))
+    .where((eb) => eb.or([eb('cit.valid_to', 'is', null), eb('cit.valid_to', '>', castAsDate(dateStr))]))
     .orderBy('cit.valid_from', 'desc')
     .executeTakeFirst()
 }
@@ -53,15 +57,19 @@ export async function getChildIndividualTariff(childId: string, activityId: stri
  * Used when no child_individual_tariff overrides the tariff type.
  */
 export async function getEffectivePrice(childId: string, activityId: string, billingDate: Date | string): Promise<number | null> {
+  const dateStr = toDbDateStr(billingDate)
+  const d = new Date(dateStr)
+  const monthEndStr = toDbDateStr(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)))
+
   const childPrice = await db
     .selectFrom('child_prices')
     .select(['price', 'discount_pct'])
     .where('child_id', '=', childId)
     .where('activity_id', '=', activityId)
-    .where('valid_from', '<=', castAsDate(billingDate))
+    .where('valid_from', '<=', castAsDate(monthEndStr))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', castAsDate(billingDate)),
+      eb('valid_to', '>=', castAsDate(dateStr)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -70,10 +78,10 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .selectFrom('tariffs')
     .select('base_fee')
     .where('activity_id', '=', activityId)
-    .where('valid_from', '<=', castAsDate(billingDate))
+    .where('valid_from', '<=', castAsDate(monthEndStr))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', castAsDate(billingDate)),
+      eb('valid_to', '>=', castAsDate(dateStr)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
@@ -94,10 +102,10 @@ export async function getEffectivePrice(childId: string, activityId: string, bil
     .selectFrom('child_global_discounts')
     .select('discount_pct')
     .where('child_id', '=', childId)
-    .where('valid_from', '<=', castAsDate(billingDate))
+    .where('valid_from', '<=', castAsDate(monthEndStr))
     .where((eb) => eb.or([
       eb('valid_to', 'is', null),
-      eb('valid_to', '>=', castAsDate(billingDate)),
+      eb('valid_to', '>=', castAsDate(dateStr)),
     ]))
     .orderBy('valid_from', 'desc')
     .executeTakeFirst()
