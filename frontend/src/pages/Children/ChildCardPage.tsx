@@ -84,6 +84,7 @@ export function ChildCardPage() {
       full_name:  child.full_name,
       birth_date: toDateInputValue(child.birth_date),
       group_id:   child.group_id  ?? '',
+      group_start_date: toDateInputValue(child.group_start_date ?? null) || todayStr(),
       effective_date: todayStr(),
       note:       child.note      ?? '',
       is_active:  child.is_active,
@@ -112,6 +113,7 @@ export function ChildCardPage() {
       birth_date: form.birth_date || null,
       group_id:   form.group_id  || null,
       effective_date: isGroupChanged ? form.effective_date : undefined,
+      group_start_date: !isGroupChanged && form.group_id ? form.group_start_date : undefined,
       note:       form.note      || null,
       is_active:  form.is_active,
       deactivation_date: !form.is_active ? form.deactivation_date : null,
@@ -169,7 +171,14 @@ export function ChildCardPage() {
                 </button>
               </div>
             </div>
-            <InfoRow label="Група"           value={child.group_name ?? '—'} />
+            <div>
+              <InfoRow label="Група"           value={child.group_name ?? '—'} />
+              {child.group_id && child.group_start_date && (
+                <div className="mt-1 text-xs text-gray-500">
+                  Дата зарахування: <span className="font-semibold text-gray-700">{formatDate(child.group_start_date)}</span>
+                </div>
+              )}
+            </div>
             {child.note && <InfoRow label="Нотатка" value={child.note} className="col-span-2" />}
           </dl>
         )}
@@ -208,7 +217,7 @@ export function ChildCardPage() {
               </select>
             </Field>
 
-            {form.group_id !== (child.group_id ?? '') && (
+            {form.group_id !== (child.group_id ?? '') ? (
               <Field label="Дата зміни групи (з якого числа вступає в силу) *">
                 <input
                   type="date"
@@ -218,7 +227,17 @@ export function ChildCardPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">З цього числа дитина буде перебувати у новій групі (для історичного обліку).</p>
               </Field>
-            )}
+            ) : form.group_id ? (
+              <Field label="Дата зарахування в групу">
+                <input
+                  type="date"
+                  value={form.group_start_date}
+                  onChange={(e) => setForm({ ...form, group_start_date: e.target.value })}
+                  className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">З цієї дати дитині дозволено ставити відмітки в журналі групи.</p>
+              </Field>
+            ) : null}
 
             <Field label="Нотатка">
               <textarea

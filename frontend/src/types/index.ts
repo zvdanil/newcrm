@@ -44,6 +44,8 @@ export interface Child {
   updated_at?: string
   group_id: string | null
   group_name: string | null
+  group_start_date?: string | null
+  entry_date?: string | null
   family_id: string | null
   family_name: string | null
   primary_parent_id?: string | null

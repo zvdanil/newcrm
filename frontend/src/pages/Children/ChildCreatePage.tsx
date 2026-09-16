@@ -13,6 +13,7 @@ export function ChildCreatePage() {
     full_name: '',
     birth_date: '',
     group_id: '',
+    entry_date: new Date().toISOString().slice(0, 10),
     family_id: '',
     note: '',
   })
@@ -26,6 +27,7 @@ export function ChildCreatePage() {
       full_name: form.full_name,
       birth_date: form.birth_date || undefined,
       group_id: form.group_id || undefined,
+      entry_date: form.group_id ? form.entry_date : undefined,
       family_id: form.family_id || undefined,
       note: form.note || undefined,
     }),
@@ -91,6 +93,24 @@ export function ChildCreatePage() {
               ))}
             </select>
           </div>
+
+          {form.group_id && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Дата зарахування в групу <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={form.entry_date}
+                onChange={(e) => set('entry_date', e.target.value)}
+                required
+                className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                З цієї дати дитині відкривається можливість ставити відмітки в журналі групи.
+              </p>
+            </div>
+          )}
 
           {/* Сім'я */}
           <div>

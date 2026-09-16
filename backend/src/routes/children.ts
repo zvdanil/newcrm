@@ -40,6 +40,13 @@ export async function childrenRoutes(app: FastifyInstance) {
           'c.note', 'c.created_at',
           'g.id as group_id', 'g.name as group_name',
           'f.id as family_id', 'f.name as family_name',
+          (eb) => eb.selectFrom('child_group_history as cgh')
+            .select('cgh.start_date')
+            .whereRef('cgh.child_id', '=', 'c.id')
+            .where('cgh.end_date', 'is', null)
+            .orderBy('cgh.start_date', 'desc')
+            .limit(1)
+            .as('group_start_date'),
         ])
 
       if (role === 'parent') {
@@ -134,6 +141,13 @@ export async function childrenRoutes(app: FastifyInstance) {
           'f.id as family_id', 'f.name as family_name',
           'p.id as primary_parent_id', 'p.full_name as primary_parent_name',
           'p.phone as primary_parent_phone',
+          (eb) => eb.selectFrom('child_group_history as cgh')
+            .select('cgh.start_date')
+            .whereRef('cgh.child_id', '=', 'c.id')
+            .where('cgh.end_date', 'is', null)
+            .orderBy('cgh.start_date', 'desc')
+            .limit(1)
+            .as('group_start_date'),
         ])
         .where('c.id', '=', request.params.id)
         .executeTakeFirst()
@@ -184,24 +198,29 @@ export async function childrenRoutes(app: FastifyInstance) {
       birth_date?: string
       family_id?: string
       group_id?: string
+      entry_date?: string
+      group_start_date?: string
       note?: string
     }
   }>(
     '/',
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
+      const { entry_date, group_start_date, ...childData } = request.body
+      const rawDate = entry_date || group_start_date
+      const startDate = (rawDate && rawDate.trim()) ? toDbDateStr(rawDate) : toDbDateStr(new Date())
+
       const child = await db.transaction().execute(async (trx) => {
         const created = await trx
           .insertInto('children')
-          .values(request.body)
+          .values(childData)
           .returningAll()
           .executeTakeFirstOrThrow()
 
-        if (request.body.group_id) {
-          const startDate = toDbDateStr(new Date())
+        if (childData.group_id) {
           await trx.insertInto('child_group_history').values({
             child_id: created.id,
-            group_id: request.body.group_id,
+            group_id: childData.group_id,
             start_date: startDate,
             end_date: null,
           }).execute()
@@ -223,6 +242,8 @@ export async function childrenRoutes(app: FastifyInstance) {
       family_id?: string
       group_id?: string | null
       effective_date?: string
+      group_start_date?: string
+      entry_date?: string
       is_active?: boolean
       deactivation_date?: string
       note?: string
@@ -232,7 +253,8 @@ export async function childrenRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (request, reply) => {
       const { id } = request.params
-      const { effective_date, deactivation_date, ...updates } = request.body
+      const { effective_date, group_start_date, entry_date, deactivation_date, ...updates } = request.body
+      const targetGroupStartDate = (group_start_date || entry_date || effective_date)?.trim()
 
       const existingChild = await db.selectFrom('children')
         .select(['id', 'group_id', 'is_active', 'deactivation_date'])
@@ -258,7 +280,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       const updated = await db.transaction().execute(async (trx) => {
         if (updates.group_id !== undefined && updates.group_id !== existingChild.group_id) {
           const todayStr = toDbDateStr(new Date())
-          const effectiveStart = (effective_date && effective_date.trim()) ? toDbDateStr(effective_date) : todayStr
+          const effectiveStart = (targetGroupStartDate && targetGroupStartDate.trim()) ? toDbDateStr(targetGroupStartDate) : todayStr
 
           let closeDate = new Date(effectiveStart)
           closeDate.setDate(closeDate.getDate() - 1)
@@ -291,6 +313,17 @@ export async function childrenRoutes(app: FastifyInstance) {
               start_date: effectiveStart,
               end_date: null,
             }).execute()
+          }
+        } else if (targetGroupStartDate && (existingChild.group_id || updates.group_id)) {
+          const formattedStart = toDbDateStr(targetGroupStartDate)
+          const targetGroupId = updates.group_id || existingChild.group_id
+          if (targetGroupId) {
+            await trx.updateTable('child_group_history')
+              .set({ start_date: formattedStart, updated_at: new Date().toISOString() as unknown as Date })
+              .where('child_id', '=', id)
+              .where('group_id', '=', targetGroupId)
+              .where('end_date', 'is', null)
+              .execute()
           }
         }
 
