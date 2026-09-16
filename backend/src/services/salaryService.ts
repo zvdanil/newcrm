@@ -597,7 +597,8 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     // Skip auto-accrual for the teacher replaced by a substitution
     if (blockedStaffId && rate.staff_id === blockedStaffId) continue
 
-    const existing = existingAccruals.find(a => a.rate_id === rate.id)
+    const matchingAccruals = existingAccruals.filter(a => a.rate_id === rate.id)
+    const existing = matchingAccruals[0] ?? null
 
     const teacherGroupLog = groupLogs.find(g => g.staff_id === rate.staff_id) ?? groupLogs.find(g => g.staff_id === null)
     const groupConducted = teacherGroupLog?.status === 'conducted'
@@ -614,17 +615,18 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
     }
 
     if (!hasLesson || newAmount <= 0) {
-      // No lesson or zero revenue → remove existing accrual
-      if (existing) {
+      // No lesson or zero revenue → remove all existing accruals for this rate
+      if (matchingAccruals.length > 0) {
+        const ids = matchingAccruals.map(a => a.id)
         await db.updateTable('salary_transactions')
           .set({ is_deleted: true, deleted_at: now })
-          .where('id', '=', existing.id)
+          .where('id', 'in', ids)
           .execute()
       }
       continue
     }
 
-    if (!existing) {
+    if (matchingAccruals.length === 0) {
       await db.insertInto('salary_transactions').values({
         staff_id:         rate.staff_id,
         rate_id:          rate.id,
@@ -636,25 +638,34 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
         billing_month:    billing,
         metadata_json:    meta,
       }).execute()
-    } else if (
-      Math.abs(Number(existing.gross_amount) - newAmount) > 0.001 ||
-      Math.abs(Number(existing.deduction_pct) - Number(rate.deduction_pct)) > 0.001
-    ) {
-      await db.updateTable('salary_transactions')
-        .set({ is_deleted: true, deleted_at: now })
-        .where('id', '=', existing.id)
-        .execute()
-      await db.insertInto('salary_transactions').values({
-        staff_id:         rate.staff_id,
-        rate_id:          rate.id,
-        activity_id:      activityId,
-        type:             'ACCRUAL',
-        gross_amount:     newAmount,
-        deduction_pct:    rate.deduction_pct,
-        transaction_date: date,
-        billing_month:    billing,
-        metadata_json:    meta,
-      }).execute()
+    } else {
+      const needsRecreate = matchingAccruals.length > 1 ||
+        Math.abs(Number(existing.gross_amount) - newAmount) > 0.001 ||
+        Math.abs(Number(existing.deduction_pct) - Number(rate.deduction_pct)) > 0.001
+
+      if (needsRecreate) {
+        const ids = matchingAccruals.map(a => a.id)
+        await db.updateTable('salary_transactions')
+          .set({ is_deleted: true, deleted_at: now })
+          .where('id', 'in', ids)
+          .execute()
+        await db.insertInto('salary_transactions').values({
+          staff_id:         rate.staff_id,
+          rate_id:          rate.id,
+          activity_id:      activityId,
+          type:             'ACCRUAL',
+          gross_amount:     newAmount,
+          deduction_pct:    rate.deduction_pct,
+          transaction_date: date,
+          billing_month:    billing,
+          metadata_json:    meta,
+        }).execute()
+      } else {
+        await db.updateTable('salary_transactions')
+          .set({ metadata_json: meta })
+          .where('id', '=', existing.id)
+          .execute()
+      }
     }
   }
 
