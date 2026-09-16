@@ -139,7 +139,7 @@ export async function parentRoutes(app: FastifyInstance) {
       'ac.payment_details as account_payment_details',
     ] as const
 
-    const [enrollments, transactions, attendanceLogs, initialBalances, txBefore] = await Promise.all([
+    const [enrollments, transactions, paymentsInMonth, attendanceLogs, initialBalances, txBefore] = await Promise.all([
       // Active/frozen enrollments with account info
       db.selectFrom('enrollments as e')
         .innerJoin('activities as a', 'a.id', 'e.activity_id')
@@ -165,6 +165,16 @@ export async function parentRoutes(app: FastifyInstance) {
         .where('t.transaction_date', '>=', new Date(from))
         .where('t.transaction_date', '<=', new Date(to))
         .orderBy('t.transaction_date', 'desc')
+        .execute(),
+
+      // PAYMENT transactions in current month for account payments_total
+      db.selectFrom('transactions as t')
+        .select(['t.account_id', 't.amount'])
+        .where('t.child_id', '=', req.params.childId)
+        .where('t.type', '=', 'PAYMENT')
+        .where('t.is_deleted', '=', false)
+        .where('t.transaction_date', '>=', new Date(from))
+        .where('t.transaction_date', '<=', new Date(to))
         .execute(),
 
       db.selectFrom('attendance_logs as al')
@@ -329,12 +339,20 @@ export async function parentRoutes(app: FastifyInstance) {
       }
     }
 
+    const paymentsTotalMap = new Map<string, number>()
+    for (const p of paymentsInMonth) {
+      const accountId = p.account_id ?? 'unknown'
+      const cur = paymentsTotalMap.get(accountId) ?? 0
+      paymentsTotalMap.set(accountId, cur + parseFloat(String(p.amount)))
+    }
+
     return Array.from(accountMap.values())
       .map(acct => ({
         account_id: acct.account_id,
         account_name: acct.account_name,
         account_payment_details: acct.account_payment_details,
         balance_start: balanceAtStartMap.get(acct.account_id) ?? 0,
+        payments_total: paymentsTotalMap.get(acct.account_id) ?? 0,
         activities: Array.from(acct.activities.values())
           .filter(a => a.enrollment_status !== null || a.transactions.length > 0)
           .map(a => ({

@@ -421,6 +421,7 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
     account_name: string
     payment_details: string | null
     balance_start: number
+    payments_total: number
     prevActivities: ActivityMonthlySummary[]
     currSubscriptions: (ActivityMonthlySummary & { display_price: number })[]
   }>()
@@ -434,7 +435,8 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
         accountMap.set(acct.account_id, {
           account_name: acct.account_name,
           payment_details: acct.account_payment_details,
-          balance_start: 0, // Will be set or overwritten by current month summary
+          balance_start: 0,
+          payments_total: 0,
           prevActivities: [],
           currSubscriptions: []
         })
@@ -463,12 +465,14 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
           account_name: acct.account_name,
           payment_details: acct.account_payment_details,
           balance_start: acct.balance_start,
+          payments_total: acct.payments_total ?? 0,
           prevActivities: [],
           currSubscriptions: []
         })
       } else {
-        // Set the current month's starting balance
+        // Set the current month's starting balance & payments total
         accountMap.get(acct.account_id)!.balance_start = acct.balance_start
+        accountMap.get(acct.account_id)!.payments_total = acct.payments_total ?? 0
       }
       // Overwrite/set payment details if not set from previous month
       if (acct.account_payment_details) {
@@ -532,11 +536,14 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
         const currSum = acct.currSubscriptions.reduce((s, a) => s + a.display_price, 0)
 
         const balanceStart = acct.balance_start
+        const paymentsCurrent = acct.payments_total
 
-        // Recommended payment formula: Current subscriptions - Starting Balance of the month (which already includes prev month consumed)
-        // Positive balanceStart = advance/overpayment -> reduces recommended payment
-        // Negative balanceStart = debt -> increases recommended payment
-        const recommendedPayment = Math.max(0, currSum - balanceStart)
+        // Calculations with current month payments:
+        const initialRecommended = Math.max(0, currSum - balanceStart)
+        const netBalanceCurrent = balanceStart + paymentsCurrent - currSum
+        const netRecommended = Math.max(0, -netBalanceCurrent)
+        const advanceAmount = Math.max(0, netBalanceCurrent)
+        const remainingPrevDebt = balanceStart < 0 ? Math.min(0, balanceStart + paymentsCurrent) : 0
 
         return (
           <div key={acct.account_id} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm print:border-none print:shadow-none">
@@ -611,7 +618,7 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
               )}
 
               {/* Final Totals Table */}
-              <div className="pt-2 border-t border-gray-100 space-y-1.5 print:border-gray-300">
+              <div className="pt-2 border-t border-gray-100 space-y-2 print:border-gray-300">
                 <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
                   <span>Сума за абонементи:</span>
                   <span className="font-medium font-mono">{currSum.toFixed(2)} ₴</span>
@@ -626,12 +633,55 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                     {balanceStart > 0 ? '+' : ''}{balanceStart.toFixed(2)} ₴
                   </span>
                 </div>
-                <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 print:border-gray-300">
-                  <span className="text-base font-bold text-gray-800">Рекомендовано до сплати:</span>
-                  <span className="text-xl font-extrabold text-iris-600 tabular-nums font-mono print:text-black">
-                    {recommendedPayment.toFixed(2)} ₴
+
+                {/* Current month payments if any */}
+                {paymentsCurrent > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm text-emerald-700 print:text-emerald-800">
+                      <span className="flex items-center gap-1 font-medium">
+                        <span>💳 Сплачено у поточному місяці:</span>
+                      </span>
+                      <span className="font-semibold font-mono">+{paymentsCurrent.toFixed(2)} ₴</span>
+                    </div>
+
+                    {balanceStart < 0 && (
+                      <div className="flex justify-between text-xs text-gray-500 pl-3 border-l-2 border-emerald-200">
+                        <span>Залишок боргу за минулий період:</span>
+                        <span className={`font-mono font-medium ${remainingPrevDebt < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {remainingPrevDebt.toFixed(2)} ₴
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Final recommendation */}
+                <div className="flex justify-between items-center pt-2.5 border-t border-dashed border-gray-200 print:border-gray-300">
+                  <div>
+                    <span className="text-base font-bold text-gray-900 block">
+                      Рекомендовано до сплати з урахуванням надходжень:
+                    </span>
+                    {paymentsCurrent > 0 && (
+                      <span className="text-xs text-gray-400 print:text-gray-500">
+                        (початково на 1-е число: {initialRecommended.toFixed(2)} ₴)
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-xl font-extrabold tabular-nums font-mono ${netRecommended > 0 ? 'text-iris-600 print:text-black' : 'text-emerald-600'}`}>
+                    {netRecommended.toFixed(2)} ₴
                   </span>
                 </div>
+
+                {/* Overpayment / Prepaid Advance Banner */}
+                {advanceAmount > 0 && (
+                  <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs font-semibold text-emerald-800 print:bg-white print:border-emerald-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-sm">✨</span>
+                      <span>Передплачений аванс на рахунку:</span>
+                    </span>
+                    <span className="text-sm font-bold font-mono text-emerald-700">+{advanceAmount.toFixed(2)} ₴</span>
+                  </div>
+                )}
               </div>
 
               {/* Requisites Block */}

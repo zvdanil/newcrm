@@ -60,6 +60,7 @@ export interface AccountMonthlySummary {
   account_name: string
   account_payment_details: string | null
   balance_start: number
+  payments_total?: number
   activities: ActivityMonthlySummary[]
 }
 
