@@ -174,9 +174,23 @@ export function PaymentDayDialog({
 
   const [form, setForm] = useState({ gross_amount: '', account_id: '', note: '', commission: '' })
   const [error, setError] = useState<string | null>(null)
+  const [linkExpense, setLinkExpense] = useState(true)
 
   const commissionAmt = parseFloat(form.commission) || 0
   const hasCommission = commissionAmt > 0
+
+  const numGrossAmount = parseFloat(form.gross_amount) || 0
+  const { data: duplicateCheck } = useQuery({
+    queryKey: ['check-duplicate-expense', staffId, form.account_id, numGrossAmount, date],
+    queryFn: () => staffApi.checkDuplicateExpense(staffId, {
+      account_id: form.account_id || undefined,
+      amount: numGrossAmount > 0 ? numGrossAmount : undefined,
+      transaction_date: date || undefined,
+    }),
+    enabled: !!form.account_id && numGrossAmount > 0,
+  })
+
+  const matchedExpense = duplicateCheck?.matches && duplicateCheck.matches.length > 0 ? duplicateCheck.matches[0] : null
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['salary', staffId] })
@@ -190,6 +204,7 @@ export function PaymentDayDialog({
       account_id:       form.account_id || undefined,
       note:             form.note || undefined,
       commission:       commissionAmt > 0 ? commissionAmt : undefined,
+      linked_expense_id: (matchedExpense && linkExpense) ? matchedExpense.id : undefined,
     }),
     onSuccess: () => { invalidateAll(); onClose() },
     onError:   () => setError('Помилка збереження'),
@@ -292,6 +307,20 @@ export function PaymentDayDialog({
               </div>
             )}
           </div>
+          {matchedExpense && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-xs text-yellow-900 space-y-1.5">
+              <div className="font-semibold text-yellow-800 flex items-center gap-1">
+                <span>💡</span> У банковскій виписці від {matchedExpense.date} знайдено списання:
+              </div>
+              <div className="font-medium">
+                {matchedExpense.amount.toLocaleString('uk-UA', { minimumFractionDigits: 2 })} ₴ — {matchedExpense.note || 'Списание з виписки'} ({matchedExpense.category_name || 'Зарплата'})
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer pt-1 font-medium text-yellow-900">
+                <input type="checkbox" checked={linkExpense} onChange={e => setLinkExpense(e.target.checked)} className="rounded text-yellow-600 focus:ring-yellow-500" />
+                <span>Связать эту выплату с банковским расходом (без дублирования в отчётах)</span>
+              </label>
+            </div>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button

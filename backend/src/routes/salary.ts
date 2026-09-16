@@ -470,6 +470,31 @@ export async function salaryRoutes(app: FastifyInstance) {
         created_by:       req.user.sub,
       }).returningAll().executeTakeFirstOrThrow()
 
+      if (linked_expense_id) {
+        const staff = await db.selectFrom('staff').select('full_name').where('id', '=', req.params.id).executeTakeFirst()
+        const staffName = staff?.full_name ?? req.params.id
+
+        const existingExpense = await db.selectFrom('expenses')
+          .select(['id', 'note', 'staff_id'])
+          .where('id', '=', linked_expense_id)
+          .executeTakeFirst()
+
+        if (existingExpense) {
+          const noteSuffix = `(Виплачено педагогу: ${staffName})`
+          const newNote = existingExpense.note
+            ? (existingExpense.note.includes(staffName) ? existingExpense.note : `${existingExpense.note} ${noteSuffix}`)
+            : `Виплачено педагогу: ${staffName}`
+
+          await db.updateTable('expenses')
+            .set({
+              note: newNote,
+              staff_id: req.params.id,
+            })
+            .where('id', '=', linked_expense_id)
+            .execute()
+        }
+      }
+
       let commissionExpense = null
       if (commissionAmt > 0) {
         const staff = await db.selectFrom('staff').select('full_name').where('id', '=', req.params.id).executeTakeFirst()

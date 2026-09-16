@@ -39,7 +39,7 @@ const balanceSql = sql<string>`(
       WHERE e.account_id = a.id AND e.status = 'paid' AND e.is_deleted = false AND e.is_advance_return = false
     ), 0)
   + COALESCE((SELECT SUM(amount) FROM expenses WHERE account_id = a.id AND status = 'paid' AND is_deleted = false AND is_advance_return = true), 0)
-  - COALESCE((SELECT SUM(gross_amount) FROM salary_transactions WHERE account_id = a.id AND type = 'PAYMENT' AND is_deleted = false), 0)
+  - COALESCE((SELECT SUM(gross_amount) FROM salary_transactions WHERE account_id = a.id AND type = 'PAYMENT' AND is_deleted = false AND (metadata_json->>'linked_expense_id') IS NULL), 0)
   + COALESCE((SELECT SUM(amount) FROM account_transfers WHERE to_account_id   = a.id), 0)
   - COALESCE((
       SELECT SUM(amount) FROM account_transfers WHERE from_account_id = a.id
@@ -155,6 +155,7 @@ export async function accountsRoutes(app: FastifyInstance) {
             + COALESCE((
               SELECT SUM(gross_amount) FROM salary_transactions
               WHERE account_id = ${id} AND type = 'PAYMENT' AND is_deleted = false
+                AND (metadata_json->>'linked_expense_id') IS NULL
                 AND (${f}::date IS NULL OR transaction_date::date >= ${f}::date)
                 AND (${t}::date IS NULL OR transaction_date::date <= ${t}::date)
             ), 0)
@@ -342,6 +343,7 @@ export async function accountsRoutes(app: FastifyInstance) {
         WHERE st.account_id = ${id}
           AND st.type       = 'PAYMENT'
           AND st.is_deleted = false
+          AND (st.metadata_json->>'linked_expense_id') IS NULL
           AND (${f}::date IS NULL OR st.transaction_date::date >= ${f}::date)
           AND (${t}::date IS NULL OR st.transaction_date::date <= ${t}::date)
 
