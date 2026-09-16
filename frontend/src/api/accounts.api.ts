@@ -25,6 +25,7 @@ export interface LedgerRow {
   utilized_advance_amount: string | null
   is_obnal: boolean
   obnal_amount: string | null
+  staff_name?: string | null
 }
 
 export interface LedgerFilters {

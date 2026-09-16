@@ -72,7 +72,13 @@ function formatLedgerNote(note: string | null | undefined): string {
   if (note.startsWith('bank_ref:')) {
     // Line 1 = bank_ref key (machine use only), line 2+ = human content
     const lines = note.split('\n')
-    const human = lines.slice(1).join(' ').trim()
+    let human = lines.slice(1).join(' ').trim()
+    if (!human) {
+      const spaceIdx = note.indexOf(' ')
+      if (spaceIdx !== -1) {
+        human = note.slice(spaceIdx).trim()
+      }
+    }
     return human || 'Імпорт виписки'
   }
   return note
@@ -808,6 +814,14 @@ export function AccountCardPage() {
                             title={row.obnal_amount ? `Сума обналичування: ${Number(row.obnal_amount).toFixed(2)} ₴` : undefined}
                           >
                             обналичивание{row.obnal_amount ? ` ${Number(row.obnal_amount).toFixed(2)} ₴` : ''}
+                          </span>
+                        )}
+                        {row.staff_name && row.kind === 'expense' && (
+                          <span
+                            className="text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-medium whitespace-nowrap"
+                            title={`Виплачено педагогу: ${row.staff_name}`}
+                          >
+                            ЗП: {row.staff_name}
                           </span>
                         )}
                       </div>
