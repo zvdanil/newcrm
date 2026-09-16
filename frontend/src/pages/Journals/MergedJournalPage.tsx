@@ -144,7 +144,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
 
   // Resolve border color in one place to avoid Tailwind class conflicts
   const borderColor = isNoTeacherPayroll
-    ? (isIndividual ? 'border-amber-500 ring-2 ring-amber-300' : 'border-amber-400 ring-2 ring-amber-300')
+    ? (isIndividual ? 'border-amber-500 ring-4 ring-amber-300' : 'border-amber-400 ring-4 ring-amber-300')
     : (isIndividual
       ? 'border-purple-600 ring-2 ring-purple-300'
       : (isSpecialMasked
@@ -176,16 +176,6 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
       {isIndividual && (
         <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
           ІЗ
-        </span>
-      )}
-      {isNoTeacherPayroll && !isIndividual && (
-        <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
-          без ЗП
-        </span>
-      )}
-      {isNoTeacherPayroll && isIndividual && (
-        <span className="absolute -top-1 -right-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
-          без ЗП
         </span>
       )}
     </button>
