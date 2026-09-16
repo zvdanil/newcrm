@@ -139,14 +139,17 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
   }
 
   const isIndividual = Boolean(log.is_individual_class)
+  const isNoTeacherPayroll = Boolean(log.is_no_teacher_payroll)
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
 
   // Resolve border color in one place to avoid Tailwind class conflicts
-  const borderColor = isIndividual
-    ? 'border-purple-600 ring-2 ring-purple-300'
-    : (isSpecialMasked
-      ? 'border-green-600'
-      : (isHighlighted ? 'border-iris-300' : 'border-transparent'))
+  const borderColor = isNoTeacherPayroll
+    ? (isIndividual ? 'border-amber-500 ring-2 ring-amber-300' : 'border-amber-400 ring-2 ring-amber-300')
+    : (isIndividual
+      ? 'border-purple-600 ring-2 ring-purple-300'
+      : (isSpecialMasked
+        ? 'border-green-600'
+        : (isHighlighted ? 'border-iris-300' : 'border-transparent')))
 
   const cellBg = isSpecialMasked
     ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -175,6 +178,16 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
           ІЗ
         </span>
       )}
+      {isNoTeacherPayroll && !isIndividual && (
+        <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
+          без ЗП
+        </span>
+      )}
+      {isNoTeacherPayroll && isIndividual && (
+        <span className="absolute -top-1 -right-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
+          без ЗП
+        </span>
+      )}
     </button>
   )
 })
@@ -197,12 +210,14 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
   const [isIndividualClass, setIsIndividualClass] = useState<boolean>(Boolean(log?.is_individual_class))
+  const [isNoTeacherPayroll, setIsNoTeacherPayroll] = useState<boolean>(Boolean(log?.is_no_teacher_payroll))
 
   useEffect(() => {
     setStatus(log?.status ?? 'present')
     setAmount(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
     setNote(log?.note ?? '')
     setIsIndividualClass(Boolean(log?.is_individual_class))
+    setIsNoTeacherPayroll(Boolean(log?.is_no_teacher_payroll))
   }, [log])
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
@@ -253,6 +268,20 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
           </label>
         </div>
 
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/80 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100/80 transition-colors" onClick={() => setIsNoTeacherPayroll(!isNoTeacherPayroll)}>
+          <input
+            type="checkbox"
+            id="isNoTeacherPayrollCheckMerged"
+            checked={isNoTeacherPayroll}
+            onChange={(e) => setIsNoTeacherPayroll(e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+          />
+          <label htmlFor="isNoTeacherPayrollCheckMerged" className="text-xs font-bold text-amber-900 cursor-pointer select-none">
+            Не начислять педагогу
+          </label>
+        </div>
+
         {!isDutyAdmin && status === 'special' && (
           <div className="animate-in slide-in-from-top-2 duration-200">
             <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">Сума (грн)</label>
@@ -281,7 +310,7 @@ function MergedAttendanceDialog({ enrollmentId, dateStr, log, openContext, isDut
         </div>
         <div className="flex gap-3 pt-2">
           {log && !isLockedSpecial && <button onClick={() => onDelete(log.id)} className="px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-semibold text-sm">Видалити</button>}
-          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note, is_individual_class: isIndividualClass })}
+          <button onClick={() => onSave({ enrollmentId, dateStr, logId: log?.id, status, amount: (!isDutyAdmin && status === 'special') ? Number(amount) : null, note, is_individual_class: isIndividualClass, is_no_teacher_payroll: isNoTeacherPayroll })}
             className="flex-1 py-2.5 bg-iris-600 hover:bg-iris-700 text-white text-sm font-bold rounded-xl shadow-lg transition-all transform active:scale-95">Зберегти</button>
         </div>
       </div>
@@ -326,8 +355,8 @@ export function MergedJournalPage() {
 
   const markMutation = useMutation({
     mutationFn: async (p: any) => {
-      if (p.logId) return attendanceApi.update(p.logId, { status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class })
-      return attendanceApi.mark({ enrollment_id: p.enrollmentId, date: p.dateStr, status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class })
+      if (p.logId) return attendanceApi.update(p.logId, { status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class, is_no_teacher_payroll: p.is_no_teacher_payroll })
+      return attendanceApi.mark({ enrollment_id: p.enrollmentId, date: p.dateStr, status: p.status, custom_amount: p.amount, note: p.note, is_individual_class: p.is_individual_class, is_no_teacher_payroll: p.is_no_teacher_payroll })
     },
     onSuccess: () => { invalidate(); setDialogTarget(null) },
   })

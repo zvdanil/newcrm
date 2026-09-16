@@ -147,14 +147,17 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
   }
 
   const isIndividual = Boolean(log.is_individual_class)
+  const isNoTeacherPayroll = Boolean(log.is_no_teacher_payroll)
   const isSpecialMasked = isDutyAdmin && log.status === 'special'
 
   // Resolve border color in one place to avoid Tailwind class conflicts
-  const borderColor = isIndividual
-    ? 'border-purple-600 ring-2 ring-purple-300'
-    : (isSpecialMasked
-      ? 'border-green-600'
-      : (isHighlightedDate ? 'border-iris-300' : 'border-transparent'))
+  const borderColor = isNoTeacherPayroll
+    ? (isIndividual ? 'border-amber-500 ring-2 ring-amber-300' : 'border-amber-400 ring-2 ring-amber-300')
+    : (isIndividual
+      ? 'border-purple-600 ring-2 ring-purple-300'
+      : (isSpecialMasked
+        ? 'border-green-600'
+        : (isHighlightedDate ? 'border-iris-300' : 'border-transparent')))
 
   const cellBg = isSpecialMasked
     ? 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -192,6 +195,17 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
           ІЗ
         </span>
       )}
+
+      {isNoTeacherPayroll && !isIndividual && (
+        <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
+          без ЗП
+        </span>
+      )}
+      {isNoTeacherPayroll && isIndividual && (
+        <span className="absolute -top-1 -right-1 px-1 py-0.5 bg-amber-500 text-white text-[6px] font-black rounded-full shadow-sm leading-none z-10" title="Не начислять педагогу">
+          без ЗП
+        </span>
+      )}
     </div>
   )
 })
@@ -203,7 +217,7 @@ interface AttendanceDialogProps {
   dateStr: string
   openContext: 'edit' | 'note'
   isDutyAdmin: boolean
-  onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean }) => void
+  onSave: (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean, is_no_teacher_payroll?: boolean }) => void
   onDelete: (logId: string) => void
   onClose: () => void
 }
@@ -214,12 +228,14 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
   const [amount, setAmount] = useState(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
   const [note, setNote]     = useState(log?.note ?? '')
   const [isIndividualClass, setIsIndividualClass] = useState<boolean>(Boolean(log?.is_individual_class))
+  const [isNoTeacherPayroll, setIsNoTeacherPayroll] = useState<boolean>(Boolean(log?.is_no_teacher_payroll))
 
   useEffect(() => {
     setStatus(log?.status ?? 'present')
     setAmount(log?.custom_amount != null ? String(Number(log.custom_amount)) : '')
     setNote(log?.note ?? '')
     setIsIndividualClass(Boolean(log?.is_individual_class))
+    setIsNoTeacherPayroll(Boolean(log?.is_no_teacher_payroll))
   }, [log])
 
   const isLockedSpecial = isDutyAdmin && log?.status === 'special'
@@ -233,6 +249,7 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
       amount: (!isDutyAdmin && status === 'special') ? (amount === '' ? 0 : Number(amount)) : null,
       note: note.trim() || null,
       is_individual_class: isIndividualClass,
+      is_no_teacher_payroll: isNoTeacherPayroll,
     })
   }
 
@@ -287,6 +304,20 @@ function AttendanceDialog({ row, dateStr, openContext, isDutyAdmin, onSave, onDe
           />
           <label htmlFor="isIndividualClassCheck" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
             "ІЗ" Індивідуальне заняття
+          </label>
+        </div>
+
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/80 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100/80 transition-colors" onClick={() => setIsNoTeacherPayroll(!isNoTeacherPayroll)}>
+          <input
+            type="checkbox"
+            id="isNoTeacherPayrollCheck"
+            checked={isNoTeacherPayroll}
+            onChange={(e) => setIsNoTeacherPayroll(e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+          />
+          <label htmlFor="isNoTeacherPayrollCheck" className="text-xs font-bold text-amber-900 cursor-pointer select-none">
+            Не начислять педагогу
           </label>
         </div>
 
@@ -459,9 +490,9 @@ export function JournalPage() {
     triggerAutoGroup(dateStr)
   }, [markMutation, triggerAutoGroup])
 
-  const handleDialogSave = (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean }) => {
-    if (payload.logId) updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class } })
-    else markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class })
+  const handleDialogSave = (payload: { enrollmentId: string, dateStr: string, logId: string | null, status: AttendanceStatus, amount?: number | null, note?: string | null, is_individual_class?: boolean, is_no_teacher_payroll?: boolean }) => {
+    if (payload.logId) updateMutation.mutate({ id: payload.logId, payload: { status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class, is_no_teacher_payroll: payload.is_no_teacher_payroll } })
+    else markMutation.mutate({ enrollment_id: payload.enrollmentId, date: payload.dateStr, status: payload.status, custom_amount: payload.amount, note: payload.note, is_individual_class: payload.is_individual_class, is_no_teacher_payroll: payload.is_no_teacher_payroll })
     
     if (payload.status === 'present' || payload.status === 'special' || payload.is_individual_class) {
       triggerAutoGroup(payload.dateStr)

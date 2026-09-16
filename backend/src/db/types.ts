@@ -189,6 +189,7 @@ export interface AttendanceLogsTable {
   notes_json:    ColumnType<unknown, string | object | undefined, string | object>
   created_by:          string | null
   is_individual_class: Generated<boolean>
+  is_no_teacher_payroll: Generated<boolean>
   created_at:          Generated<Date>
   updated_at:    Generated<Date>
 }

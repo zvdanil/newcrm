@@ -196,6 +196,7 @@ export interface AttendanceLog {
   attributed_notes?: AttributedNote[]
   has_note?: boolean
   is_individual_class?: boolean
+  is_no_teacher_payroll?: boolean
   created_by: string | null
   created_at: string
   updated_at: string

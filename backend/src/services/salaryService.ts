@@ -98,6 +98,10 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
         sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
       ]),
     ]))
+    .where((eb) => eb.or([
+      eb('al.is_no_teacher_payroll', 'is', null),
+      eb('al.is_no_teacher_payroll', '=', false),
+    ]))
     .execute()
 
   // Group by child and date to ensure we count distinct visits (days attended)
@@ -527,6 +531,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       eb('is_individual_class', 'is', null),
       eb('is_individual_class', '=', false),
     ]))
+    .where((eb) => eb.or([
+      eb('is_no_teacher_payroll', 'is', null),
+      eb('is_no_teacher_payroll', '=', false),
+    ]))
     .executeTakeFirst()
 
   const presentCount = Number(presentResult?.cnt ?? 0)
@@ -546,6 +554,10 @@ export async function recalcStaffAccruals(activityId: string, date: string): Pro
       ]),
     ]))
     .where('al.is_individual_class', '=', true)
+    .where((eb) => eb.or([
+      eb('al.is_no_teacher_payroll', 'is', null),
+      eb('al.is_no_teacher_payroll', '=', false),
+    ]))
     .execute()
 
   const specialChildrenNames = specialChildren.map(c => c.full_name)

@@ -801,12 +801,13 @@ export async function journalsRoutes(app: FastifyInstance) {
       custom_amount?: number | null
       note?: string | null
       is_individual_class?: boolean
+      is_no_teacher_payroll?: boolean
     }
   }>(
     '/attendance',
     { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
-      const { enrollment_id, date, status, custom_amount, note, is_individual_class } = req.body
+      const { enrollment_id, date, status, custom_amount, note, is_individual_class, is_no_teacher_payroll } = req.body
       if (!enrollment_id || !date || !status) {
         return reply.status(400).send({ error: 'BadRequest', message: 'enrollment_id, date, status є обовʼязковими' })
       }
@@ -858,6 +859,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             notes_json: initialNotesJson,
             created_by: createdBy,
             is_individual_class: is_individual_class ?? false,
+            is_no_teacher_payroll: is_no_teacher_payroll ?? false,
           })
           .onConflict((oc) =>
             oc.columns(['enrollment_id', 'date']).doUpdateSet({
@@ -866,6 +868,7 @@ export async function journalsRoutes(app: FastifyInstance) {
               note: note?.trim() || null,
               notes_json: initialNotesJson,
               is_individual_class: is_individual_class ?? false,
+              is_no_teacher_payroll: is_no_teacher_payroll ?? false,
               updated_at: new Date().toISOString() as unknown as Date,
             })
           )
@@ -952,12 +955,13 @@ export async function journalsRoutes(app: FastifyInstance) {
       custom_amount?: number | null
       note?: string | null
       is_individual_class?: boolean
+      is_no_teacher_payroll?: boolean
     }
   }>(
     '/attendance/:id',
     { preHandler: requireRole('owner', 'admin', 'manager', 'teacher', 'duty_admin') },
     async (req, reply) => {
-      const { status, custom_amount, note, is_individual_class } = req.body
+      const { status, custom_amount, note, is_individual_class, is_no_teacher_payroll } = req.body
       const createdBy = (req.user as { sub: string }).sub
 
       const existing = await db.selectFrom('attendance_logs').selectAll().where('id', '=', req.params.id).executeTakeFirst()
@@ -986,6 +990,7 @@ export async function journalsRoutes(app: FastifyInstance) {
             custom_amount: safeCustomAmount,
             notes_json: buildNotesJsonUpsert(putUserId, putUserRole, putUserName, note ?? null),
             is_individual_class: is_individual_class ?? false,
+            is_no_teacher_payroll: is_no_teacher_payroll ?? false,
           })
           .where('id', '=', req.params.id)
           .returningAll()

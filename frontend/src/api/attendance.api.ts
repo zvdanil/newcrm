@@ -15,6 +15,7 @@ export const attendanceApi = {
     custom_amount?: number | null
     note?: string | null
     is_individual_class?: boolean
+    is_no_teacher_payroll?: boolean
   }) => {
     const { data } = await apiClient.post<AttendanceLog>('/journals/attendance', payload)
     return data
@@ -25,6 +26,7 @@ export const attendanceApi = {
     custom_amount?: number | null
     note?: string | null
     is_individual_class?: boolean
+    is_no_teacher_payroll?: boolean
   }) => {
     const { data } = await apiClient.put<AttendanceLog>(`/journals/attendance/${id}`, payload)
     return data
