@@ -338,6 +338,7 @@ export async function childrenRoutes(app: FastifyInstance) {
           'a.name as account_name',
           (eb) => eb.fn.coalesce('cb.balance', eb.lit(0)).as('balance'),
           (eb) => eb.fn.coalesce('ib.amount', eb.lit(0)).as('initial_balance'),
+          'ib.balance_date as initial_balance_date',
           'ib.note as initial_balance_note',
           'cb.updated_at',
         ])
@@ -714,13 +715,13 @@ export async function childrenRoutes(app: FastifyInstance) {
   // POST /api/children/:id/initial-balance — set opening balance (Owner only)
   app.post<{
     Params: { id: string }
-    Body: { account_id: string; amount: number; note?: string }
+    Body: { account_id: string; amount: number; balance_date?: string; note?: string }
   }>(
     '/:id/initial-balance',
     { preHandler: requireRole('owner') },
     async (request, reply) => {
       const { id } = request.params
-      const { account_id, amount, note } = request.body
+      const { account_id, amount, balance_date, note } = request.body
 
       const child = await db
         .selectFrom('children')
@@ -729,17 +730,24 @@ export async function childrenRoutes(app: FastifyInstance) {
         .executeTakeFirst()
       if (!child) return reply.status(404).send({ error: 'NotFound' })
 
+      const targetDate = balance_date || new Date().toISOString().slice(0, 10)
+
       const row = await db
         .insertInto('initial_balances')
         .values({
           child_id: id,
           account_id,
           amount,
+          balance_date: targetDate,
           note: note ?? null,
           created_by: request.user.sub,
         })
         .onConflict((oc) =>
-          oc.columns(['child_id', 'account_id']).doUpdateSet({ amount, note: note ?? null })
+          oc.columns(['child_id', 'account_id']).doUpdateSet({
+            amount,
+            balance_date: targetDate,
+            note: note ?? null,
+          })
         )
         .returningAll()
         .executeTakeFirstOrThrow()

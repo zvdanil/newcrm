@@ -5,6 +5,7 @@ export interface ChildBalance {
   account_name: string
   balance: string
   initial_balance: string
+  initial_balance_date?: string | null
   initial_balance_note: string | null
   updated_at: string
 }
@@ -120,7 +121,7 @@ export const billingApi = {
     return data
   },
 
-  setInitialBalance: async (childId: string, payload: { account_id: string; amount: number; note?: string }) => {
+  setInitialBalance: async (childId: string, payload: { account_id: string; amount: number; balance_date?: string; note?: string }) => {
     const { data } = await apiClient.post(`/children/${childId}/initial-balance`, payload)
     return data
   },

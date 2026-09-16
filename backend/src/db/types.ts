@@ -244,13 +244,14 @@ export interface ChildBalancesTable {
 }
 
 export interface InitialBalancesTable {
-  id:         Generated<string>
-  child_id:   string
-  account_id: string
-  amount:     ColumnType<string, number | string, number | string>
-  note:       string | null
-  created_by: string | null
-  created_at: Generated<Date>
+  id:           Generated<string>
+  child_id:     string
+  account_id:   string
+  amount:       ColumnType<string, number | string, number | string>
+  balance_date: ColumnType<Date, string | Date | undefined, string | Date>
+  note:         string | null
+  created_by:   string | null
+  created_at:   Generated<Date>
 }
 
 export type ExpenseStatus = 'pending' | 'paid'

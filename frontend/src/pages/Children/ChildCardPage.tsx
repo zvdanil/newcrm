@@ -1636,7 +1636,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
   const qc = useQueryClient()
   const [showInitForm, setShowInitForm] = useState(false)
   const [showPayForm, setShowPayForm] = useState(false)
-  const [initForm, setInitForm] = useState({ account_id: '', amount: '', note: '' })
+  const [initForm, setInitForm] = useState({ account_id: '', amount: '', date: todayStr(), note: '' })
   const [payForm, setPayForm]   = useState({
     account_id: '',
     payment_account_id: '',
@@ -1688,11 +1688,14 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
 
   const initMutation = useMutation({
     mutationFn: () => billingApi.setInitialBalance(childId, {
-      account_id: initForm.account_id, amount: Number(initForm.amount), note: initForm.note || undefined,
+      account_id: initForm.account_id,
+      amount: Number(initForm.amount),
+      balance_date: initForm.date,
+      note: initForm.note || undefined,
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['balance', childId] })
-      setShowInitForm(false); setInitForm({ account_id: '', amount: '', note: '' }); setInitError(null)
+      setShowInitForm(false); setInitForm({ account_id: '', amount: '', date: todayStr(), note: '' }); setInitError(null)
     },
     onError: () => setInitError('Помилка збереження'),
   })
@@ -1846,7 +1849,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
               className="text-sm text-iris-600 hover:text-iris-700 font-medium">
               + Оплата
             </button>
-            <button onClick={() => { setShowInitForm(true); setShowPayForm(false) }}
+            <button onClick={() => { setShowInitForm(true); setShowPayForm(false); setInitForm({ account_id: '', amount: '', date: todayStr(), note: '' }) }}
               className="text-xs text-gray-400 hover:text-gray-600">
               Поч. залишок
             </button>
@@ -1926,13 +1929,20 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                   {(Number(b.initial_balance) !== 0 || b.initial_balance_note) && (
                     <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between">
                       <div>
-                        <span className="text-xs text-gray-500">Поч. залишок: </span>
+                        <span className="text-xs text-gray-500">
+                          Поч. залишок{b.initial_balance_date ? ` (${String(b.initial_balance_date).slice(0, 10)})` : ''}:{' '}
+                        </span>
                         <span className="text-xs font-medium text-gray-700">{Number(b.initial_balance).toFixed(2)}</span>
                       </div>
                       {canEdit && (
                         <button 
                           onClick={() => {
-                            setInitForm({ account_id: b.account_id, amount: String(b.initial_balance), note: b.initial_balance_note ?? '' })
+                            setInitForm({
+                              account_id: b.account_id,
+                              amount: String(b.initial_balance),
+                              date: b.initial_balance_date ? String(b.initial_balance_date).slice(0, 10) : todayStr(),
+                              note: b.initial_balance_note ?? '',
+                            })
                             setShowInitForm(true)
                             setShowPayForm(false)
                           }}
@@ -2077,7 +2087,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
       {showInitForm && (
         <div className="p-4 bg-amber-50 rounded-lg space-y-3 border border-amber-200">
           <p className="text-sm font-medium text-gray-700">Початковий залишок</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Рахунок *</label>
               <select value={initForm.account_id} onChange={(e) => setInitForm({ ...initForm, account_id: e.target.value })}
@@ -2093,12 +2103,17 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                 placeholder="напр. 1500 або -800"
                 className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Дата остатку *</label>
+              <input type="date" value={initForm.date} onChange={(e) => setInitForm({ ...initForm, date: e.target.value })}
+                className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
+            </div>
           </div>
           <input type="text" placeholder="Нотатка" value={initForm.note} onChange={(e) => setInitForm({ ...initForm, note: e.target.value })}
             className="w-full rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500" />
           {initError && <p className="text-xs text-red-600">{initError}</p>}
           <div className="flex gap-2">
-            <button onClick={() => { if (!initForm.account_id || !initForm.amount) { setInitError('Оберіть рахунок та суму'); return } initMutation.mutate() }}
+            <button onClick={() => { if (!initForm.account_id || !initForm.amount || !initForm.date) { setInitError('Оберіть рахунок, суму та дату'); return } initMutation.mutate() }}
               disabled={initMutation.isPending}
               className="text-xs px-3 py-1.5 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-md">
               {initMutation.isPending ? '...' : 'Зберегти'}
