@@ -3,6 +3,7 @@ import { db } from '../db/index.js'
 import { sql } from 'kysely'
 import { requireRole } from '../plugins/authenticate.js'
 import { recalcRetroAccruals, triggerRetroAccruals, recalcSmartStaffBenefit, recalcSmartPerChildBenefit, recalcFixedMonthlyAccruals, recalcStaffAccruals } from '../services/salaryService.js'
+import { castAsDate } from '../services/dateUtils.js'
 
 function countDaysInPeriod(periodStart: string, periodEnd: string, calcType: 'CALENDAR_DAYS' | 'WORKING_DAYS'): number {
   const start = new Date(periodStart + 'T00:00:00')
@@ -264,13 +265,13 @@ export async function staffRoutes(app: FastifyInstance) {
           .where('id', '=', oldRate.id)
           .execute()
 
-        // Delete any CORRECTION transactions attached to this rate that are now superseded
+        // Delete any CORRECTION or ACCRUAL transactions attached to this rate that are now superseded by the new rate
         await db.updateTable('salary_transactions')
           .set({ is_deleted: true, deleted_at: new Date().toISOString() })
           .where('staff_id', '=', req.params.id)
           .where('rate_id', '=', oldRate.id)
-          .where('type', '=', 'CORRECTION')
-          .where('transaction_date', '>=', fromDateObj)
+          .where('type', 'in', ['CORRECTION', 'ACCRUAL'])
+          .where('billing_month', '>=', castAsDate(fromDate))
           .execute()
       }
 
@@ -562,6 +563,11 @@ export async function staffRoutes(app: FastifyInstance) {
         .where('staff_id',      '=', staffId)
         .where('rate_category', '=', 'auto')
         .where('rate_type', 'in', ['smart', 'smart_per_child'])
+        .where('valid_from', '<=', castAsDate(billingMonth))
+        .where((eb) => eb.or([
+          eb('valid_to', 'is', null),
+          eb('valid_to', '>', castAsDate(billingMonth)),
+        ]))
         .execute()
 
       for (const r of smartRates) {

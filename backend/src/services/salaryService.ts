@@ -66,6 +66,25 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
 
   if (!rate || !config || !rate.activity_id) return
 
+  const bDate = new Date(billingMonth)
+  const bMonthStart = new Date(bDate.getFullYear(), bDate.getMonth(), 1)
+  const bMonthEnd = new Date(bDate.getFullYear(), bDate.getMonth() + 1, 0, 23, 59, 59)
+
+  if (
+    (rate.valid_from && new Date(rate.valid_from) > bMonthEnd) ||
+    (rate.valid_to && new Date(rate.valid_to) <= bMonthStart)
+  ) {
+    await db.updateTable('salary_transactions')
+      .set({ is_deleted: true, deleted_at: now })
+      .where('staff_id', '=', rate.staff_id)
+      .where('rate_id', '=', rateId)
+      .where('billing_month', '=', castAsDate(billingMonth))
+      .where('type', '=', 'ACCRUAL')
+      .where('is_deleted', '=', false)
+      .execute()
+    return
+  }
+
   const cfg = {
     attendance_threshold: Number(config.attendance_threshold),
     starter_rate:         Number(config.starter_rate),
@@ -734,6 +753,25 @@ export async function recalcSmartStaffBenefit(rateId: string, billingMonth: stri
   ])
 
   if (!rate || !config || !rate.activity_id) return
+
+  const bDate = new Date(billingMonth)
+  const bMonthStart = new Date(bDate.getFullYear(), bDate.getMonth(), 1)
+  const bMonthEnd = new Date(bDate.getFullYear(), bDate.getMonth() + 1, 0, 23, 59, 59)
+
+  if (
+    (rate.valid_from && new Date(rate.valid_from) > bMonthEnd) ||
+    (rate.valid_to && new Date(rate.valid_to) <= bMonthStart)
+  ) {
+    await db.updateTable('salary_transactions')
+      .set({ is_deleted: true, deleted_at: now })
+      .where('staff_id', '=', rate.staff_id)
+      .where('rate_id', '=', rateId)
+      .where('billing_month', '=', castAsDate(billingMonth))
+      .where('type', '=', 'CORRECTION')
+      .where('is_deleted', '=', false)
+      .execute()
+    return
+  }
 
   const startDate = new Date(billingMonth)
   const endDate = new Date(startDate)

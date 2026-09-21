@@ -566,17 +566,23 @@ export async function syncAttendanceFinancials(params: {
 
   // Staff salary auto-accruals
   await recalcStaffAccruals(activityId, date)
+  const billingMonthStart = date.slice(0, 7) + '-01'
   const smartStaffRates = await db.selectFrom('staff_rates')
     .select(['id', 'rate_type'])
     .where('activity_id', '=', activityId)
     .where('rate_type', 'in', ['smart', 'smart_per_child'])
     .where('rate_category', '=', 'auto')
+    .where('valid_from', '<=', castAsDate(billingMonthStart))
+    .where((eb) => eb.or([
+      eb('valid_to', 'is', null),
+      eb('valid_to', '>', castAsDate(billingMonthStart)),
+    ]))
     .execute()
   for (const r of smartStaffRates) {
     if (r.rate_type === 'smart') {
-      await recalcSmartStaffBenefit(r.id, date.slice(0, 7) + '-01')
+      await recalcSmartStaffBenefit(r.id, billingMonthStart)
     } else {
-      await recalcSmartPerChildBenefit(r.id, date.slice(0, 7) + '-01')
+      await recalcSmartPerChildBenefit(r.id, billingMonthStart)
     }
   }
 }
