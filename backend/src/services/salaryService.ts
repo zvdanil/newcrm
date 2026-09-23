@@ -111,7 +111,6 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
     .where('al.date', '<', castAsDate(billingEnd))
     .where((eb) => eb.or([
       eb('al.status', '=', 'present'),
-      eb('al.status', '=', 'separate_billing'),
       eb.and([
         eb('al.status', '=', 'special'),
         sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
