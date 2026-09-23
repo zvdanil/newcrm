@@ -512,8 +512,8 @@ export function JournalPage() {
     rows.forEach(r => {
       Object.entries(r.logs).forEach(([d, log]) => {
         if (!totals[d]) return
-        if (r.effective_start && d < r.effective_start) return
-        if (r.effective_end && d > r.effective_end) return
+        if (!log && r.effective_start && d < r.effective_start) return
+        if (!log && r.effective_end && d > r.effective_end) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') totals[d].present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') totals[d].excused++
         else if (log.status === 'absent_unexcused') totals[d].unexcused++
@@ -529,10 +529,10 @@ export function JournalPage() {
       let excused = 0
       let unexcused = 0
       dates.forEach(d => {
-        if (r.effective_start && d < r.effective_start) return
-        if (r.effective_end && d > r.effective_end) return
         const log = r.logs[d]
         if (!log) return
+        if (!log && r.effective_start && d < r.effective_start) return
+        if (!log && r.effective_end && d > r.effective_end) return
         if (log.status === 'present' || log.status === 'special' || log.status === 'separate_billing') present++
         else if (log.status === 'absent_excused' || log.status === 'absent_excused_30') excused++
         else if (log.status === 'absent_unexcused') unexcused++
@@ -755,7 +755,7 @@ export function JournalPage() {
                           const isColHovered = hoveredDate === dateStr
                           const isCrosshair = isRowHovered && isColHovered
                           const isWeekend = new Date(dateStr).getDay() === 0 || new Date(dateStr).getDay() === 6
-                          const isLocked = Boolean(
+                          const isLocked = !Boolean(row.logs[dateStr]) && Boolean(
                             (row.effective_start && dateStr < row.effective_start) ||
                             (row.effective_end && dateStr > row.effective_end)
                           )

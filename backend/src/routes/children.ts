@@ -314,16 +314,31 @@ export async function childrenRoutes(app: FastifyInstance) {
               end_date: null,
             }).execute()
           }
-        } else if (targetGroupStartDate && (existingChild.group_id || updates.group_id)) {
-          const formattedStart = toDbDateStr(targetGroupStartDate)
-          const targetGroupId = updates.group_id || existingChild.group_id
-          if (targetGroupId) {
-            await trx.updateTable('child_group_history')
-              .set({ start_date: formattedStart, updated_at: new Date().toISOString() as unknown as Date })
-              .where('child_id', '=', id)
-              .where('group_id', '=', targetGroupId)
-              .where('end_date', 'is', null)
-              .execute()
+        } else if ((group_start_date || entry_date) && (existingChild.group_id || updates.group_id)) {
+          const rawGroupStart = (group_start_date || entry_date)?.trim()
+          if (rawGroupStart) {
+            let formattedStart = toDbDateStr(rawGroupStart)
+            const targetGroupId = updates.group_id || existingChild.group_id
+            if (targetGroupId) {
+              const earliestLog = await trx.selectFrom('attendance_logs')
+                .select((eb) => eb.fn.min('date').as('min_date'))
+                .where('child_id', '=', id)
+                .executeTakeFirst()
+
+              if (earliestLog?.min_date) {
+                const earliestLogStr = toDbDateStr(earliestLog.min_date as unknown as Date)
+                if (formattedStart > earliestLogStr) {
+                  formattedStart = earliestLogStr
+                }
+              }
+
+              await trx.updateTable('child_group_history')
+                .set({ start_date: formattedStart, updated_at: new Date().toISOString() as unknown as Date })
+                .where('child_id', '=', id)
+                .where('group_id', '=', targetGroupId)
+                .where('end_date', 'is', null)
+                .execute()
+            }
           }
         }
 

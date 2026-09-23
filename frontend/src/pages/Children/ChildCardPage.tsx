@@ -43,6 +43,7 @@ export function ChildCardPage() {
     full_name: '',
     birth_date: '',
     group_id: '',
+    group_start_date: '',
     effective_date: '',
     note: '',
     is_active: true,
@@ -108,12 +109,14 @@ export function ChildCardPage() {
       return
     }
 
+    const isGroupStartChanged = !isGroupChanged && Boolean(form.group_id) && form.group_start_date !== toDateInputValue(child.group_start_date ?? null)
+
     updateMutation.mutate({
       full_name:  form.full_name.trim(),
       birth_date: form.birth_date || null,
       group_id:   form.group_id  || null,
       effective_date: isGroupChanged ? form.effective_date : undefined,
-      group_start_date: !isGroupChanged && form.group_id ? form.group_start_date : undefined,
+      group_start_date: isGroupStartChanged ? form.group_start_date : undefined,
       note:       form.note      || null,
       is_active:  form.is_active,
       deactivation_date: !form.is_active ? form.deactivation_date : null,
