@@ -4,6 +4,8 @@ import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { recalcActivityAccruals, countWorkingDays } from '../services/billingRunService.js'
 import { recalcBalance } from '../services/balanceService.js'
 
+import { toDbDateStr } from '../services/dateUtils.js'
+
 export async function enrollmentsRoutes(app: FastifyInstance) {
   // GET /api/children/:childId/enrollments
   app.get<{ Params: { childId: string } }>(
@@ -109,12 +111,77 @@ export async function enrollmentsRoutes(app: FastifyInstance) {
     '/enrollments/:id',
     { preHandler: requireRole('owner', 'admin', 'manager') },
     async (req, reply) => {
+      const { id } = req.params
+      const existing = await db
+        .selectFrom('enrollments')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst()
+
+      if (!existing) return reply.status(404).send({ error: 'NotFound' })
+
       const updated = await db.updateTable('enrollments')
-        .set(req.body)
-        .where('id', '=', req.params.id)
+        .set({
+          account_id: req.body.account_id ?? existing.account_id,
+          start_date: req.body.start_date ?? toDbDateStr(existing.start_date),
+          end_date: req.body.end_date !== undefined ? req.body.end_date : (existing.end_date ? toDbDateStr(existing.end_date) : null),
+          note: req.body.note !== undefined ? req.body.note : existing.note,
+        })
+        .where('id', '=', id)
         .returningAll()
         .executeTakeFirst()
+
       if (!updated) return reply.status(404).send({ error: 'NotFound' })
+
+      const rawUserId = (req as { user?: { sub?: string } }).user?.sub
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const createdBy = rawUserId && uuidRegex.test(rawUserId) ? rawUserId : null
+
+      const oldStartStr = toDbDateStr(existing.start_date)
+      const newStartStr = toDbDateStr(updated.start_date)
+      const startDateChanged = oldStartStr !== newStartStr
+      const accountIdChanged = existing.account_id !== updated.account_id
+
+      if (startDateChanged) {
+        const activity = await db
+          .selectFrom('activities')
+          .select('tariff_type')
+          .where('id', '=', updated.activity_id)
+          .executeTakeFirst()
+
+        if (activity?.tariff_type === 'monthly' || activity?.tariff_type === 'smart') {
+          const oldMonthStr = `${oldStartStr.slice(0, 7)}-01`
+          const newMonthStr = `${newStartStr.slice(0, 7)}-01`
+          const now = new Date()
+          const currentMonthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
+
+          let minMonthStr = oldMonthStr < newMonthStr ? oldMonthStr : newMonthStr
+          let maxMonthStr = oldMonthStr > newMonthStr ? oldMonthStr : newMonthStr
+          if (currentMonthStr > maxMonthStr) maxMonthStr = currentMonthStr
+
+          await recalcActivityAccruals(
+            updated.activity_id,
+            new Date(minMonthStr),
+            new Date(maxMonthStr),
+            createdBy,
+            updated.child_id,
+          )
+        }
+      }
+
+      if (accountIdChanged) {
+        await db
+          .updateTable('transactions')
+          .set({ account_id: updated.account_id })
+          .where('enrollment_id', '=', updated.id)
+          .where('is_deleted', '=', false)
+          .execute()
+
+        await recalcBalance(updated.child_id, existing.account_id)
+      }
+
+      await recalcBalance(updated.child_id, updated.account_id)
+
       return updated
     }
   )

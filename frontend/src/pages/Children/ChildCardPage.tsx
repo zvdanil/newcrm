@@ -584,6 +584,16 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const [rebindForm, setRebindForm]   = useState(EMPTY_REBIND)
   const [rebindWarning, setRebindWarning] = useState<{ payments: RebindPayment[]; message: string } | null>(null)
 
+  interface EditEnrollmentState {
+    id: string
+    activity_name: string
+    start_date: string
+    account_id: string
+    note: string
+  }
+  const [editEnrollment, setEditEnrollment] = useState<EditEnrollmentState | null>(null)
+  const [editError, setEditError]           = useState<string | null>(null)
+
   const { data: enrollments = [], isLoading } = useQuery({
     queryKey: ['enrollments', childId],
     queryFn:  () => enrollmentsApi.listByChild(childId),
@@ -608,7 +618,7 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts'],
     queryFn:  accountsApi.list,
-    enabled:  showForm || rebindId !== null,
+    enabled:  showForm || rebindId !== null || editEnrollment !== null,
   })
 
   const { data: priceCheck } = useQuery({
@@ -712,6 +722,32 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
       if (data?.error === 'HasPayments') {
         setRebindWarning({ payments: data.payments ?? [], message: data.message ?? '' })
       }
+    },
+  })
+
+  const updateEnrollmentMutation = useMutation({
+    mutationFn: () => {
+      if (!editEnrollment) throw new Error('No edit enrollment selected')
+      return enrollmentsApi.update(editEnrollment.id, {
+        start_date: editEnrollment.start_date,
+        account_id: editEnrollment.account_id,
+        note: editEnrollment.note || null,
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['enrollments', childId] })
+      qc.invalidateQueries({ queryKey: ['balance', childId] })
+      qc.invalidateQueries({ queryKey: ['ledger', childId] })
+      qc.invalidateQueries({ queryKey: ['child-month-stats', childId] })
+      qc.invalidateQueries({ queryKey: ['imbalances', childId] })
+      qc.invalidateQueries({ queryKey: ['billing-forecast', childId] })
+      setEditEnrollment(null)
+      setEditError(null)
+    },
+    onError: (err: unknown) => {
+      setEditError(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Помилка при збереженні запису'
+      )
     },
   })
 
@@ -1120,9 +1156,27 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
                 {canEdit && (
                   <>
                     {e.status !== 'archived' && (
-                      <button
-                        onClick={() => { setRebindId(e.id); setRebindForm({ ...EMPTY_REBIND, from_month: TODAY.slice(0, 7) }); setRebindWarning(null) }}
-                        className="hover:text-amber-600 transition-colors">рахунок</button>
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditEnrollment({
+                              id: e.id,
+                              activity_name: e.activity_name,
+                              start_date: toDateInputValue(e.start_date),
+                              account_id: e.account_id,
+                              note: e.note || '',
+                            })
+                            setEditError(null)
+                          }}
+                          className="hover:text-iris-600 transition-colors"
+                          title="Редагувати дату запису, рахунок та примітку"
+                        >
+                          редагувати
+                        </button>
+                        <button
+                          onClick={() => { setRebindId(e.id); setRebindForm({ ...EMPTY_REBIND, from_month: TODAY.slice(0, 7) }); setRebindWarning(null) }}
+                          className="hover:text-amber-600 transition-colors">рахунок</button>
+                      </>
                     )}
                     {e.status === 'active' && (
                       <button onClick={() => { setFreezeId(e.id); setFreezeForm({ frozen_from: TODAY, frozen_to: '' }) }}
@@ -1487,6 +1541,92 @@ function EnrollmentsBlock({ childId, canEdit, canEditTariffs, viewedYm }: { chil
             })}
           </ul>
         </details>
+      )}
+
+      {/* Edit Enrollment Modal Dialog */}
+      {editEnrollment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <span>✏️</span> Редагування запису на активність
+              </h3>
+              <button
+                onClick={() => setEditEnrollment(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg font-bold leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <p className="text-sm text-gray-900 font-semibold">{editEnrollment.activity_name}</p>
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+                ℹ️ Зміна дати початку запису автоматично перерахує абонплату (про-рата або повну вартість) та оновить баланс дитини.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Дата початку запису <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={editEnrollment.start_date}
+                  onChange={(ev) => setEditEnrollment({ ...editEnrollment, start_date: ev.target.value })}
+                  className="w-full rounded-lg border-gray-300 text-sm focus:border-iris-500 focus:ring-iris-500 shadow-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Рахунок прив'язки <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={editEnrollment.account_id}
+                  onChange={(ev) => setEditEnrollment({ ...editEnrollment, account_id: ev.target.value })}
+                  className="w-full rounded-lg border-gray-300 text-sm focus:border-iris-500 focus:ring-iris-500 shadow-sm"
+                >
+                  {accounts.filter((a) => a.is_active || a.id === editEnrollment.account_id).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Примітка</label>
+                <input
+                  type="text"
+                  value={editEnrollment.note}
+                  onChange={(ev) => setEditEnrollment({ ...editEnrollment, note: ev.target.value })}
+                  placeholder="Необов'язкова примітка..."
+                  className="w-full rounded-lg border-gray-300 text-sm focus:border-iris-500 focus:ring-iris-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {editError && <p className="text-xs text-red-600 font-medium">{editError}</p>}
+
+            <div className="flex justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => setEditEnrollment(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Скасувати
+              </button>
+              <button
+                onClick={() => updateEnrollmentMutation.mutate()}
+                disabled={updateEnrollmentMutation.isPending || !editEnrollment.start_date || !editEnrollment.account_id}
+                className="px-4 py-2 text-xs font-medium text-white bg-iris-600 hover:bg-iris-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {updateEnrollmentMutation.isPending ? 'Збереження...' : 'Зберегти та перерахувати'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
