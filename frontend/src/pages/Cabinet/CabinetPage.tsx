@@ -401,6 +401,22 @@ function PaymentsTab({
 
 export function InvoiceTab({ child, month }: { child: { id: string; full_name: string }; month: string }) {
   const prev = prevMonth(month)
+  const [displayMode, setDisplayMode] = useState<'integer' | 'cents'>(() => {
+    const saved = localStorage.getItem('invoice_display_mode')
+    return saved === 'cents' ? 'cents' : 'integer'
+  })
+
+  const changeDisplayMode = (mode: 'integer' | 'cents') => {
+    setDisplayMode(mode)
+    localStorage.setItem('invoice_display_mode', mode)
+  }
+
+  const fmt = (num: number, showPlusSign = false) => {
+    const rounded = displayMode === 'integer' ? Math.round(num) : num
+    const str = displayMode === 'integer' ? String(rounded) : rounded.toFixed(2)
+    if (showPlusSign && rounded > 0) return `+${str} ₴`
+    return `${str} ₴`
+  }
 
   const { data: currentSummary = [], isLoading: loadingCurrent } = useQuery<AccountMonthlySummary[]>({
     queryKey: ['parent-month-summary', child.id, month],
@@ -497,8 +513,33 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
 
   return (
     <div className="px-6 py-4 space-y-6 invoice-container">
-      {/* Print action */}
-      <div className="flex justify-end no-print">
+      {/* Print action and mode toggle */}
+      <div className="flex items-center justify-between no-print gap-3 flex-wrap">
+        <div className="inline-flex items-center p-0.5 bg-gray-100 rounded-lg border border-gray-200 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => changeDisplayMode('integer')}
+            className={`px-3 py-1 rounded-md transition-colors ${
+              displayMode === 'integer'
+                ? 'bg-white text-gray-900 shadow-sm font-semibold'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            Цілі
+          </button>
+          <button
+            type="button"
+            onClick={() => changeDisplayMode('cents')}
+            className={`px-3 py-1 rounded-md transition-colors ${
+              displayMode === 'cents'
+                ? 'bg-white text-gray-900 shadow-sm font-semibold'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            з копійками
+          </button>
+        </div>
+
         <button
           onClick={handlePrint}
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors border border-gray-200"
@@ -579,14 +620,14 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                             </p>
                           </div>
                           <span className="font-semibold text-gray-700 font-mono">
-                            {net.toFixed(2)} ₴
+                            {fmt(net)}
                           </span>
                         </div>
                       )
                     })}
                     <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50 text-xs font-medium text-gray-600 print:bg-white print:border-t-2">
                       <span>Всього за спожиті послуги</span>
-                      <span className="font-mono">{prevSum.toFixed(2)} ₴</span>
+                      <span className="font-mono">{fmt(prevSum)}</span>
                     </div>
                   </div>
                 </div>
@@ -604,14 +645,14 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                         <div key={a.activity_id} className="flex justify-between items-center px-4 py-2.5 text-sm">
                           <p className="font-medium text-gray-800">{a.activity_name}</p>
                           <span className="font-semibold text-gray-700 font-mono">
-                            {a.display_price.toFixed(2)} ₴
+                            {fmt(a.display_price)}
                           </span>
                         </div>
                       )
                     })}
                     <div className="flex justify-between items-center px-4 py-2 bg-gray-50/50 text-xs font-medium text-gray-600 print:bg-white print:border-t-2">
                       <span>Всього за абонементи</span>
-                      <span className="font-mono">{currSum.toFixed(2)} ₴</span>
+                      <span className="font-mono">{fmt(currSum)}</span>
                     </div>
                   </div>
                 </div>
@@ -621,7 +662,7 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
               <div className="pt-2 border-t border-gray-100 space-y-2 print:border-gray-300">
                 <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
                   <span>Сума за абонементи:</span>
-                  <span className="font-medium font-mono">{currSum.toFixed(2)} ₴</span>
+                  <span className="font-medium font-mono">{fmt(currSum)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600 print:text-gray-800">
                   <span>
@@ -630,7 +671,7 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                     {balanceStart < 0 && <span className="ml-1.5 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full font-medium print:border print:border-red-300 print:bg-white">борг</span>}
                   </span>
                   <span className={`font-medium font-mono ${balanceStart > 0 ? 'text-green-700' : balanceStart < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {balanceStart > 0 ? '+' : ''}{balanceStart.toFixed(2)} ₴
+                    {fmt(balanceStart, true)}
                   </span>
                 </div>
 
@@ -641,14 +682,14 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                       <span className="flex items-center gap-1 font-medium">
                         <span>💳 Сплачено у поточному місяці:</span>
                       </span>
-                      <span className="font-semibold font-mono">+{paymentsCurrent.toFixed(2)} ₴</span>
+                      <span className="font-semibold font-mono">{fmt(paymentsCurrent, true)}</span>
                     </div>
 
                     {balanceStart < 0 && (
                       <div className="flex justify-between text-xs text-gray-500 pl-3 border-l-2 border-emerald-200">
                         <span>Залишок боргу за минулий період:</span>
                         <span className={`font-mono font-medium ${remainingPrevDebt < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                          {remainingPrevDebt.toFixed(2)} ₴
+                          {fmt(remainingPrevDebt)}
                         </span>
                       </div>
                     )}
@@ -663,12 +704,12 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                     </span>
                     {paymentsCurrent > 0 && (
                       <span className="text-xs text-gray-400 print:text-gray-500">
-                        (початково на 1-е число: {initialRecommended.toFixed(2)} ₴)
+                        (початково на 1-е число: {fmt(initialRecommended)})
                       </span>
                     )}
                   </div>
                   <span className={`text-xl font-extrabold tabular-nums font-mono ${netRecommended > 0 ? 'text-iris-600 print:text-black' : 'text-emerald-600'}`}>
-                    {netRecommended.toFixed(2)} ₴
+                    {fmt(netRecommended)}
                   </span>
                 </div>
 
@@ -679,7 +720,7 @@ export function InvoiceTab({ child, month }: { child: { id: string; full_name: s
                       <span className="text-sm">✨</span>
                       <span>Передплачений аванс на рахунку:</span>
                     </span>
-                    <span className="text-sm font-bold font-mono text-emerald-700">+{advanceAmount.toFixed(2)} ₴</span>
+                    <span className="text-sm font-bold font-mono text-emerald-700">{fmt(advanceAmount, true)}</span>
                   </div>
                 )}
               </div>
