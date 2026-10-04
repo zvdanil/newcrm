@@ -139,12 +139,45 @@ export async function transactionsRoutes(app: FastifyInstance) {
             }
           }
         } else if (tx.transaction_date) {
-          // Per-lesson: delete the attendance mark (present/special) that generated this ACCRUAL
+          // Per-lesson: delete the attendance mark (present/special/separate_billing) that generated this ACCRUAL
           await db.deleteFrom('attendance_logs')
             .where('enrollment_id', '=', tx.enrollment_id)
             .where('date', '=', castAsDate(tx.transaction_date))
-            .where('status', 'in', ['present', 'special'])
+            .where('status', 'in', ['present', 'special', 'separate_billing'])
             .execute()
+        }
+      }
+
+      // Cascade on REFUND cancellation: remove linked attendance mark from journal
+      if (tx.type === 'REFUND' && tx.enrollment_id && tx.transaction_date) {
+        await db.deleteFrom('attendance_logs')
+          .where('enrollment_id', '=', tx.enrollment_id)
+          .where('date', '=', castAsDate(tx.transaction_date))
+          .execute()
+
+        if (tx.activity_id) {
+          const linked = await db
+            .selectFrom('linked_activities')
+            .select('child_activity_id')
+            .where('parent_activity_id', '=', tx.activity_id)
+            .execute()
+
+          for (const { child_activity_id } of linked) {
+            const le = await db
+              .selectFrom('enrollments')
+              .select('id')
+              .where('child_id', '=', tx.child_id)
+              .where('activity_id', '=', child_activity_id)
+              .where('status', '!=', 'archived')
+              .executeTakeFirst()
+
+            if (le) {
+              await db.deleteFrom('attendance_logs')
+                .where('enrollment_id', '=', le.id)
+                .where('date', '=', castAsDate(tx.transaction_date))
+                .execute()
+            }
+          }
         }
       }
 

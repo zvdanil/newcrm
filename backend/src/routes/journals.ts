@@ -242,6 +242,7 @@ async function triggerPerLessonAccrual(
   customAmount: number | null,
   overridePrice: number | null,  // from child_individual_tariff
   createdBy: string | null,
+  noteText?: string | null,
 ): Promise<string | null> {
   let amount: number
 
@@ -321,6 +322,10 @@ async function triggerPerLessonAccrual(
     }
   }
 
+  const noteStr = customAmount !== null
+    ? (noteText?.trim() ? `Спец-доплата: ${noteText.trim()}` : `Спец-доплата ${date}`)
+    : `Заняття ${date}`
+
   return createTransaction({
     type: 'ACCRUAL',
     child_id: childId,
@@ -329,7 +334,7 @@ async function triggerPerLessonAccrual(
     enrollment_id: enrollmentId,
     amount,
     transaction_date: date,
-    note: `Заняття ${date}`,
+    note: noteStr,
     metadata_json: { per_lesson: true, custom_amount: customAmount },
     created_by: createdBy,
   })
@@ -440,6 +445,7 @@ export async function syncAttendanceFinancials(params: {
   newStatus: string | null
   oldCustomAmount?: number | null
   newCustomAmount?: number | null
+  note?: string | null
   userId: string | null
 }): Promise<void> {
   const {
@@ -452,6 +458,7 @@ export async function syncAttendanceFinancials(params: {
     newStatus,
     oldCustomAmount,
     newCustomAmount,
+    note,
     userId,
   } = params
 
@@ -494,6 +501,28 @@ export async function syncAttendanceFinancials(params: {
     }
   }
 
+  // Handle Spec Extra Accruals (custom_amount > 0) for subscription tariffs (monthly / smart)
+  if (effectiveTariffType !== 'per_lesson') {
+    const wasSpecPositive = oldAmt !== null && oldAmt > 0
+    const isNowSpecPositive = newAmt !== null && newAmt > 0
+
+    if (wasSpecPositive && (!isNowSpecPositive || amountChanged || oldStatus !== newStatus)) {
+      await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await reversePerLessonAccrual(le.id, le.account_id, childId, date, userId)
+      }
+    }
+
+    if (isNowSpecPositive && (!wasSpecPositive || amountChanged || oldStatus !== newStatus)) {
+      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newAmt, null, userId, note)
+      for (const { child_activity_id } of linked) {
+        const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
+        if (le) await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, newAmt, null, userId, note)
+      }
+    }
+  }
+
   if (effectiveTariffType === 'per_lesson') {
     if (wasChargeable && !isNowChargeable) {
       await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
@@ -502,25 +531,25 @@ export async function syncAttendanceFinancials(params: {
         if (le) await reversePerLessonAccrual(le.id, le.account_id, childId, date, userId)
       }
     } else if (!wasChargeable && isNowChargeable) {
-      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId, note)
       for (const { child_activity_id } of linked) {
         const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
         if (le) {
           const leInd = await getChildIndividualTariff(childId, child_activity_id, date)
           const leIndPrice = leInd ? Math.round(parseFloat(leInd.price as string) * 100) / 100 : null
-          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId)
+          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId, note)
         }
       }
     } else if (wasChargeable && isNowChargeable && (oldStatus !== newStatus || amountChanged)) {
       await reversePerLessonAccrual(enrollmentId, accountId, childId, date, userId)
-      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId)
+      await triggerPerLessonAccrual(enrollmentId, childId, accountId, activityId, date, newCustomAmount ?? null, indPrice, userId, note)
       for (const { child_activity_id } of linked) {
         const le = await db.selectFrom('enrollments').select(['id', 'account_id']).where('child_id', '=', childId).where('activity_id', '=', child_activity_id).where('status', '!=', 'archived').executeTakeFirst()
         if (le) {
           const leInd = await getChildIndividualTariff(childId, child_activity_id, date)
           const leIndPrice = leInd ? Math.round(parseFloat(leInd.price as string) * 100) / 100 : null
           await reversePerLessonAccrual(le.id, le.account_id, childId, date, userId)
-          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId)
+          await triggerPerLessonAccrual(le.id, childId, le.account_id, child_activity_id, date, null, leIndPrice, userId, note)
         }
       }
     }
@@ -946,6 +975,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         newStatus: status,
         oldCustomAmount: existingBefore?.custom_amount != null ? Number(existingBefore.custom_amount) : null,
         newCustomAmount: custom_amount ?? null,
+        note: note ?? null,
         userId: createdBy,
       })
 
@@ -1032,6 +1062,7 @@ export async function journalsRoutes(app: FastifyInstance) {
         newStatus: status,
         oldCustomAmount,
         newCustomAmount: safeCustomAmount,
+        note: note ?? null,
         userId: putUserId,
       })
 
