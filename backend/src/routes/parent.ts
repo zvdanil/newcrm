@@ -96,7 +96,7 @@ export async function parentRoutes(app: FastifyInstance) {
         't.note', 'a.name as activity_name', 'ac.name as account_name',
       ])
       .where('t.child_id', '=', req.params.childId)
-      .where('t.type', 'in', ['ACCRUAL', 'PAYMENT', 'REFUND', 'ADJUSTMENT'])
+      .where('t.type', 'in', ['ACCRUAL', 'PAYMENT', 'REFUND', 'ADJUSTMENT', 'TRANSFER_IN', 'TRANSFER_OUT'])
       .where('t.is_deleted', '=', false)
       .$if(!!from, (q) => q.where('t.transaction_date', '>=', new Date(from!)))
       .$if(!!to,   (q) => q.where('t.transaction_date', '<=', new Date(to!)))
@@ -167,11 +167,11 @@ export async function parentRoutes(app: FastifyInstance) {
         .orderBy('t.transaction_date', 'desc')
         .execute(),
 
-      // PAYMENT transactions in current month for account payments_total
+      // PAYMENT and TRANSFER transactions in current month for account payments_total
       db.selectFrom('transactions as t')
-        .select(['t.account_id', 't.amount'])
+        .select(['t.account_id', 't.type', 't.amount'])
         .where('t.child_id', '=', req.params.childId)
-        .where('t.type', '=', 'PAYMENT')
+        .where('t.type', 'in', ['PAYMENT', 'TRANSFER_IN', 'TRANSFER_OUT'])
         .where('t.is_deleted', '=', false)
         .where('t.transaction_date', '>=', new Date(from))
         .where('t.transaction_date', '<=', new Date(to))
@@ -235,9 +235,9 @@ export async function parentRoutes(app: FastifyInstance) {
       const accountId = tx.account_id ?? 'unknown'
       const cur = balanceAtStartMap.get(accountId) ?? 0
       const amt = parseFloat(String(tx.amount))
-      if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+      if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL' || tx.type === 'TRANSFER_IN') {
         balanceAtStartMap.set(accountId, cur + amt)
-      } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+      } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT' || tx.type === 'TRANSFER_OUT') {
         balanceAtStartMap.set(accountId, cur - amt)
       }
     }
@@ -343,7 +343,9 @@ export async function parentRoutes(app: FastifyInstance) {
     for (const p of paymentsInMonth) {
       const accountId = p.account_id ?? 'unknown'
       const cur = paymentsTotalMap.get(accountId) ?? 0
-      paymentsTotalMap.set(accountId, cur + parseFloat(String(p.amount)))
+      const amt = parseFloat(String(p.amount))
+      const signed = p.type === 'TRANSFER_OUT' ? -amt : amt
+      paymentsTotalMap.set(accountId, cur + signed)
     }
 
     return Array.from(accountMap.values())

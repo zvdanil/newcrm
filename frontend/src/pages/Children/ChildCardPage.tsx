@@ -309,7 +309,7 @@ export function ChildCardPage() {
       {id && <ParentAccessBlock childId={id} />}
 
       {/* Balances */}
-      {id && <BalancesBlock childId={id} canEdit={isOwner} ym={ym} setYm={setYm} />}
+      {id && <BalancesBlock childId={id} canEdit={canEdit} ym={ym} setYm={setYm} />}
 
       {/* Billing forecast */}
       {id && <BillingForecastBlock childId={id} />}
@@ -2045,12 +2045,10 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
               className="text-sm text-iris-600 hover:text-iris-700 font-medium">
               + Оплата
             </button>
-            {activeAccounts.length > 0 && (
-              <button onClick={() => setShowTransferModal(true)}
-                className="text-sm text-purple-600 hover:text-purple-700 font-medium">
-                ⇄ Переброс балансу
-              </button>
-            )}
+            <button onClick={() => setShowTransferModal(true)}
+              className="text-sm text-purple-600 hover:text-purple-700 font-medium">
+              ⇄ Переброс балансу
+            </button>
             <button onClick={() => { setShowInitForm(true); setShowPayForm(false); setInitForm({ account_id: '', amount: '', date: todayStr(), note: '' }) }}
               className="text-xs text-gray-400 hover:text-gray-600">
               Поч. залишок

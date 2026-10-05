@@ -1062,7 +1062,7 @@ export async function childrenRoutes(app: FastifyInstance) {
       const child = await db.selectFrom('children').select('id').where('id', '=', id).executeTakeFirst()
       if (!child) return reply.status(404).send({ error: 'NotFound' })
 
-      const [accruals, creditRow] = await Promise.all([
+      const [accruals, creditRows] = await Promise.all([
         db.selectFrom('transactions as t')
           .leftJoin('activities as act', 'act.id', 't.activity_id')
           .select(['t.id', 't.amount', 't.transaction_date', 't.billing_month', 'act.name as activity_name'])
@@ -1074,12 +1074,12 @@ export async function childrenRoutes(app: FastifyInstance) {
           .orderBy('t.amount', 'desc')
           .execute(),
         db.selectFrom('transactions')
-          .select((eb) => eb.fn.sum<string>('amount').as('total'))
+          .select(['type', 'amount'])
           .where('child_id', '=', id)
           .where('account_id', '=', account_id)
-          .where('type', 'in', ['PAYMENT', 'REFUND'])
+          .where('type', 'in', ['PAYMENT', 'REFUND', 'REVERSAL', 'TRANSFER_IN', 'TRANSFER_OUT'])
           .where('is_deleted', '=', false)
-          .executeTakeFirst(),
+          .execute(),
       ])
 
       const toDateStr = (v: unknown) => {
@@ -1088,7 +1088,15 @@ export async function childrenRoutes(app: FastifyInstance) {
         return String(v).slice(0, 10)
       }
 
-      let pool = Number(creditRow?.total ?? 0)
+      let pool = 0
+      for (const cr of creditRows) {
+        const amt = Number(cr.amount)
+        if (cr.type === 'TRANSFER_OUT') {
+          pool -= amt
+        } else {
+          pool += amt
+        }
+      }
       const result = []
       for (const acc of accruals) {
         const amount = Number(acc.amount)
