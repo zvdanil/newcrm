@@ -141,6 +141,20 @@ export const childrenApi = {
     const { data } = await apiClient.get<ChildMonthStats>(`/children/${childId}/month-stats?month=${month}`)
     return data
   },
+
+  transferBalance: async (childId: string, payload: {
+    from_account_id: string
+    to_account_id: string
+    amount: number
+    transaction_date?: string
+    note?: string
+  }): Promise<{ ok: boolean; transfer_out_id: string; transfer_in_id: string }> => {
+    const { data } = await apiClient.post<{ ok: boolean; transfer_out_id: string; transfer_in_id: string }>(
+      `/children/${childId}/transfer-balance`,
+      payload
+    )
+    return data
+  },
 }
 
 export interface MonthStatsEnrollment {

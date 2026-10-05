@@ -181,6 +181,36 @@ export async function transactionsRoutes(app: FastifyInstance) {
         }
       }
 
+      // Cascade on TRANSFER cancellation: cancel the paired transfer transaction too
+      if (tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT') {
+        const full = await db
+          .selectFrom('transactions')
+          .select('metadata_json')
+          .where('id', '=', id)
+          .executeTakeFirst()
+        const relatedId = (full?.metadata_json as { related_transaction_id?: string } | null)?.related_transaction_id
+        if (relatedId) {
+          const related = await db
+            .selectFrom('transactions')
+            .select(['id', 'child_id', 'account_id', 'is_deleted', 'note'])
+            .where('id', '=', relatedId)
+            .executeTakeFirst()
+          if (related && !related.is_deleted) {
+            await db
+              .updateTable('transactions')
+              .set({
+                is_deleted: true,
+                deleted_at: new Date().toISOString(),
+                deleted_by: request.user.sub,
+                note: related.note ? `${related.note} · ${suffix}` : suffix,
+              })
+              .where('id', '=', related.id)
+              .execute()
+            await recalcBalance(related.child_id, related.account_id)
+          }
+        }
+      }
+
       await recalcBalance(tx.child_id, tx.account_id)
 
       return { ok: true }

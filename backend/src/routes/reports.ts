@@ -346,17 +346,17 @@ export async function reportsRoutes(app: FastifyInstance) {
           't.child_id',
           't.account_id',
           // Credits / debits that occurred BEFORE the period (needed to compute balance_start)
-          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL') AND date_trunc('month', t.transaction_date) < ${fromDate} THEN t.amount ELSE 0 END)`.as('credits_before'),
-          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) < ${fromDate} THEN t.amount ELSE 0 END)`.as('debits_before'),
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) < ${fromDate} THEN t.amount ELSE 0 END)`.as('credits_before'),
+          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) < ${fromDate} THEN t.amount ELSE 0 END)`.as('debits_before'),
           // Credits / debits WITHIN the period
-          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('credits_in_period'),
-          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate} THEN t.amount ELSE 0 END)`.as('debits_in_period'),
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('credits_in_period'),
+          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate} THEN t.amount ELSE 0 END)`.as('debits_in_period'),
         ])
         .where('t.is_deleted', '=', false)
         .where(sql<SqlBool>`(
-          (t.type IN ('PAYMENT','REFUND','REVERSAL') AND date_trunc('month', t.transaction_date) <= ${toDate})
+          (t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) <= ${toDate})
           OR
-          (t.type IN ('ACCRUAL','ADJUSTMENT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate})
+          (t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate})
         )`)
         .groupBy(['t.child_id', 't.account_id'])
 
@@ -369,25 +369,25 @@ export async function reportsRoutes(app: FastifyInstance) {
           't.child_id',
           't.account_id',
           sql<string>`to_char(
-            CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT')
+            CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT')
               THEN COALESCE(t.billing_month, date_trunc('month', t.transaction_date))
               ELSE date_trunc('month', t.transaction_date)
             END,
             'YYYY-MM-01'
           )`.as('month'),
-          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL') THEN t.amount ELSE 0 END)`.as('credits'),
-          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT') THEN t.amount ELSE 0 END)`.as('debits'),
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') THEN t.amount ELSE 0 END)`.as('credits'),
+          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') THEN t.amount ELSE 0 END)`.as('debits'),
         ])
         .where('t.is_deleted', '=', false)
         .where(sql<SqlBool>`(
-          (t.type IN ('PAYMENT','REFUND','REVERSAL') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate})
+          (t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate})
           OR
-          (t.type IN ('ACCRUAL','ADJUSTMENT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate})
+          (t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate})
         )`)
         .groupBy([
           't.child_id',
           't.account_id',
-          sql`CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT')
+          sql`CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT')
             THEN COALESCE(t.billing_month, date_trunc('month', t.transaction_date))
             ELSE date_trunc('month', t.transaction_date)
           END`,
@@ -1112,9 +1112,9 @@ export async function reportsRoutes(app: FastifyInstance) {
       let openingBalance = 0
       for (const tx of priorTxs) {
         const amt = Number(tx.amount)
-        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL' || tx.type === 'TRANSFER_IN') {
           openingBalance += amt
-        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT' || tx.type === 'TRANSFER_OUT') {
           openingBalance -= amt
         }
       }
@@ -1291,19 +1291,21 @@ export async function reportsRoutes(app: FastifyInstance) {
                 note: tx.note,
               })
             }
-          } else if (tx.type === 'PAYMENT') {
-            monthPaymentSum += amt
+          } else if (tx.type === 'PAYMENT' || tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT') {
+            const isTransfer = tx.type !== 'PAYMENT'
+            const signedAmt = tx.type === 'TRANSFER_OUT' ? -amt : amt
+            monthPaymentSum += signedAmt
             const meta = (tx.metadata_json as Record<string, any>) || {}
             paymentItems.push({
               id: tx.id,
               transaction_date: txDateStr,
               created_at: tx.created_at ? new Date(tx.created_at).toISOString() : txDateStr,
-              amount: amt,
-              payment_method: meta.payment_method || meta.method || 'Каса/Безготівковий',
+              amount: signedAmt,
+              payment_method: isTransfer ? 'Переброс балансу' : (meta.payment_method || meta.method || 'Каса/Безготівковий'),
               account_id: tx.account_id,
               account_name: accName,
               note: tx.note,
-              receipt_url: meta.receipt_url || null,
+              receipt_url: isTransfer ? null : (meta.receipt_url || null),
             })
           } else if (tx.type === 'REFUND' || tx.type === 'REVERSAL') {
             monthRefundSum += amt

@@ -1,5 +1,6 @@
 import { BankPayersBlock } from './BankPayersBlock'
 import { ChildOSVWidget } from './ChildOSVWidget'
+import { TransferBalanceModal } from './TransferBalanceModal'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -1641,6 +1642,8 @@ const TX_LABEL: Record<string, string> = {
   REFUND:     'Повернення',
   REVERSAL:   'Сторно',
   ADJUSTMENT: 'Коригування',
+  TRANSFER_IN:  'Переброс (прихід)',
+  TRANSFER_OUT: 'Переброс (списання)',
 }
 
 const TX_BADGE: Record<string, string> = {
@@ -1649,9 +1652,37 @@ const TX_BADGE: Record<string, string> = {
   REFUND:     'bg-blue-50 text-blue-700',
   REVERSAL:   'bg-gray-100 text-gray-500',
   ADJUSTMENT: 'bg-amber-50 text-amber-700',
+  TRANSFER_IN:  'bg-purple-50 text-purple-700',
+  TRANSFER_OUT: 'bg-purple-50 text-purple-700',
 }
 
 type EnrichedAccrual = LedgerEntry & { _orig: number; _eff: number; _adjusted: boolean }
+
+function TransfersBlock({ entries }: { entries: LedgerEntry[] }) {
+  if (entries.length === 0) return null
+  const net = entries.reduce((s, t) => s + (t.type === 'TRANSFER_OUT' ? -Number(t.amount) : Number(t.amount)), 0)
+  return (
+    <div className="p-3 bg-purple-50/50 border border-purple-100 rounded-lg space-y-1">
+      <div className="flex justify-between text-[11px] font-bold text-purple-700 mb-0.5">
+        <span>Переброс балансу</span>
+        <span>{net >= 0 ? '+' : '−'}{Math.abs(net).toFixed(2)}</span>
+      </div>
+      {entries.map((t) => {
+        const out = t.type === 'TRANSFER_OUT'
+        return (
+          <div key={t.id} className="flex justify-between gap-2 py-0.5">
+            <span className="text-gray-700 truncate">
+              {formatDate(t.transaction_date)}{t.note ? ` · ${t.note}` : ''}
+            </span>
+            <span className={`font-mono shrink-0 ${out ? 'text-red-500' : 'text-green-600'}`}>
+              {out ? '−' : '+'}{Number(t.amount).toFixed(2)}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function enrichAccruals(accruals: LedgerEntry[], adjustments: LedgerEntry[]): {
   enriched: EnrichedAccrual[]
@@ -1798,6 +1829,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
   const qc = useQueryClient()
   const [showInitForm, setShowInitForm] = useState(false)
   const [showPayForm, setShowPayForm] = useState(false)
+  const [showTransferModal, setShowTransferModal] = useState(false)
   const [initForm, setInitForm] = useState({ account_id: '', amount: '', date: todayStr(), note: '' })
   const [payForm, setPayForm]   = useState({
     account_id: '',
@@ -1960,14 +1992,16 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
     payments: LedgerEntry[]
     refunds: LedgerEntry[]
     adjustments: LedgerEntry[]
+    transfers: LedgerEntry[]
   }>>((acc, tx) => {
     if (!acc[tx.account_id]) {
-      acc[tx.account_id] = { account_name: tx.account_name, accruals: [], payments: [], refunds: [], adjustments: [] }
+      acc[tx.account_id] = { account_name: tx.account_name, accruals: [], payments: [], refunds: [], adjustments: [], transfers: [] }
     }
     if (tx.type === 'ACCRUAL')    acc[tx.account_id].accruals.push(tx)
     if (tx.type === 'PAYMENT')    acc[tx.account_id].payments.push(tx)
     if (tx.type === 'REFUND')     acc[tx.account_id].refunds.push(tx)
     if (tx.type === 'ADJUSTMENT') acc[tx.account_id].adjustments.push(tx)
+    if (tx.type === 'TRANSFER_IN' || tx.type === 'TRANSFER_OUT') acc[tx.account_id].transfers.push(tx)
     return acc
   }, {})
 
@@ -2011,6 +2045,12 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
               className="text-sm text-iris-600 hover:text-iris-700 font-medium">
               + Оплата
             </button>
+            {activeAccounts.length > 0 && (
+              <button onClick={() => setShowTransferModal(true)}
+                className="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                ⇄ Переброс балансу
+              </button>
+            )}
             <button onClick={() => { setShowInitForm(true); setShowPayForm(false); setInitForm({ account_id: '', amount: '', date: todayStr(), note: '' }) }}
               className="text-xs text-gray-400 hover:text-gray-600">
               Поч. залишок
@@ -2018,6 +2058,14 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
           </div>
         )}
       </div>
+
+      <TransferBalanceModal
+        childId={childId}
+        isOpen={showTransferModal}
+        accounts={accounts}
+        balances={balances}
+        onClose={() => setShowTransferModal(false)}
+      />
 
       {/* Inline error (cancel mutation errors show here, outside the pay form) */}
       {payError && !showPayForm && (
@@ -2371,7 +2419,8 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                 const totalAccruals = group.accruals.reduce((s, t) => s + Number(t.amount), 0)
                 const totalRefunds  = group.refunds.reduce((s, t) => s + Number(t.amount), 0)
                 const totalAdj      = group.adjustments.reduce((s, t) => s + Number(t.amount), 0)
-                const monthNet      = totalPayments + totalRefunds - totalAccruals + totalAdj
+                const totalTransfers = group.transfers.reduce((s, t) => s + (t.type === 'TRANSFER_OUT' ? -Number(t.amount) : Number(t.amount)), 0)
+                const monthNet      = totalPayments + totalRefunds - totalAccruals + totalAdj + totalTransfers
                 const { enriched: archEnriched } = enrichAccruals(group.accruals, group.adjustments)
                 const archByActivity = archEnriched.reduce<Record<string, { orig: number; eff: number; adjusted: boolean; activityId: string | null }>>((acc, tx) => {
                   const key = tx.activity_name ?? '—'
@@ -2398,6 +2447,7 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                       </span>
                     </div>
                     <div className="px-4 py-3 space-y-2 text-xs">
+                      <TransfersBlock entries={group.transfers} />
                       {/* Нарахування for archived-enrollment accounts */}
                       {archEnriched.length > 0 && (
                         <div>
@@ -2507,7 +2557,8 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
               const totalPayments  = (group?.payments  ?? []).reduce((s, t) => s + Number(t.amount), 0)
               const totalRefunds   = (group?.refunds   ?? []).reduce((s, t) => s + Number(t.amount), 0)
               const totalAdj       = (group?.adjustments ?? []).reduce((s, t) => s + Number(t.amount), 0)
-              const monthNet       = totalPayments + totalRefunds - totalAccruals + totalAdj
+              const totalTransfers = (group?.transfers ?? []).reduce((s, t) => s + (t.type === 'TRANSFER_OUT' ? -Number(t.amount) : Number(t.amount)), 0)
+              const monthNet       = totalPayments + totalRefunds - totalAccruals + totalAdj + totalTransfers
 
               return (
                 <div key={bal.account_id} className="rounded-lg border border-gray-100 overflow-hidden">
@@ -2583,6 +2634,8 @@ function BalancesBlock({ childId, canEdit, ym, setYm }: { childId: string; canEd
                         <span className="font-mono">{pastDebt.toFixed(2)} грн</span>
                       </div>
                     )}
+
+                    <TransfersBlock entries={group?.transfers ?? []} />
 
                     {/* 🔷 БЛОК 1: ОСНОВНА ПОСЛУГА */}
                     {(mainAccruals.length > 0 || zeroMain.length > 0 || mainRefunds.length > 0) && (

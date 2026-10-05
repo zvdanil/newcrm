@@ -216,7 +216,7 @@ export interface RefundConfigsTable {
   updated_at:        Generated<Date>
 }
 
-export type TransactionType = 'ACCRUAL' | 'PAYMENT' | 'REFUND' | 'REVERSAL' | 'ADJUSTMENT'
+export type TransactionType = 'ACCRUAL' | 'PAYMENT' | 'REFUND' | 'REVERSAL' | 'ADJUSTMENT' | 'TRANSFER_IN' | 'TRANSFER_OUT'
 
 export interface TransactionsTable {
   id:               Generated<string>

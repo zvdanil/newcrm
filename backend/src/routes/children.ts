@@ -491,7 +491,10 @@ export async function childrenRoutes(app: FastifyInstance) {
 
           // Total credits: payments, refunds, positive initial balance
           let pool = txs
-            .filter((t) => t.type === 'PAYMENT' || t.type === 'REFUND' || t.type === 'REVERSAL')
+            .filter((t) => t.type === 'PAYMENT' || t.type === 'REFUND' || t.type === 'REVERSAL' || t.type === 'TRANSFER_IN')
+            .reduce((sum, t) => sum + parseFloat(t.amount as string), 0)
+          pool -= txs
+            .filter((t) => t.type === 'TRANSFER_OUT')
             .reduce((sum, t) => sum + parseFloat(t.amount as string), 0)
 
           if (initAmt > 0) pool += initAmt
@@ -1473,9 +1476,9 @@ export async function childrenRoutes(app: FastifyInstance) {
       for (const tx of txBefore) {
         const cur = balanceAtStart.get(tx.account_id) ?? 0
         const amt = parseFloat(tx.amount as string)
-        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL') {
+        if (tx.type === 'PAYMENT' || tx.type === 'REFUND' || tx.type === 'REVERSAL' || tx.type === 'TRANSFER_IN') {
           balanceAtStart.set(tx.account_id, cur + amt)
-        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') {
+        } else if (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT' || tx.type === 'TRANSFER_OUT') {
           balanceAtStart.set(tx.account_id, cur - amt)
         }
       }
@@ -1742,6 +1745,105 @@ export async function childrenRoutes(app: FastifyInstance) {
       return {
         enrollments: enrichedEnrollments,
         attendance: Object.entries(attendanceMap).map(([activity_id, data]) => ({ activity_id, ...data })),
+      }
+    }
+  )
+
+  // POST /api/children/:id/transfer-balance
+  // Transfer funds between two balances of the same child (e.g., from ФОП account to ТОВ account)
+  app.post<{
+    Params: { id: string }
+    Body: {
+      from_account_id: string
+      to_account_id: string
+      amount: number
+      transaction_date?: string
+      note?: string
+    }
+  }>(
+    '/:id/transfer-balance',
+    { preHandler: requireRole('owner', 'admin', 'manager') },
+    async (req, reply) => {
+      const childId = req.params.id
+      const { from_account_id, to_account_id, amount, transaction_date, note } = req.body
+
+      if (!from_account_id || !to_account_id) {
+        return reply.status(400).send({ error: 'MissingAccounts', message: 'Вкажіть рахунок-джерело та рахунок-отримувач' })
+      }
+      if (from_account_id === to_account_id) {
+        return reply.status(400).send({ error: 'SameAccount', message: 'Рахунок-джерело та рахунок-отримувач не можуть бути однаковими' })
+      }
+      const transferAmount = Number(amount)
+      if (isNaN(transferAmount) || transferAmount <= 0) {
+        return reply.status(400).send({ error: 'InvalidAmount', message: 'Сума переказу повинна бути більше 0' })
+      }
+
+      const child = await db.selectFrom('children').select('id').where('id', '=', childId).executeTakeFirst()
+      if (!child) return reply.status(404).send({ error: 'ChildNotFound', message: 'Дитину не знайдено' })
+
+      const accounts = await db.selectFrom('accounts')
+        .select(['id', 'name'])
+        .where('id', 'in', [from_account_id, to_account_id])
+        .execute()
+
+      if (accounts.length < 2) {
+        return reply.status(404).send({ error: 'AccountNotFound', message: 'Один з вказаних рахунків не знайдено' })
+      }
+
+      const fromAccountName = accounts.find(a => a.id === from_account_id)?.name || 'Рахунок'
+      const toAccountName = accounts.find(a => a.id === to_account_id)?.name || 'Рахунок'
+
+      const txDate = transaction_date ? transaction_date.substring(0, 10) : new Date().toISOString().substring(0, 10)
+      const userSub = (req.user as { sub: string })?.sub ?? null
+
+      const customNote = note?.trim() ? ` [${note.trim()}]` : ''
+      const outNote = `Переброс остатку на рахунок ${toAccountName}${customNote}`
+      const inNote = `Переброс остатку з рахунку ${fromAccountName}${customNote}`
+
+      // Create outgoing transaction (TRANSFER_OUT from source account)
+      const transferOutId = await createTransaction({
+        type: 'TRANSFER_OUT',
+        child_id: childId,
+        account_id: from_account_id,
+        amount: transferAmount,
+        transaction_date: txDate,
+        note: outNote,
+        metadata_json: { target_account_id: to_account_id, target_account_name: toAccountName },
+        created_by: userSub,
+      })
+
+      // Create incoming transaction (TRANSFER_IN to target account)
+      const transferInId = await createTransaction({
+        type: 'TRANSFER_IN',
+        child_id: childId,
+        account_id: to_account_id,
+        amount: transferAmount,
+        transaction_date: txDate,
+        note: inNote,
+        metadata_json: { source_account_id: from_account_id, source_account_name: fromAccountName, related_transaction_id: transferOutId },
+        created_by: userSub,
+      })
+
+      // Link related transaction ID back to transferOut
+      await db.updateTable('transactions')
+        .set({
+          metadata_json: {
+            target_account_id: to_account_id,
+            target_account_name: toAccountName,
+            related_transaction_id: transferInId,
+          }
+        })
+        .where('id', '=', transferOutId)
+        .execute()
+
+      // Recalculate both balances to ensure perfection
+      await recalcBalance(childId, from_account_id)
+      await recalcBalance(childId, to_account_id)
+
+      return {
+        ok: true,
+        transfer_out_id: transferOutId,
+        transfer_in_id: transferInId,
       }
     }
   )

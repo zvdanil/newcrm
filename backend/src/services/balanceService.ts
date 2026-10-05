@@ -18,9 +18,9 @@ export async function recalcBalance(childId: string, accountId: string): Promise
   let balance = 0
   for (const row of txRows) {
     const amt = parseFloat(row.amount as string)
-    if (row.type === 'PAYMENT' || row.type === 'REFUND') {
+    if (row.type === 'PAYMENT' || row.type === 'REFUND' || row.type === 'TRANSFER_IN') {
       balance += amt
-    } else if (row.type === 'ACCRUAL' || row.type === 'ADJUSTMENT') {
+    } else if (row.type === 'ACCRUAL' || row.type === 'ADJUSTMENT' || row.type === 'TRANSFER_OUT') {
       balance -= amt
     }
     // REVERSAL: sums cancel each other — the reversed tx is soft-deleted,
