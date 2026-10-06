@@ -32,10 +32,12 @@ import { reportsRoutes } from './routes/reports.js'
 import { usersRoutes } from './routes/users.js'
 import { inviteRoutes } from './routes/invites.js'
 import { parentRoutes } from './routes/parent.js'
+import { backupRoutes } from './routes/backup.js'
 import cron from 'node-cron'
 import { runBilling, currentBillingMonth } from './services/billingRunService.js'
 import { runSmartAccruals } from './services/smartTariffService.js'
 import { runFixedMonthlyAccruals, runSmartStaffAccruals } from './services/salaryService.js'
+import { exportBackup } from './scripts/export_backup.js'
 
 const app = Fastify({
   trustProxy: true,
@@ -82,6 +84,7 @@ await app.register(reportsRoutes,        { prefix: '/api/reports' })
 await app.register(usersRoutes,          { prefix: '/api/users' })
 await app.register(inviteRoutes,         { prefix: '/api/invite' })
 await app.register(parentRoutes,         { prefix: '/api/parent' })
+await app.register(backupRoutes,         { prefix: '/api/backup' })
 
 // Serve frontend in production (single-service mode)
 if (isProd) {
@@ -96,6 +99,17 @@ if (isProd) {
     }
   })
 }
+
+// Daily Database Backup cron — runs every day at 03:00 AM
+cron.schedule('0 3 * * *', async () => {
+  try {
+    console.log('[Backup Cron] Starting daily database backup...')
+    await exportBackup({ keepDays: 30 })
+    console.log('[Backup Cron] Daily database backup completed successfully')
+  } catch (err) {
+    console.error('[Backup Cron] Error running daily backup:', err)
+  }
+})
 
 // Billing Run cron — runs at 06:00 on the 1st of every month
 cron.schedule('0 6 1 * *', async () => {

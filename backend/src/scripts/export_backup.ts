@@ -10,13 +10,11 @@ const { Client } = pg
 
 const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:MMRvlehWdQpXtMDsoJpUeQDyckkVcyJz@turntable.proxy.rlwy.net:59629/railway'
 
-async function exportBackup() {
-  console.log('Connecting to Railway PostgreSQL database...')
+export async function generateBackupData() {
   const client = new Client({ connectionString })
   await client.connect()
 
   try {
-    // 1. Get all tables in public schema
     const tablesRes = await client.query(`
       SELECT table_name 
       FROM information_schema.tables 
@@ -24,15 +22,12 @@ async function exportBackup() {
       ORDER BY table_name;
     `)
     const tables = tablesRes.rows.map(r => r.table_name)
-    console.log(`Found ${tables.length} tables:`, tables.join(', '))
-
     const backupData: Record<string, any[]> = {}
-    let sqlContent = `-- CRM Database Backup\n-- Date: ${new Date().toISOString()}\n\n`
+    let sqlContent = `-- IRIS CRM Database Backup\n-- Date: ${new Date().toISOString()}\n\n`
 
     for (const table of tables) {
       const res = await client.query(`SELECT * FROM "${table}";`)
       backupData[table] = res.rows
-      console.log(`Exported ${table}: ${res.rows.length} rows`)
 
       if (res.rows.length > 0) {
         const columns = Object.keys(res.rows[0]).map(c => `"${c}"`).join(', ')
@@ -49,27 +44,59 @@ async function exportBackup() {
         sqlContent += '\n'
       }
     }
-
-    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const backupDir = path.join(process.cwd(), '../backups')
-    if (!fs.existsSync(backupDir)) {
-      fs.mkdirSync(backupDir, { recursive: true })
-    }
-
-    const jsonPath = path.join(backupDir, `backup_${dateStr}.json`)
-    const sqlPath = path.join(backupDir, `backup_${dateStr}.sql`)
-
-    fs.writeFileSync(jsonPath, JSON.stringify(backupData, null, 2), 'utf-8')
-    fs.writeFileSync(sqlPath, sqlContent, 'utf-8')
-
-    console.log('\n✅ Backup created successfully!')
-    console.log(`📄 JSON backup: ${jsonPath}`)
-    console.log(`📄 SQL backup:  ${sqlPath}`)
-  } catch (err) {
-    console.error('❌ Error exporting backup:', err)
+    return { backupData, sqlContent, tableCount: tables.length }
   } finally {
     await client.end()
   }
 }
 
-exportBackup()
+export async function exportBackup(options: { keepDays?: number } = { keepDays: 30 }) {
+  const keepDays = options?.keepDays ?? 30
+  console.log('[Backup] Starting database backup export...')
+  const { backupData, sqlContent, tableCount } = await generateBackupData()
+
+  const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const backupDir = path.join(process.cwd(), '../backups')
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true })
+  }
+
+  const jsonPath = path.join(backupDir, `backup_${dateStr}.json`)
+  const sqlPath = path.join(backupDir, `backup_${dateStr}.sql`)
+
+  fs.writeFileSync(jsonPath, JSON.stringify(backupData, null, 2), 'utf-8')
+  fs.writeFileSync(sqlPath, sqlContent, 'utf-8')
+
+  console.log(`[Backup] ✅ Backup created (${tableCount} tables). Files:\n 📄 ${jsonPath}\n 📄 ${sqlPath}`)
+
+  // Cleanup old backups
+  if (keepDays > 0) {
+    const cutoffTime = Date.now() - keepDays * 24 * 60 * 60 * 1000
+    try {
+      const files = fs.readdirSync(backupDir)
+      for (const file of files) {
+        if (file.startsWith('backup_')) {
+          const filePath = path.join(backupDir, file)
+          const stat = fs.statSync(filePath)
+          if (stat.mtimeMs < cutoffTime) {
+            fs.unlinkSync(filePath)
+            console.log(`[Backup] 🗑️ Cleaned up old backup file: ${file}`)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Backup] Error during backup cleanup:', err)
+    }
+  }
+
+  return { jsonPath, sqlPath }
+}
+
+// Execute directly if run as a script
+if (process.argv[1] && (process.argv[1].endsWith('export_backup.ts') || process.argv[1].endsWith('export_backup.js'))) {
+  exportBackup().catch(err => {
+    console.error('❌ Error exporting backup:', err)
+    process.exit(1)
+  })
+}
+

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi, type CrmUser } from '../../api/users.api'
+import { backupApi } from '../../api/backup.api'
 import { useAuthStore } from '../../store/auth.store'
 import type { UserRole } from '../../types'
 import { InviteModal } from './InviteModal'
@@ -37,6 +38,11 @@ export default function UsersPage() {
   const [setPassUser,  setSetPassUser]  = useState<CrmUser | null>(null)
   const [generatedUrl, setGeneratedUrl] = useState<{ url: string; type: 'invite' | 'reset' } | null>(null)
 
+  const [isDownloadingSql, setIsDownloadingSql]   = useState(false)
+  const [isDownloadingJson, setIsDownloadingJson] = useState(false)
+  const [isCreatingServerBackup, setIsCreatingServerBackup] = useState(false)
+  const [backupNotice, setBackupNotice] = useState<string | null>(null)
+
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: usersApi.list,
@@ -54,6 +60,45 @@ export default function UsersPage() {
     mutationFn: (id: string) => usersApi.resetLink(id),
     onSuccess: ({ resetUrl }) => setGeneratedUrl({ url: resetUrl, type: 'reset' }),
   })
+
+  const handleDownloadSql = async () => {
+    try {
+      setIsDownloadingSql(true)
+      setBackupNotice(null)
+      await backupApi.downloadSql()
+      setBackupNotice('✅ SQL-дамп бази даних успішно завантажено на ваш комп\'ютер!')
+    } catch (err: any) {
+      setBackupNotice(`❌ Помилка завантаження: ${err.message || 'Не вдалося створити бэкап'}`)
+    } finally {
+      setIsDownloadingSql(false)
+    }
+  }
+
+  const handleDownloadJson = async () => {
+    try {
+      setIsDownloadingJson(true)
+      setBackupNotice(null)
+      await backupApi.downloadJson()
+      setBackupNotice('✅ JSON-дамп бази даних успішно завантажено на ваш комп\'ютер!')
+    } catch (err: any) {
+      setBackupNotice(`❌ Помилка завантаження: ${err.message || 'Не вдалося створити бэкап'}`)
+    } finally {
+      setIsDownloadingJson(false)
+    }
+  }
+
+  const handleCreateServerBackup = async () => {
+    try {
+      setIsCreatingServerBackup(true)
+      setBackupNotice(null)
+      const res = await backupApi.runServerBackup()
+      setBackupNotice(`✅ ${res.message}`)
+    } catch (err: any) {
+      setBackupNotice(`❌ Помилка: ${err.message || 'Не вдалося створити бэкап на сервері'}`)
+    } finally {
+      setIsCreatingServerBackup(false)
+    }
+  }
 
   if (me?.role !== 'owner' && me?.role !== 'admin') {
     return (
@@ -151,6 +196,52 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* Database Backup Section */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <span>💾</span> Резервне копіювання бази даних (Backup)
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Щоденний автоматичний бэкап виконується о 03:00 ночі (зберігаються за останні 30 днів).
+            </p>
+          </div>
+        </div>
+
+        {backupNotice && (
+          <div className={`p-3 rounded-lg text-xs font-medium ${backupNotice.startsWith('✅') ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+            {backupNotice}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3 pt-1">
+          <button
+            onClick={handleDownloadSql}
+            disabled={isDownloadingSql}
+            className="flex items-center gap-2 text-xs px-3.5 py-2 bg-iris-600 hover:bg-iris-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+          >
+            {isDownloadingSql ? 'Генерація SQL...' : '📥 Скачати бэкап на ПК (.sql)'}
+          </button>
+
+          <button
+            onClick={handleDownloadJson}
+            disabled={isDownloadingJson}
+            className="flex items-center gap-2 text-xs px-3.5 py-2 bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+          >
+            {isDownloadingJson ? 'Генерація JSON...' : '📥 Скачати бэкап на ПК (.json)'}
+          </button>
+
+          <button
+            onClick={handleCreateServerBackup}
+            disabled={isCreatingServerBackup}
+            className="flex items-center gap-2 text-xs px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+          >
+            {isCreatingServerBackup ? 'Збереження...' : '⚡ Зберегти бэкап на сервері'}
+          </button>
+        </div>
+      </div>
+
       {inviteOpen && (
         <InviteModal
           onClose={() => setInviteOpen(false)}
@@ -181,3 +272,4 @@ export default function UsersPage() {
     </div>
   )
 }
+
