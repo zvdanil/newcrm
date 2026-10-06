@@ -1102,7 +1102,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         .select(['type', 'amount'])
         .where('child_id', '=', childId)
         .where('is_deleted', '=', false)
-        .where(sql<SqlBool>`transaction_date < ${startDateStr}`)
+        .where(sql<SqlBool>`COALESCE(billing_month, transaction_date) < ${startDateStr}`)
 
       if (account_id) {
         priorTxQuery = priorTxQuery.where('account_id', '=', account_id)
@@ -1150,6 +1150,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           't.enrollment_id',
           't.amount',
           't.transaction_date',
+          't.billing_month',
           't.created_at',
           't.note',
           't.metadata_json',
@@ -1158,8 +1159,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         ])
         .where('t.child_id', '=', childId)
         .where('t.is_deleted', '=', false)
-        .where(sql<SqlBool>`t.transaction_date >= ${startDateStr}`)
-        .where(sql<SqlBool>`t.transaction_date <= ${endDateStr}`)
+        .where(sql<SqlBool>`COALESCE(t.billing_month, t.transaction_date) >= ${startDateStr}`)
+        .where(sql<SqlBool>`COALESCE(t.billing_month, t.transaction_date) <= ${endDateStr}`)
 
       if (account_id) {
         periodTxQuery = periodTxQuery.where('t.account_id', '=', account_id)
@@ -1191,9 +1192,12 @@ export async function reportsRoutes(app: FastifyInstance) {
         txByMonth.set(ym, [])
       }
       for (const tx of periodTxs) {
-        const txDateStr = typeof tx.transaction_date === 'string'
-          ? tx.transaction_date
-          : new Date(tx.transaction_date).toISOString().slice(0, 10)
+        const effDate = (tx.type === 'ACCRUAL' || tx.type === 'ADJUSTMENT') && tx.billing_month
+          ? tx.billing_month
+          : tx.transaction_date
+        const txDateStr = typeof effDate === 'string'
+          ? effDate
+          : new Date(effDate).toISOString().slice(0, 10)
         const ym = txDateStr.slice(0, 7)
         if (txByMonth.has(ym)) {
           txByMonth.get(ym)!.push(tx)

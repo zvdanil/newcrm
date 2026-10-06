@@ -204,7 +204,10 @@ async function billMonthlyEnrollment(
  * Pass 1: monthly-activity enrollments where child has no individual override (or override is also monthly)
  * Pass 2: non-monthly-activity enrollments where child has individual monthly tariff
  */
-export async function runBilling(billingMonthStr: string, triggeredBy: string | null = null): Promise<RunResult> {
+export async function runBilling(billingMonthStrRaw: string, triggeredBy: string | null = null): Promise<RunResult> {
+  const rawDate = new Date(billingMonthStrRaw)
+  const billingMonthStr = `${rawDate.getFullYear()}-${String(rawDate.getMonth() + 1).padStart(2, '0')}-01`
+
   const result: RunResult = {
     billing_month: billingMonthStr,
     created_count: 0,
