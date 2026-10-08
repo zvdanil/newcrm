@@ -535,13 +535,14 @@ export async function reportsRoutes(app: FastifyInstance) {
   )
 
   // ── PnL 2 Report ─────────────────────────────────────────────────────────────
-  // GET /api/reports/pnl2?from=YYYY-MM&to=YYYY-MM
+  // GET /api/reports/pnl2?from=YYYY-MM&to=YYYY-MM&account_ids=...
   // Returns parallel Accrual and Cash metrics for each account and category, with detailed drilldown.
-  app.get<{ Querystring: { from?: string; to?: string } }>(
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string } }>(
     '/pnl2',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
-      const { from, to } = req.query
+      const { from, to, account_ids: accountIdsRaw } = req.query
+      const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
 
       // Parse range — default: last 6 months
       const now = new Date()
@@ -565,9 +566,15 @@ export async function reportsRoutes(app: FastifyInstance) {
       }
 
       // 1. Fetch active accounts
-      const accounts = await db.selectFrom('accounts')
+      let accountsQ = db.selectFrom('accounts')
         .select(['id', 'name'])
         .where('is_active', '=', true)
+      
+      if (accountIds.length > 0) {
+        accountsQ = accountsQ.where('id', 'in', accountIds)
+      }
+      
+      const accounts = await accountsQ
         .orderBy('name', 'asc')
         .execute()
 
@@ -587,81 +594,90 @@ export async function reportsRoutes(app: FastifyInstance) {
         cashoutTransfers,
       ] = await Promise.all([
         // 1. Client transactions with activity and child info
-        db.selectFrom('transactions as t')
-          .leftJoin('children as c', 'c.id', 't.child_id')
-          .leftJoin('activities as act', 'act.id', 't.activity_id')
-          .select([
-            't.account_id',
-            't.activity_id',
-            'act.name as activity_name',
-            't.child_id',
-            'c.full_name as child_name',
-            't.type',
-            sql<string>`to_char(COALESCE(t.billing_month, date_trunc('month', t.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
-            sql<string>`to_char(date_trunc('month', t.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
-            sql<string>`COALESCE(SUM(t.amount), 0)`.as('total')
-          ])
-          .where('t.is_deleted', '=', false)
-          .groupBy([
-            't.account_id',
-            't.activity_id',
-            'act.name',
-            't.child_id',
-            'c.full_name',
-            't.type',
-            sql`COALESCE(t.billing_month, date_trunc('month', t.transaction_date))`,
-            sql`date_trunc('month', t.transaction_date)`
-          ])
-          .execute(),
+        (() => {
+          let q = db.selectFrom('transactions as t')
+            .leftJoin('children as c', 'c.id', 't.child_id')
+            .leftJoin('activities as act', 'act.id', 't.activity_id')
+            .select([
+              't.account_id',
+              't.activity_id',
+              'act.name as activity_name',
+              't.child_id',
+              'c.full_name as child_name',
+              't.type',
+              sql<string>`to_char(COALESCE(t.billing_month, date_trunc('month', t.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
+              sql<string>`to_char(date_trunc('month', t.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
+              sql<string>`COALESCE(SUM(t.amount), 0)`.as('total')
+            ])
+            .where('t.is_deleted', '=', false)
+            .groupBy([
+              't.account_id',
+              't.activity_id',
+              'act.name',
+              't.child_id',
+              'c.full_name',
+              't.type',
+              sql`COALESCE(t.billing_month, date_trunc('month', t.transaction_date))`,
+              sql`date_trunc('month', t.transaction_date)`
+            ])
+          if (accountIds.length > 0) q = q.where('t.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
 
         // 2. Salary transactions with staff info
-        db.selectFrom('salary_transactions as st')
-          .innerJoin('staff as s', 's.id', 'st.staff_id')
-          .select([
-            'st.staff_id',
-            's.full_name as staff_name',
-            'st.type',
-            'st.is_dividend',
-            'st.note',
-            'st.transaction_date',
-            sql<string>`to_char(COALESCE(st.billing_month, date_trunc('month', st.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
-            sql<string>`to_char(date_trunc('month', st.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
-            sql<string>`COALESCE(SUM(st.gross_amount), 0)`.as('total')
-          ])
-          .where('st.is_deleted', '=', false)
-          .groupBy([
-            'st.staff_id',
-            's.full_name',
-            'st.type',
-            'st.is_dividend',
-            'st.note',
-            'st.transaction_date',
-            sql`COALESCE(st.billing_month, date_trunc('month', st.transaction_date))`,
-            sql`date_trunc('month', st.transaction_date)`
-          ])
-          .execute(),
+        (() => {
+          let q = db.selectFrom('salary_transactions as st')
+            .innerJoin('staff as s', 's.id', 'st.staff_id')
+            .select([
+              'st.staff_id',
+              's.full_name as staff_name',
+              'st.type',
+              'st.is_dividend',
+              'st.note',
+              'st.transaction_date',
+              sql<string>`to_char(COALESCE(st.billing_month, date_trunc('month', st.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
+              sql<string>`to_char(date_trunc('month', st.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
+              sql<string>`COALESCE(SUM(st.gross_amount), 0)`.as('total')
+            ])
+            .where('st.is_deleted', '=', false)
+            .groupBy([
+              'st.staff_id',
+              's.full_name',
+              'st.type',
+              'st.is_dividend',
+              'st.note',
+              'st.transaction_date',
+              sql`COALESCE(st.billing_month, date_trunc('month', st.transaction_date))`,
+              sql`date_trunc('month', st.transaction_date)`
+            ])
+          if (accountIds.length > 0) q = q.where('st.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
 
         // 3. Expense transactions with category info
-        db.selectFrom('expenses as e')
-          .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
-          .select([
-            'e.id',
-            'e.category_id',
-            'c.name as category_name',
-            'e.amount',
-            'e.accrual_date',
-            'e.payment_date',
-            'e.status',
-            'e.note',
-            'e.is_dividend',
-            'e.dividend_amount',
-            'e.is_advance',
-            'e.is_advance_return',
-            'e.utilized_advance_amount',
-            'e.dividend_payout_id',
-          ])
-          .where('e.is_deleted', '=', false)
-          .execute(),
+        (() => {
+          let q = db.selectFrom('expenses as e')
+            .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
+            .select([
+              'e.id',
+              'e.category_id',
+              'c.name as category_name',
+              'e.amount',
+              'e.accrual_date',
+              'e.payment_date',
+              'e.status',
+              'e.note',
+              'e.is_dividend',
+              'e.dividend_amount',
+              'e.is_advance',
+              'e.is_advance_return',
+              'e.utilized_advance_amount',
+              'e.dividend_payout_id',
+            ])
+            .where('e.is_deleted', '=', false)
+          if (accountIds.length > 0) q = q.where('e.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
 
         // 4. Dividend payouts to map participants
         db.selectFrom('dividend_payouts as dp')
@@ -670,35 +686,43 @@ export async function reportsRoutes(app: FastifyInstance) {
           .execute(),
 
         // 5. Cash-out transfers (linked to active expenses or salary payments)
-        db.selectFrom('account_transfers as t')
-          .innerJoin('accounts as fa', 'fa.id', 't.from_account_id')
-          .innerJoin('accounts as ta', 'ta.id', 't.to_account_id')
-          .select([
-            't.id',
-            't.amount',
-            't.transfer_date',
-            't.note',
-            't.from_account_id',
-            'fa.name as from_account_name',
-            't.to_account_id',
-            'ta.name as to_account_name',
-            sql<string>`to_char(date_trunc('month', t.transfer_date), 'YYYY-MM-01')`.as('month')
-          ])
-          .where((eb) => eb.or([
-            eb.exists(
-              db.selectFrom('expenses as e')
-                .select('e.id')
-                .where(sql<boolean>`e.withdrawal_transfer_id = t.id`)
-                .where('e.is_deleted', '=', false)
-            ),
-            eb.exists(
-              db.selectFrom('salary_transactions as st')
-                .select('st.id')
-                .where(sql<boolean>`st.withdrawal_transfer_id = t.id`)
-                .where('st.is_deleted', '=', false)
-            )
-          ]))
-          .execute(),
+        (() => {
+          let q = db.selectFrom('account_transfers as t')
+            .innerJoin('accounts as fa', 'fa.id', 't.from_account_id')
+            .innerJoin('accounts as ta', 'ta.id', 't.to_account_id')
+            .select([
+              't.id',
+              't.amount',
+              't.transfer_date',
+              't.note',
+              't.from_account_id',
+              'fa.name as from_account_name',
+              't.to_account_id',
+              'ta.name as to_account_name',
+              sql<string>`to_char(date_trunc('month', t.transfer_date), 'YYYY-MM-01')`.as('month')
+            ])
+            .where((eb) => eb.or([
+              eb.exists(
+                db.selectFrom('expenses as e')
+                  .select('e.id')
+                  .where(sql<boolean>`e.withdrawal_transfer_id = t.id`)
+                  .where('e.is_deleted', '=', false)
+              ),
+              eb.exists(
+                db.selectFrom('salary_transactions as st')
+                  .select('st.id')
+                  .where(sql<boolean>`st.withdrawal_transfer_id = t.id`)
+                  .where('st.is_deleted', '=', false)
+              )
+            ]))
+          if (accountIds.length > 0) {
+            q = q.where((eb) => eb.or([
+              eb('t.from_account_id', 'in', accountIds),
+              eb('t.to_account_id', 'in', accountIds)
+            ]))
+          }
+          return q.execute()
+        })(),
       ])
 
       // 4. Post-process Revenue Details

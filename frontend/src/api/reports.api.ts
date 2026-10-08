@@ -122,10 +122,11 @@ export const reportsApi = {
     return data
   },
 
-  getPnL2: async (from?: string, to?: string): Promise<PnL2Report> => {
+  getPnL2: async (from?: string, to?: string, account_ids?: string[]): Promise<PnL2Report> => {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to)   params.set('to', to)
+    if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
     const { data } = await apiClient.get<PnL2Report>(`/reports/pnl2?${params}`)
     return data
   },

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { reportsApi } from '../../api/reports.api'
+import { accountsApi } from '../../api/accounts.api'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,20 @@ function monthLabel(isoDate: string) {
 export function PnL2Report() {
   const [fromMonth, setFromMonth] = useState(sixMonthsAgo())
   const [toMonth, setToMonth] = useState(currentYM())
-  const [committed, setCommitted] = useState<{ from: string; to: string } | null>(null)
+  const [committed, setCommitted] = useState<{ from: string; to: string; accountIds: string[] } | null>(null)
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const tableRef = useRef<HTMLDivElement>(null)
 
+  const { data: accountsList } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: accountsApi.getAccounts
+  })
+
+
   const { data, isFetching, isError } = useQuery({
     queryKey: ['report-pnl2', committed],
-    queryFn: () => reportsApi.getPnL2(committed!.from, committed!.to),
+    queryFn: () => reportsApi.getPnL2(committed!.from, committed!.to, committed!.accountIds),
     enabled: !!committed,
     staleTime: 0,
   })
@@ -49,8 +57,14 @@ export function PnL2Report() {
 
   const handleGenerate = () => {
     setExpanded({})
-    setCommitted({ from: fromMonth, to: toMonth })
+    setCommitted({ from: fromMonth, to: toMonth, accountIds: selectedAccounts })
     setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+  }
+
+  const toggleAccount = (accId: string) => {
+    setSelectedAccounts(prev =>
+      prev.includes(accId) ? prev.filter(id => id !== accId) : [...prev, accId]
+    )
   }
 
   // Helper functions to get unions of detailed fields across selected months range
@@ -342,6 +356,40 @@ export function PnL2Report() {
                 onChange={e => setToMonth(e.target.value)}
                 className="rounded border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
               />
+            </div>
+          </div>
+
+          <div className="space-y-1.5 min-w-[200px] flex-1 max-w-sm">
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Рахунки</label>
+            <div className="relative group">
+              <div className="min-h-[38px] p-1.5 bg-white border border-gray-300 rounded-lg shadow-sm flex flex-wrap gap-1 items-center cursor-pointer hover:border-iris-400 transition-colors">
+                {selectedAccounts.length === 0 ? (
+                  <span className="text-sm text-gray-400 px-2 py-0.5">Всі рахунки (Загальний звіт)</span>
+                ) : (
+                  selectedAccounts.map(accId => {
+                    const acc = accountsList?.find(a => a.id === accId)
+                    return (
+                      <span key={accId} className="inline-flex items-center gap-1 px-2 py-0.5 bg-iris-50 text-iris-700 text-xs font-medium rounded border border-iris-100">
+                        {acc?.name || accId}
+                        <button onClick={(e) => { e.stopPropagation(); toggleAccount(accId); }} className="hover:text-iris-900 focus:outline-none">&times;</button>
+                      </span>
+                    )
+                  })
+                )}
+              </div>
+              <div className="absolute top-full left-0 mt-1 w-full max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-30">
+                {accountsList?.filter(a => a.is_active).map(acc => (
+                  <label key={acc.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedAccounts.includes(acc.id)}
+                      onChange={() => toggleAccount(acc.id)}
+                      className="rounded border-gray-300 text-iris-600 focus:ring-iris-500"
+                    />
+                    <span className="text-sm text-gray-700">{acc.name}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         </div>
