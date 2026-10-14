@@ -276,6 +276,7 @@ export interface ExpensesTable {
   status:                 Generated<ExpenseStatus>
   is_instant:             Generated<boolean>
   is_dividend:            Generated<boolean>
+  is_non_operating:       Generated<boolean>
   note:                   string | null
   created_by:             string | null
   withdrawal_transfer_id: string | null

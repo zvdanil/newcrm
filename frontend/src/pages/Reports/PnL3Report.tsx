@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { reportsApi, type PnL2Row } from '../../api/reports.api'
+import { reportsApi, type PnL3Row } from '../../api/reports.api'
 import { accountsApi } from '../../api/accounts.api'
 import * as XLSX from 'xlsx'
 
@@ -8,9 +8,10 @@ import * as XLSX from 'xlsx'
  * PnL 3 — змішана база:
  *  - Доходи та повернення: за НАРАХУВАННЯМ (очікувані надходження)
  *  - Зарплата та витрати: за ФАКТИЧНОЮ ОПЛАТОЮ
- *  - Повернення відображаються окремо, але зменшують дохід
- *  - Вивід коштів / дивіденди — як у PnL 2 (по оплаті)
- * Дані беруться з того ж ендпоінту, що й PnL 2 (/reports/pnl2).
+ *  - Комісії за обнал: окремим рядком в операційних витратах
+ *  - Неопераційні витрати: окремим блоком після операційного прибутку
+ *  - Внутрішні перекази та обнал: довідково (не занижують і не завищують прибуток)
+ * Дані беруться з виділеного ендпоінту /reports/pnl3.
  */
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -39,12 +40,20 @@ function monthLabel(isoDate: string) {
 
 // ─── row calculations ───────────────────────────────────────────────────────
 
-const incomeAccrued = (r: PnL2Row) => r.accounts.reduce((s, ac) => s + ac.accrued, 0)
-const refundsAccrued = (r: PnL2Row) => r.refunds?.accrued ?? 0
-const netIncome = (r: PnL2Row) => incomeAccrued(r) - refundsAccrued(r)
-const expensesPaid = (r: PnL2Row) => r.salary.paid + r.expenses.paid
-const opProfit = (r: PnL2Row) => netIncome(r) - expensesPaid(r)
-const remaining = (r: PnL2Row) => opProfit(r) - r.withdrawals.paid - r.dividends.paid
+const incomeAccrued = (r: PnL3Row) => r.totals?.income_accrued ?? r.accounts.reduce((s, ac) => s + ac.accrued, 0)
+const refundsAccrued = (r: PnL3Row) => r.totals?.refunds_accrued ?? (r.refunds?.accrued ?? 0)
+const netIncome = (r: PnL3Row) => r.totals?.net_income ?? (incomeAccrued(r) - refundsAccrued(r))
+const salaryPaid = (r: PnL3Row) => r.salary.paid
+const operatingExpensesPaid = (r: PnL3Row) => r.operating_expenses?.paid ?? r.expenses.paid
+const obnalCommissionsPaid = (r: PnL3Row) => r.obnal_commissions?.paid ?? 0
+const totalOperatingExpenses = (r: PnL3Row) => r.totals?.total_operating_expenses ?? (salaryPaid(r) + operatingExpensesPaid(r) + obnalCommissionsPaid(r))
+const opProfit = (r: PnL3Row) => r.totals?.operating_profit ?? (netIncome(r) - totalOperatingExpenses(r))
+const nonOperatingPaid = (r: PnL3Row) => r.non_operating_expenses?.paid ?? 0
+const profitBeforeDistribution = (r: PnL3Row) => r.totals?.profit_before_distribution ?? (opProfit(r) - nonOperatingPaid(r))
+const withdrawalsPaid = (r: PnL3Row) => r.withdrawals.paid
+const dividendsPaid = (r: PnL3Row) => r.dividends.paid
+const remaining = (r: PnL3Row) => r.totals?.retained_profit ?? (profitBeforeDistribution(r) - dividendsPaid(r) - withdrawalsPaid(r))
+const transfersTotal = (r: PnL3Row) => r.transfers?.total_amount ?? 0
 
 export function PnL3Report() {
   const [fromMonth, setFromMonth] = useState(sixMonthsAgo())
@@ -61,7 +70,7 @@ export function PnL3Report() {
 
   const { data, isFetching, isError } = useQuery({
     queryKey: ['report-pnl3', committed],
-    queryFn: () => reportsApi.getPnL2(committed!.from, committed!.to, committed!.accountIds),
+    queryFn: () => reportsApi.getPnL3(committed!.from, committed!.to, committed!.accountIds),
     enabled: !!committed,
     staleTime: 0,
   })
@@ -94,26 +103,46 @@ export function PnL3Report() {
     return Object.keys(names).filter(id => used[id]).map(id => ({ id, name: names[id] }))
   }
 
-  const incomeAcc = (r: PnL2Row, accId: string) => r.accounts.find(a => a.account_id === accId)
-  const refundAcc = (r: PnL2Row, accId: string) => r.refunds?.details?.find(a => a.account_id === accId)
+  const incomeAcc = (r: PnL3Row, accId: string) => r.accounts.find(a => a.account_id === accId)
+  const refundAcc = (r: PnL3Row, accId: string) => r.refunds?.details?.find(a => a.account_id === accId)
 
-  const activitiesOf = (getAcc: (r: PnL2Row) => PnL2Row['accounts'][0] | undefined) =>
+  const activitiesOf = (getAcc: (r: PnL3Row) => PnL3Row['accounts'][0] | undefined) =>
     uniq(rows.flatMap(r => (getAcc(r)?.details ?? []).map(d => [d.activity_id, d.activity_name, d.accrued] as [string, string, number])))
 
-  const childrenOf = (getAcc: (r: PnL2Row) => PnL2Row['accounts'][0] | undefined, actId: string) =>
+  const childrenOf = (getAcc: (r: PnL3Row) => PnL3Row['accounts'][0] | undefined, actId: string) =>
     uniq(rows.flatMap(r => (getAcc(r)?.details.find(d => d.activity_id === actId)?.children ?? [])
       .map(c => [c.child_id, c.child_name, c.accrued] as [string, string, number])))
 
   const getUniqueStaff = () =>
     uniq(rows.flatMap(r => r.salary.details.map(d => [d.staff_id, d.staff_name, d.paid] as [string, string, number])))
 
-  const getUniqueCategories = () =>
-    uniq(rows.flatMap(r => r.expenses.details.map(d => [d.category_id, d.category_name, d.paid] as [string, string, number])))
+  const getUniqueOperatingCategories = () =>
+    uniq(rows.flatMap(r => (r.operating_expenses?.details ?? r.expenses.details).map(d => [d.category_id, d.category_name, d.paid] as [string, string, number])))
 
-  const getCategoryPaidTransactions = (categoryId: string) => {
+  const getOperatingCategoryPaidTransactions = (categoryId: string) => {
     const map: Record<string, { id: string; date: string; note: string; payments: Record<string, number> }> = {}
     rows.forEach(r => {
-      r.expenses.details.find(d => d.category_id === categoryId)?.transactions.forEach(t => {
+      const list = r.operating_expenses?.details ?? r.expenses.details
+      list.find(d => d.category_id === categoryId)?.transactions.forEach(t => {
+        if (t.type !== 'paid') return
+        if (!map[t.id]) map[t.id] = { id: t.id, date: t.date, note: t.note, payments: {} }
+        map[t.id].payments[r.month] = (map[t.id].payments[r.month] || 0) + t.amount
+      })
+    })
+    return Object.values(map).sort((x, y) => x.date.localeCompare(y.date))
+  }
+
+  const getObnalCommissionTransactions = () =>
+    rows.flatMap(r => (r.obnal_commissions?.transactions ?? []).map(t => ({ ...t, month: r.month })))
+      .sort((x, y) => x.date.localeCompare(y.date))
+
+  const getUniqueNonOpCategories = () =>
+    uniq(rows.flatMap(r => (r.non_operating_expenses?.details ?? []).map(d => [d.category_id, d.category_name, d.paid] as [string, string, number])))
+
+  const getNonOpCategoryPaidTransactions = (categoryId: string) => {
+    const map: Record<string, { id: string; date: string; note: string; payments: Record<string, number> }> = {}
+    rows.forEach(r => {
+      r.non_operating_expenses?.details?.find(d => d.category_id === categoryId)?.transactions.forEach(t => {
         if (t.type !== 'paid') return
         if (!map[t.id]) map[t.id] = { id: t.id, date: t.date, note: t.note, payments: {} }
         map[t.id].payments[r.month] = (map[t.id].payments[r.month] || 0) + t.amount
@@ -130,11 +159,15 @@ export function PnL3Report() {
     rows.flatMap(r => r.dividends.transactions.map(t => ({ ...t, month: r.month })))
       .sort((x, y) => x.date.localeCompare(y.date))
 
+  const getTransferTransactions = () =>
+    rows.flatMap(r => (r.transfers?.items ?? []).map(t => ({ ...t, month: r.month })))
+      .sort((x, y) => x.date.localeCompare(y.date))
+
   // ─── Excel ──────────────────────────────────────────────────────────────────
 
   const handleExportExcel = () => {
     const csvData: (string | number)[][] = [['Показник', ...months.map(monthLabel)]]
-    const addRow = (label: string, get: (r: PnL2Row) => number) => {
+    const addRow = (label: string, get: (r: PnL3Row) => number) => {
       csvData.push([label, ...rows.map(r => Math.round(get(r) * 100) / 100)])
     }
 
@@ -164,27 +197,53 @@ export function PnL3Report() {
     })
     addRow('Чистий дохід', netIncome)
 
-    addRow('Зарплата (сплачено)', r => r.salary.paid)
-    getUniqueStaff().forEach(s => addRow(`  └ ${s.name}`, r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0))
-    addRow('Витрати (сплачено)', r => r.expenses.paid)
-    getUniqueCategories().forEach(c => {
-      addRow(`  └ ${c.name}`, r => r.expenses.details.find(d => d.category_id === c.id)?.paid ?? 0)
-      getCategoryPaidTransactions(c.id).forEach(tx =>
-        addRow(`      ${tx.date}  ${tx.note || '(без примітки)'}`, r => tx.payments[r.month] ?? 0))
+    addRow('ОПЕРАЦІЙНІ ВИТРАТИ (сплачено)', totalOperatingExpenses)
+    addRow('  Зарплата (сплачено)', salaryPaid)
+    getUniqueStaff().forEach(s => addRow(`    └ ${s.name}`, r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0))
+    addRow('  Операційні витрати (сплачено)', operatingExpensesPaid)
+    getUniqueOperatingCategories().forEach(c => {
+      addRow(`    └ ${c.name}`, r => (r.operating_expenses?.details ?? r.expenses.details).find(d => d.category_id === c.id)?.paid ?? 0)
+      getOperatingCategoryPaidTransactions(c.id).forEach(tx =>
+        addRow(`        ${tx.date}  ${tx.note || '(без примітки)'}`, r => tx.payments[r.month] ?? 0))
     })
-    addRow('Всього фактичних витрат', expensesPaid)
-
+    const hasObnalComm = rows.some(r => obnalCommissionsPaid(r) > 0)
+    if (hasObnalComm) {
+      addRow('  Комісії за обнал', obnalCommissionsPaid)
+      getObnalCommissionTransactions().forEach(tx =>
+        addRow(`    ${tx.date}  ${tx.note || '(без примітки)'}`, r => r.month === tx.month ? tx.amount : 0))
+    }
+    addRow('Всього операційних витрат', totalOperatingExpenses)
     addRow('Операційний прибуток', opProfit)
-    addRow('Вивід коштів', r => r.withdrawals.paid)
+
+    const hasNonOp = rows.some(r => nonOperatingPaid(r) > 0)
+    if (hasNonOp) {
+      addRow('НЕОПЕРАЦІЙНІ ВИТРАТИ', nonOperatingPaid)
+      getUniqueNonOpCategories().forEach(c => {
+        addRow(`  └ ${c.name}`, r => r.non_operating_expenses?.details.find(d => d.category_id === c.id)?.paid ?? 0)
+        getNonOpCategoryPaidTransactions(c.id).forEach(tx =>
+          addRow(`      ${tx.date}  ${tx.note || '(без примітки)'}`, r => tx.payments[r.month] ?? 0))
+      })
+      addRow('Прибуток до розподілу', profitBeforeDistribution)
+    }
+
+    addRow('РОЗПОДІЛ ПРИБУТКУ', r => withdrawalsPaid(r) + dividendsPaid(r))
+    addRow('  Вивід коштів', withdrawalsPaid)
     getWithdrawalTransactions().forEach(tx =>
       addRow(`    ${tx.date}  ${tx.note || '(без примітки)'}`, r => r.month === tx.month ? tx.amount : 0))
-    addRow('Дивіденди', r => r.dividends.paid)
+    addRow('  Дивіденди', dividendsPaid)
     getDividendTransactions().forEach(tx =>
       addRow(`    ${tx.date}  [${tx.recipient || 'Учасник'}]  ${tx.note || '(без примітки)'}`, r => r.month === tx.month ? tx.amount : 0))
     addRow('Залишок після розподілу', remaining)
 
+    const hasTransfers = rows.some(r => transfersTotal(r) > 0)
+    if (hasTransfers) {
+      addRow('ДОВІДКА: ВНУТРІШНІ ПЕРЕКАЗИ ТА ОБНАЛ', transfersTotal)
+      getTransferTransactions().forEach(tx =>
+        addRow(`  ${tx.date}  [${tx.from_account_name} → ${tx.to_account_name}]  ${tx.note || ''}`, r => r.month === tx.month ? tx.amount : 0))
+    }
+
     const ws = XLSX.utils.aoa_to_sheet(csvData)
-    ws['!cols'] = [{ wch: 50 }, ...months.map(() => ({ wch: 14 }))]
+    ws['!cols'] = [{ wch: 54 }, ...months.map(() => ({ wch: 14 }))]
     ws['!freeze'] = { xSplit: 1, ySplit: 1 }
     const range = XLSX.utils.decode_range(ws['!ref']!)
     for (let R = 1; R <= range.e.r; R++) {
@@ -211,7 +270,7 @@ export function PnL3Report() {
   const DataRow = ({ label, level, get, expandKey, bg = 'bg-white', title, emptyAsDash }: {
     label: React.ReactNode
     level: Level
-    get: (r: PnL2Row) => number
+    get: (r: PnL3Row) => number
     expandKey?: string
     bg?: string
     title?: string
@@ -249,7 +308,7 @@ export function PnL3Report() {
     </tr>
   )
 
-  const TotalRow = ({ label, get, cls, colored }: { label: string; get: (r: PnL2Row) => number; cls: string; colored?: boolean }) => (
+  const TotalRow = ({ label, get, cls, colored }: { label: string; get: (r: PnL3Row) => number; cls: string; colored?: boolean }) => (
     <tr className={`${cls} font-semibold border-t-2 border-b-2`}>
       <td className={`sticky left-0 z-10 ${cls} px-4 py-2.5 border-r border-gray-200`}>{label}</td>
       {rows.map(r => {
@@ -266,7 +325,7 @@ export function PnL3Report() {
   // Income / refund tree (account → activity → child), accrued basis, sign = 1 or -1
   const renderAccrualTree = (
     prefix: string,
-    getAcc: (r: PnL2Row, accId: string) => PnL2Row['accounts'][0] | undefined,
+    getAcc: (r: PnL3Row, accId: string) => PnL3Row['accounts'][0] | undefined,
     sign: number,
     baseLevel: 0 | 1,
     accountLabel: (name: string) => string,
@@ -286,7 +345,7 @@ export function PnL3Report() {
         {expanded[accKey] && acts.map(act => {
           const actKey = `${prefix}-act::${a.id}::${act.id}`
           const kids = childrenOf(r => getAcc(r, a.id), act.id)
-          const actDetail = (r: PnL2Row) => getAcc(r, a.id)?.details.find(d => d.activity_id === act.id)
+          const actDetail = (r: PnL3Row) => getAcc(r, a.id)?.details.find(d => d.activity_id === act.id)
           return (
             <React.Fragment key={act.id}>
               <DataRow
@@ -319,7 +378,7 @@ export function PnL3Report() {
         <div>
           <h2 className="font-medium text-gray-900">PnL 3 звіт</h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Доходи — за нарахуванням (очікувані надходження), витрати — за фактичною оплатою
+            Доходи — за нарахуванням, витрати — за фактичною оплатою, обнал та внутрішні перекази ізольовані
           </p>
         </div>
 
@@ -393,7 +452,7 @@ export function PnL3Report() {
               <table className="text-sm border-collapse w-max min-w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-r border-gray-200 min-w-[300px]">
+                    <th className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-r border-gray-200 min-w-[320px]">
                       Показник
                     </th>
                     {months.map(m => (
@@ -420,23 +479,23 @@ export function PnL3Report() {
 
                   <TotalRow label="Чистий дохід" get={netIncome} cls="bg-iris-100 text-iris-950 border-iris-200" />
 
-                  {/* EXPENSES — paid */}
-                  <SectionHeader label="ФАКТИЧНІ ВИТРАТИ (СПЛАЧЕНО)" />
+                  {/* OPERATING EXPENSES — paid */}
+                  <SectionHeader label="ОПЕРАЦІЙНІ ВИТРАТИ (СПЛАЧЕНО)" />
 
-                  <DataRow label="Зарплата персоналу" level={0} expandKey="salary" get={r => r.salary.paid} />
+                  <DataRow label="Зарплата персоналу" level={0} expandKey="salary" get={salaryPaid} />
                   {expanded['salary'] && getUniqueStaff().map(s => (
                     <DataRow key={s.id} label={s.name} level={1} bg="bg-gray-50"
                       get={r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0} />
                   ))}
 
-                  <DataRow label="Операційні витрати" level={0} bg="bg-gray-50" expandKey="expenses" get={r => r.expenses.paid} />
-                  {expanded['expenses'] && getUniqueCategories().map(cat => {
+                  <DataRow label="Операційні витрати" level={0} bg="bg-gray-50" expandKey="operating_expenses" get={operatingExpensesPaid} />
+                  {expanded['operating_expenses'] && getUniqueOperatingCategories().map(cat => {
                     const catKey = `category::${cat.id}`
-                    const txs = getCategoryPaidTransactions(cat.id)
+                    const txs = getOperatingCategoryPaidTransactions(cat.id)
                     return (
                       <React.Fragment key={cat.id}>
                         <DataRow label={cat.name} level={1} bg="bg-gray-50" expandKey={txs.length ? catKey : undefined}
-                          get={r => r.expenses.details.find(d => d.category_id === cat.id)?.paid ?? 0} />
+                          get={r => (r.operating_expenses?.details ?? r.expenses.details).find(d => d.category_id === cat.id)?.paid ?? 0} />
                         {expanded[catKey] && txs.map(tx => (
                           <DataRow key={tx.id} level={2} bg="bg-gray-50" title={tx.note} emptyAsDash
                             label={<><span className="font-semibold text-gray-400 mr-2">{tx.date}</span>{tx.note || '(без примітки)'}</>}
@@ -446,21 +505,57 @@ export function PnL3Report() {
                     )
                   })}
 
-                  <TotalRow label="Всього фактичних витрат" get={expensesPaid} cls="bg-amber-50 text-amber-950 border-amber-100" />
+                  {/* Obnal commissions in operating expenses */}
+                  {rows.some(r => obnalCommissionsPaid(r) > 0) && (
+                    <>
+                      <DataRow label="Комісії за обнал" level={0} bg="bg-gray-50" expandKey="obnal_commissions" get={obnalCommissionsPaid} />
+                      {expanded['obnal_commissions'] && getObnalCommissionTransactions().map(tx => (
+                        <DataRow key={tx.id} level={1} bg="bg-gray-50" title={tx.note} emptyAsDash
+                          label={<><span className="font-semibold text-gray-400 mr-2">{tx.date}</span>{tx.note || '(без примітки)'}</>}
+                          get={r => r.month === tx.month ? tx.amount : 0} />
+                      ))}
+                    </>
+                  )}
 
-                  <TotalRow label="Операційний прибуток" get={opProfit} cls="bg-gray-50 text-gray-900 border-gray-200" colored />
+                  <TotalRow label="Всього операційних витрат" get={totalOperatingExpenses} cls="bg-amber-50 text-amber-950 border-amber-100" />
 
-                  {/* Distribution — as in PnL 2 */}
+                  <TotalRow label="Операційний прибуток" get={opProfit} cls="bg-gray-100 text-gray-900 border-gray-300" colored />
+
+                  {/* NON-OPERATING EXPENSES */}
+                  {rows.some(r => nonOperatingPaid(r) > 0) && (
+                    <>
+                      <SectionHeader label="НЕОПЕРАЦІЙНІ ВИТРАТИ (СПЛАЧЕНО)" />
+                      <DataRow label="Неопераційні витрати" level={0} bg="bg-gray-50" expandKey="non_operating" get={nonOperatingPaid} />
+                      {expanded['non_operating'] && getUniqueNonOpCategories().map(cat => {
+                        const catKey = `nonop::${cat.id}`
+                        const txs = getNonOpCategoryPaidTransactions(cat.id)
+                        return (
+                          <React.Fragment key={cat.id}>
+                            <DataRow label={cat.name} level={1} bg="bg-gray-50" expandKey={txs.length ? catKey : undefined}
+                              get={r => r.non_operating_expenses?.details.find(d => d.category_id === cat.id)?.paid ?? 0} />
+                            {expanded[catKey] && txs.map(tx => (
+                              <DataRow key={tx.id} level={2} bg="bg-gray-50" title={tx.note} emptyAsDash
+                                label={<><span className="font-semibold text-gray-400 mr-2">{tx.date}</span>{tx.note || '(без примітки)'}</>}
+                                get={r => tx.payments[r.month] ?? 0} />
+                            ))}
+                          </React.Fragment>
+                        )
+                      })}
+                      <TotalRow label="Прибуток до розподілу" get={profitBeforeDistribution} cls="bg-purple-50 text-purple-950 border-purple-200" colored />
+                    </>
+                  )}
+
+                  {/* PROFIT DISTRIBUTION */}
                   <SectionHeader label="РОЗПОДІЛ ПРИБУТКУ (ПО ОПЛАТІ)" />
 
-                  <DataRow label="Вивід коштів" level={0} expandKey="withdrawals" get={r => r.withdrawals.paid} />
+                  <DataRow label="Вивід коштів" level={0} expandKey="withdrawals" get={withdrawalsPaid} />
                   {expanded['withdrawals'] && getWithdrawalTransactions().map(tx => (
                     <DataRow key={tx.id} level={1} bg="bg-gray-50" title={tx.note} emptyAsDash
                       label={<><span className="font-semibold text-gray-400 mr-2">{tx.date}</span>{tx.note || '(без примітки)'}</>}
                       get={r => r.month === tx.month ? tx.amount : 0} />
                   ))}
 
-                  <DataRow label="Дивіденди" level={0} bg="bg-gray-50" expandKey="dividends" get={r => r.dividends.paid} />
+                  <DataRow label="Дивіденди" level={0} bg="bg-gray-50" expandKey="dividends" get={dividendsPaid} />
                   {expanded['dividends'] && getDividendTransactions().map(tx => (
                     <DataRow key={tx.id} level={1} bg="bg-gray-50" title={tx.note} emptyAsDash
                       label={<>
@@ -472,6 +567,29 @@ export function PnL3Report() {
                   ))}
 
                   <TotalRow label="Залишок після розподілу" get={remaining} cls="bg-iris-50 text-iris-950 border-iris-200" colored />
+
+                  {/* INFORMATIONAL TRANSFERS & OBNAL */}
+                  {rows.some(r => transfersTotal(r) > 0) && (
+                    <>
+                      <SectionHeader label="ДОВІДКА: ВНУТРІШНІ ПЕРЕКАЗИ ТА ОБНАЛ" />
+                      <DataRow
+                        label="Внутрішні перекази (обнал / між рахунками)"
+                        level={0}
+                        bg="bg-slate-50"
+                        expandKey="transfers"
+                        get={transfersTotal}
+                      />
+                      {expanded['transfers'] && getTransferTransactions().map(tx => (
+                        <DataRow key={tx.id} level={1} bg="bg-slate-50" title={tx.note} emptyAsDash
+                          label={<>
+                            <span className="font-semibold text-gray-400 mr-2">{tx.date}</span>
+                            <span className="font-medium text-slate-700 mr-2">[{tx.from_account_name} → {tx.to_account_name}]</span>
+                            {tx.note || ''}
+                          </>}
+                          get={r => r.month === tx.month ? tx.amount : 0} />
+                      ))}
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>

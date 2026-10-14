@@ -111,7 +111,9 @@ export async function expensesRoutes(app: FastifyInstance) {
       status?: string
       from?: string
       to?: string
+      search?: string
       is_dividend?: string
+      is_non_operating?: string
       include_salary?: string
       limit?: string
       offset?: string
@@ -133,7 +135,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .leftJoin('staff as s', 's.id', 'e.staff_id')
         .select([
           'e.id', 'e.amount', 'e.accrual_date', 'e.payment_date',
-          'e.status', 'e.is_instant', 'e.is_dividend', 'e.note', 'e.created_at',
+          'e.status', 'e.is_instant', 'e.is_dividend', 'e.is_non_operating', 'e.note', 'e.created_at',
           'e.withdrawal_transfer_id', 'e.withdrawal_amount', 'e.dividend_payout_id', 'e.dividend_amount',
           'e.account_id', 'a.name as account_name',
           'e.category_id',
@@ -262,11 +264,18 @@ export async function expensesRoutes(app: FastifyInstance) {
       }
       if (req.query.is_dividend === 'true') q = q.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') q = q.where('e.is_dividend', '=', false)
+      if (req.query.is_non_operating === 'true') q = q.where('e.is_non_operating', '=', true)
+      if (req.query.is_non_operating === 'false') q = q.where('e.is_non_operating', '=', false)
+
+      const search = req.query.search?.trim()
 
       // Total for the filter (without limit/offset)
       const totalQ = db
         .selectFrom('expenses as e')
         .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
+        .leftJoin('expense_categories as cp', 'cp.id', 'c.parent_id')
+        .leftJoin('accounts as a', 'a.id', 'e.account_id')
+        .leftJoin('staff as s', 's.id', 'e.staff_id')
         .select((eb) => [
           eb.fn.countAll<number>().as('count'),
           eb.fn.sum<string>('e.amount').as('total_amount'),
@@ -295,6 +304,30 @@ export async function expensesRoutes(app: FastifyInstance) {
       }
       if (req.query.is_dividend === 'true') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', true)
       if (req.query.is_dividend === 'false') totalQFiltered = totalQFiltered.where('e.is_dividend', '=', false)
+      if (req.query.is_non_operating === 'true') totalQFiltered = totalQFiltered.where('e.is_non_operating', '=', true)
+      if (req.query.is_non_operating === 'false') totalQFiltered = totalQFiltered.where('e.is_non_operating', '=', false)
+
+      if (search) {
+        const pattern = `%${search}%`
+        const numClean = search.replace(/\s+/g, '').replace(',', '.')
+        const numPattern = `%${numClean}%`
+        const searchExpr = (eb: any) => {
+          const conditions = [
+            eb('e.note', 'ilike', pattern),
+            sql<boolean>`e.amount::text ILIKE ${numPattern}`,
+            eb('c.name', 'ilike', pattern),
+            eb('cp.name', 'ilike', pattern),
+            eb('a.name', 'ilike', pattern),
+            eb('s.full_name', 'ilike', pattern),
+          ]
+          if (numClean !== search) {
+            conditions.push(eb('e.note', 'ilike', numPattern))
+          }
+          return eb.or(conditions)
+        }
+        q = q.where(searchExpr)
+        totalQFiltered = totalQFiltered.where(searchExpr)
+      }
 
       const [data, totals] = await Promise.all([
         q.orderBy('e.accrual_date', 'desc').orderBy('e.created_at', 'desc').limit(limit).offset(offset).execute(),
@@ -352,6 +385,24 @@ export async function expensesRoutes(app: FastifyInstance) {
           if (req.query.to) sq = sq.where('st.transaction_date', '<=', new Date(req.query.to))
           if (req.query.is_dividend === 'true') sq = sq.where('st.is_dividend', '=', true)
           if (req.query.is_dividend === 'false') sq = sq.where('st.is_dividend', '=', false)
+          if (search) {
+            const pattern = `%${search}%`
+            const numClean = search.replace(/\s+/g, '').replace(',', '.')
+            const numPattern = `%${numClean}%`
+            sq = sq.where((eb) => {
+              const conditions = [
+                eb('st.note', 'ilike', pattern),
+                sql<boolean>`st.gross_amount::text ILIKE ${numPattern}`,
+                eb('s.full_name', 'ilike', pattern),
+                eb('ac.name', 'ilike', pattern),
+                sql<boolean>`'Зарплата' ILIKE ${pattern}`,
+              ]
+              if (numClean !== search) {
+                conditions.push(eb('st.note', 'ilike', numPattern))
+              }
+              return eb.or(conditions)
+            })
+          }
 
           const salaryRows = await sq.orderBy('st.transaction_date', 'desc').execute()
 
@@ -379,6 +430,7 @@ export async function expensesRoutes(app: FastifyInstance) {
             status:                  'paid' as const,
             is_instant:              true,
             is_dividend:             sr.is_dividend,
+            is_non_operating:        false,
             note:                    sr.note ?? `Зарплата: ${sr.staff_name}`,
             created_at:              sr.created_at,
             withdrawal_transfer_id:  null,
@@ -431,6 +483,7 @@ export async function expensesRoutes(app: FastifyInstance) {
       payment_date?: string
       is_instant?: boolean
       is_dividend?: boolean
+      is_non_operating?: boolean
       note?: string
       is_advance?: boolean
       staff_id?: string
@@ -444,7 +497,7 @@ export async function expensesRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const {
         account_id, category_id, amount, accrual_date, payment_date,
-        is_instant = false, is_dividend = false, note,
+        is_instant = false, is_dividend = false, is_non_operating = false, note,
         is_advance = false, staff_id,
         utilized_advance_id, utilized_advance_amount,
         advance_staff_id,
@@ -467,6 +520,7 @@ export async function expensesRoutes(app: FastifyInstance) {
             status,
             is_instant,
             is_dividend,
+            is_non_operating,
             note: note ?? null,
             created_by: req.user.sub,
             is_advance,
@@ -556,7 +610,7 @@ export async function expensesRoutes(app: FastifyInstance) {
   // PUT /api/expenses/:id  — edit any expense (including paid), record audit diff
   app.put<{
     Params: { id: string }
-    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; payment_date?: string | null; note?: string | null; edit_note?: string; is_dividend?: boolean }
+    Body: { account_id?: string; category_id?: string | null; amount?: number; accrual_date?: string; payment_date?: string | null; note?: string | null; edit_note?: string; is_dividend?: boolean; is_non_operating?: boolean }
   }>(
     '/:id',
     { preHandler: requireRole('owner', 'admin', 'accountant') },

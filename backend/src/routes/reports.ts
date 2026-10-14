@@ -1087,6 +1087,647 @@ export async function reportsRoutes(app: FastifyInstance) {
     }
   )
 
+  // ── PnL 3 Report ─────────────────────────────────────────────────────────────
+  // GET /api/reports/pnl3?from=YYYY-MM&to=YYYY-MM&account_ids=...
+  // Mixed-base PnL: Income by accrual minus refunds, expenses by actual payment,
+  // internal transfers & obnal isolated, non-operating expenses separate, obnal commissions in OPEX.
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string } }>(
+    '/pnl3',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const { from, to, account_ids: accountIdsRaw } = req.query
+      const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
+
+      const now = new Date()
+      const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+      const fromDate = from ? new Date(`${from}-01`) : defaultFrom
+      const toDate   = to   ? new Date(`${to}-01`)   : new Date(now.getFullYear(), now.getMonth(), 1)
+
+      const fmtMonth = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        return `${y}-${m}-01`
+      }
+
+      const months: string[] = []
+      const cursor = new Date(fromDate)
+      while (cursor <= toDate) {
+        months.push(fmtMonth(cursor))
+        cursor.setMonth(cursor.getMonth() + 1)
+      }
+
+      let accountsQ = db.selectFrom('accounts')
+        .select(['id', 'name'])
+        .where('is_active', '=', true)
+
+      if (accountIds.length > 0) {
+        accountsQ = accountsQ.where('id', 'in', accountIds)
+      }
+
+      const accounts = await accountsQ
+        .orderBy('name', 'asc')
+        .execute()
+
+      const withdrawalCat = await db.selectFrom('expense_categories')
+        .select('id')
+        .where('name', '=', 'Вивід коштів')
+        .executeTakeFirst()
+      const withdrawalCatId = withdrawalCat?.id ?? null
+
+      const [
+        clientTxDetails,
+        salaryTxDetails,
+        expenseTxDetails,
+        dividendPayouts,
+        allTransfers,
+      ] = await Promise.all([
+        // 1. Client transactions (accruals & refunds)
+        (() => {
+          let q = db.selectFrom('transactions as t')
+            .leftJoin('children as c', 'c.id', 't.child_id')
+            .leftJoin('activities as act', 'act.id', 't.activity_id')
+            .select([
+              't.account_id',
+              't.activity_id',
+              'act.name as activity_name',
+              't.child_id',
+              'c.full_name as child_name',
+              't.type',
+              sql<string>`to_char(COALESCE(t.billing_month, date_trunc('month', t.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
+              sql<string>`COALESCE(SUM(t.amount), 0)`.as('total')
+            ])
+            .where('t.is_deleted', '=', false)
+            .where('t.type', 'in', ['ACCRUAL', 'REFUND'])
+            .groupBy([
+              't.account_id',
+              't.activity_id',
+              'act.name',
+              't.child_id',
+              'c.full_name',
+              't.type',
+              sql`COALESCE(t.billing_month, date_trunc('month', t.transaction_date))`
+            ])
+          if (accountIds.length > 0) q = q.where('t.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
+
+        // 2. Paid salary transactions
+        (() => {
+          let q = db.selectFrom('salary_transactions as st')
+            .innerJoin('staff as s', 's.id', 'st.staff_id')
+            .select([
+              'st.staff_id',
+              's.full_name as staff_name',
+              'st.type',
+              'st.is_dividend',
+              'st.note',
+              'st.transaction_date',
+              sql<string>`to_char(date_trunc('month', st.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
+              sql<string>`COALESCE(SUM(st.gross_amount), 0)`.as('total')
+            ])
+            .where('st.is_deleted', '=', false)
+            .where('st.type', '=', 'PAYMENT')
+            .groupBy([
+              'st.staff_id',
+              's.full_name',
+              'st.type',
+              'st.is_dividend',
+              'st.note',
+              'st.transaction_date',
+              sql`date_trunc('month', st.transaction_date)`
+            ])
+          if (accountIds.length > 0) q = q.where('st.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
+
+        // 3. Paid expenses with category and transfer info
+        (() => {
+          let q = db.selectFrom('expenses as e')
+            .leftJoin('expense_categories as c', 'c.id', 'e.category_id')
+            .leftJoin('accounts as a', 'a.id', 'e.account_id')
+            .select([
+              'e.id',
+              'e.account_id',
+              'a.name as account_name',
+              'e.category_id',
+              'c.name as category_name',
+              'e.amount',
+              'e.accrual_date',
+              'e.payment_date',
+              'e.status',
+              'e.note',
+              'e.is_dividend',
+              'e.dividend_amount',
+              'e.dividend_payout_id',
+              'e.is_non_operating',
+              'e.withdrawal_transfer_id',
+              'e.withdrawal_amount',
+              'e.is_advance',
+              'e.is_advance_return',
+            ])
+            .where('e.is_deleted', '=', false)
+            .where('e.status', '=', 'paid')
+            .where('e.payment_date', 'is not', null)
+          if (accountIds.length > 0) q = q.where('e.account_id', 'in', accountIds)
+          return q.execute()
+        })(),
+
+        // 4. Dividend payouts
+        db.selectFrom('dividend_payouts as dp')
+          .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
+          .select(['dp.id', 'ep.name as participant_name'])
+          .execute(),
+
+        // 5. Account transfers (all internal transfers / obnal)
+        (() => {
+          let q = db.selectFrom('account_transfers as t')
+            .innerJoin('accounts as fa', 'fa.id', 't.from_account_id')
+            .innerJoin('accounts as ta', 'ta.id', 't.to_account_id')
+            .select([
+              't.id',
+              't.amount',
+              't.transfer_date',
+              't.note',
+              't.from_account_id',
+              'fa.name as from_account_name',
+              't.to_account_id',
+              'ta.name as to_account_name',
+              sql<string>`to_char(date_trunc('month', t.transfer_date), 'YYYY-MM-01')`.as('month')
+            ])
+          if (accountIds.length > 0) {
+            q = q.where((eb) => eb.or([
+              eb('t.from_account_id', 'in', accountIds),
+              eb('t.to_account_id', 'in', accountIds)
+            ]))
+          }
+          return q.execute()
+        })(),
+      ])
+
+      // 4. Process Client Revenue & Refunds (by accrual month)
+      const revDetailsMap: Record<string, Record<string, Record<string, { activity_name: string; accrued: number; paid: number; children: Record<string, { child_name: string; accrued: number; paid: number }> }>>> = {}
+      const refundDetailsMap: Record<string, Record<string, Record<string, { activity_name: string; accrued: number; paid: number; children: Record<string, { child_name: string; accrued: number; paid: number }> }>>> = {}
+
+      for (const tx of clientTxDetails) {
+        const actId = tx.activity_id ?? 'manual'
+        const actName = tx.activity_name ?? 'Без активності'
+        const chId = tx.child_id ?? 'unknown'
+        const chName = tx.child_name ?? 'Невідомий клієнт'
+        const total = Number(tx.total)
+        const m = tx.month_accrual
+
+        if (tx.type === 'ACCRUAL') {
+          if (!revDetailsMap[m]) revDetailsMap[m] = {}
+          if (!revDetailsMap[m][tx.account_id]) revDetailsMap[m][tx.account_id] = {}
+          if (!revDetailsMap[m][tx.account_id][actId]) {
+            revDetailsMap[m][tx.account_id][actId] = { activity_name: actName, accrued: 0, paid: 0, children: {} }
+          }
+          const actObj = revDetailsMap[m][tx.account_id][actId]
+          actObj.accrued += total
+          if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
+          actObj.children[chId].accrued += total
+        } else if (tx.type === 'REFUND') {
+          if (!refundDetailsMap[m]) refundDetailsMap[m] = {}
+          if (!refundDetailsMap[m][tx.account_id]) refundDetailsMap[m][tx.account_id] = {}
+          if (!refundDetailsMap[m][tx.account_id][actId]) {
+            refundDetailsMap[m][tx.account_id][actId] = { activity_name: actName, accrued: 0, paid: 0, children: {} }
+          }
+          const actObj = refundDetailsMap[m][tx.account_id][actId]
+          actObj.accrued += total
+          if (!actObj.children[chId]) actObj.children[chId] = { child_name: chName, accrued: 0, paid: 0 }
+          actObj.children[chId].accrued += total
+        }
+      }
+
+      // 5. Process Salaries (by payment month)
+      const salaryDetailsMap: Record<string, Record<string, { staff_name: string; accrued: number; paid: number }>> = {}
+      const salaryDividendPayments: Array<{ month: string; date: string; name: string; note: string; amount: number }> = []
+
+      for (const tx of salaryTxDetails) {
+        const total = Number(tx.total)
+        const dateStr = tx.transaction_date ? new Date(tx.transaction_date).toISOString().slice(0, 10) : ''
+        const m = tx.month_payment
+
+        if (tx.is_dividend) {
+          salaryDividendPayments.push({
+            month: m,
+            date: dateStr,
+            name: tx.staff_name,
+            note: tx.note || 'Виплата дивідендів (ЗП)',
+            amount: total,
+          })
+          continue
+        }
+
+        if (!salaryDetailsMap[m]) salaryDetailsMap[m] = {}
+        if (!salaryDetailsMap[m][tx.staff_id]) {
+          salaryDetailsMap[m][tx.staff_id] = { staff_name: tx.staff_name, accrued: 0, paid: 0 }
+        }
+        salaryDetailsMap[m][tx.staff_id].paid += total
+      }
+
+      // 6. Process Expenses (by payment month)
+      const operatingExpMap: Record<string, Record<string, { category_name: string; accrued: number; paid: number; transactions: Array<{ id: string; date: string; amount: number; note: string; type: 'paid' }> }>> = {}
+      const nonOperatingExpMap: Record<string, Record<string, { category_name: string; accrued: number; paid: number; transactions: Array<{ id: string; date: string; amount: number; note: string; type: 'paid' }> }>> = {}
+      const obnalCommissionsMap: Record<string, { paid: number; transactions: Array<{ id: string; date: string; amount: number; note: string }> }> = {}
+      const withdrawalsTxList: Array<{ month: string; id: string; date: string; note: string; amount: number }> = []
+      const dividendExpensesList: Array<{ month: string; id: string; date: string; note: string; amount: number; dividend_payout_id: string | null }> = []
+
+      for (const e of expenseTxDetails) {
+        if (e.is_advance || e.is_advance_return) continue
+        if (!e.payment_date) continue
+
+        const m = fmtMonth(new Date(e.payment_date))
+        const paidDateStr = new Date(e.payment_date).toISOString().slice(0, 10)
+        let totalAmount = Number(e.amount)
+
+        // A. Dividends
+        if (e.is_dividend) {
+          const divAmount = e.dividend_amount != null ? Number(e.dividend_amount) : totalAmount
+          dividendExpensesList.push({
+            month: m,
+            id: e.id,
+            date: paidDateStr,
+            note: e.note || '',
+            amount: divAmount,
+            dividend_payout_id: e.dividend_payout_id,
+          })
+          totalAmount -= divAmount
+          if (totalAmount <= 0) continue
+        }
+
+        // B. Obnal commission ("% за вывод" or cash withdrawal fee)
+        const noteLower = (e.note || '').toLowerCase()
+        const isObnalComm = (
+          (e.account_name === 'Готівка' || noteLower.includes('% за вывод')) &&
+          (noteLower.includes('% за вывод') || noteLower.includes('зняття') || noteLower.includes('комісі'))
+        )
+        if (isObnalComm) {
+          if (!obnalCommissionsMap[m]) obnalCommissionsMap[m] = { paid: 0, transactions: [] }
+          obnalCommissionsMap[m].paid += totalAmount
+          obnalCommissionsMap[m].transactions.push({
+            id: e.id,
+            date: paidDateStr,
+            amount: totalAmount,
+            note: e.note || 'Комісія за обнал',
+          })
+          continue
+        }
+
+        // C. Linked Account Transfer (Obnal or inter-account transfer)
+        if (e.withdrawal_transfer_id != null) {
+          const withdrawalAmount = e.withdrawal_amount != null ? Number(e.withdrawal_amount) : totalAmount
+          const remainingExpense = Math.max(0, totalAmount - withdrawalAmount)
+
+          // If there is a remaining real expense beyond the transfer (e.g. 77 330 - 60 000 = 17 330)
+          if (remainingExpense > 0) {
+            const catId = e.category_id ?? 'uncategorized'
+            const catName = e.category_name ?? 'Без категорії'
+            const targetMap = e.is_non_operating ? nonOperatingExpMap : operatingExpMap
+
+            if (!targetMap[m]) targetMap[m] = {}
+            if (!targetMap[m][catId]) {
+              targetMap[m][catId] = { category_name: catName, accrued: 0, paid: 0, transactions: [] }
+            }
+            targetMap[m][catId].paid += remainingExpense
+            targetMap[m][catId].transactions.push({
+              id: e.id,
+              date: paidDateStr,
+              amount: remainingExpense,
+              note: e.note || '',
+              type: 'paid',
+            })
+          }
+          // The transfer amount itself is excluded from company expenses!
+          continue
+        }
+
+        // D. Withdrawal category without transfer and without dividend (owner cash drawings)
+        const catId = e.category_id ?? 'uncategorized'
+        const catName = e.category_name ?? 'Без категорії'
+        if (catId === withdrawalCatId) {
+          withdrawalsTxList.push({
+            month: m,
+            id: e.id,
+            date: paidDateStr,
+            note: e.note || '',
+            amount: totalAmount,
+          })
+          continue
+        }
+
+        // E. Non-operating expense
+        if (e.is_non_operating) {
+          if (!nonOperatingExpMap[m]) nonOperatingExpMap[m] = {}
+          if (!nonOperatingExpMap[m][catId]) {
+            nonOperatingExpMap[m][catId] = { category_name: catName, accrued: 0, paid: 0, transactions: [] }
+          }
+          nonOperatingExpMap[m][catId].paid += totalAmount
+          nonOperatingExpMap[m][catId].transactions.push({
+            id: e.id,
+            date: paidDateStr,
+            amount: totalAmount,
+            note: e.note || '',
+            type: 'paid',
+          })
+          continue
+        }
+
+        // F. Regular Operating Expense
+        if (!operatingExpMap[m]) operatingExpMap[m] = {}
+        if (!operatingExpMap[m][catId]) {
+          operatingExpMap[m][catId] = { category_name: catName, accrued: 0, paid: 0, transactions: [] }
+        }
+        operatingExpMap[m][catId].paid += totalAmount
+        operatingExpMap[m][catId].transactions.push({
+          id: e.id,
+          date: paidDateStr,
+          amount: totalAmount,
+          note: e.note || '',
+          type: 'paid',
+        })
+      }
+
+      // 7. Assemble Results by Month
+      const rows = months.map(month => {
+        // Accounts revenue list (accrued)
+        let totalIncomeAccrued = 0
+        const monthAccounts = accounts.map(a => {
+          let accrued = 0
+          const monthMap = revDetailsMap[month]
+          const accMap = monthMap?.[a.id]
+
+          const detailsList = []
+          if (accMap) {
+            for (const [actId, actObj] of Object.entries(accMap)) {
+              accrued += actObj.accrued
+
+              const childrenList = Object.entries(actObj.children).map(([childId, chObj]) => ({
+                child_id: childId,
+                child_name: chObj.child_name,
+                accrued: chObj.accrued,
+                paid: chObj.paid,
+              })).sort((x, y) => y.accrued - x.accrued)
+
+              detailsList.push({
+                activity_id: actId,
+                activity_name: actObj.activity_name,
+                accrued: actObj.accrued,
+                paid: actObj.paid,
+                children: childrenList,
+              })
+            }
+          }
+
+          detailsList.sort((x, y) => y.accrued - x.accrued)
+          totalIncomeAccrued += accrued
+
+          return {
+            account_id: a.id,
+            name: a.name,
+            accrued,
+            paid: accrued, // for UI display
+            details: detailsList,
+          }
+        })
+
+        // Refunds list (accrued)
+        let totalRefundsAccrued = 0
+        const monthRefunds = accounts.map(a => {
+          let accrued = 0
+          const monthMap = refundDetailsMap[month]
+          const accMap = monthMap?.[a.id]
+
+          const detailsList = []
+          if (accMap) {
+            for (const [actId, actObj] of Object.entries(accMap)) {
+              accrued += actObj.accrued
+
+              const childrenList = Object.entries(actObj.children).map(([childId, chObj]) => ({
+                child_id: childId,
+                child_name: chObj.child_name,
+                accrued: chObj.accrued,
+                paid: chObj.paid,
+              })).sort((x, y) => y.accrued - x.accrued)
+
+              detailsList.push({
+                activity_id: actId,
+                activity_name: actObj.activity_name,
+                accrued: actObj.accrued,
+                paid: actObj.paid,
+                children: childrenList,
+              })
+            }
+          }
+
+          detailsList.sort((x, y) => y.accrued - x.accrued)
+          totalRefundsAccrued += accrued
+
+          return {
+            account_id: a.id,
+            name: a.name,
+            accrued,
+            paid: accrued,
+            details: detailsList,
+          }
+        })
+
+        // Salary list (paid)
+        const monthSalaryDetails = []
+        const salMap = salaryDetailsMap[month]
+        let salary_paid = 0
+        if (salMap) {
+          for (const [staffId, obj] of Object.entries(salMap)) {
+            salary_paid += obj.paid
+            monthSalaryDetails.push({
+              staff_id: staffId,
+              staff_name: obj.staff_name,
+              accrued: obj.paid,
+              paid: obj.paid,
+            })
+          }
+        }
+        monthSalaryDetails.sort((x, y) => y.paid - x.paid)
+
+        // Operating Expenses (paid)
+        const monthOperatingExpDetails = []
+        const opExpMap = operatingExpMap[month]
+        let operating_expenses_paid = 0
+        if (opExpMap) {
+          for (const [catId, obj] of Object.entries(opExpMap)) {
+            operating_expenses_paid += obj.paid
+            obj.transactions.sort((x, y) => x.date.localeCompare(y.date))
+            monthOperatingExpDetails.push({
+              category_id: catId,
+              category_name: obj.category_name,
+              accrued: obj.paid,
+              paid: obj.paid,
+              transactions: obj.transactions,
+            })
+          }
+        }
+        monthOperatingExpDetails.sort((x, y) => y.paid - x.paid)
+
+        // Obnal Commissions
+        const obnalCommObj = obnalCommissionsMap[month] ?? { paid: 0, transactions: [] }
+        const obnal_commissions_paid = obnalCommObj.paid
+        obnalCommObj.transactions.sort((x, y) => x.date.localeCompare(y.date))
+
+        // Non-operating Expenses (paid)
+        const monthNonOperatingExpDetails = []
+        const nonOpExpMap = nonOperatingExpMap[month]
+        let non_operating_expenses_paid = 0
+        if (nonOpExpMap) {
+          for (const [catId, obj] of Object.entries(nonOpExpMap)) {
+            non_operating_expenses_paid += obj.paid
+            obj.transactions.sort((x, y) => x.date.localeCompare(y.date))
+            monthNonOperatingExpDetails.push({
+              category_id: catId,
+              category_name: obj.category_name,
+              accrued: obj.paid,
+              paid: obj.paid,
+              transactions: obj.transactions,
+            })
+          }
+        }
+        monthNonOperatingExpDetails.sort((x, y) => y.paid - x.paid)
+
+        // Combined expenses list for backward compatibility in table view
+        const combinedExpenseDetails = [...monthOperatingExpDetails]
+        if (obnal_commissions_paid > 0) {
+          combinedExpenseDetails.push({
+            category_id: 'obnal_commissions',
+            category_name: 'Комісії за обнал',
+            accrued: obnal_commissions_paid,
+            paid: obnal_commissions_paid,
+            transactions: obnalCommObj.transactions.map(t => ({ ...t, type: 'paid' as const })),
+          })
+        }
+        combinedExpenseDetails.sort((x, y) => y.paid - x.paid)
+
+        // Withdrawals (drawings by owners)
+        const monthWithdrawals = withdrawalsTxList
+          .filter(t => t.month === month)
+          .map(t => ({ id: t.id, date: t.date, note: t.note, amount: t.amount }))
+          .sort((x, y) => x.date.localeCompare(y.date))
+        const withdrawal_paid = monthWithdrawals.reduce((s, t) => s + t.amount, 0)
+
+        // Dividends
+        const monthDividends = []
+        const divExps = dividendExpensesList.filter(t => t.month === month)
+        for (const de of divExps) {
+          const recipient = de.dividend_payout_id
+            ? (dividendPayouts.find(p => p.id === de.dividend_payout_id)?.participant_name ?? '')
+            : ''
+          monthDividends.push({
+            id: de.id,
+            date: de.date,
+            recipient,
+            note: de.note,
+            amount: de.amount,
+          })
+        }
+        const divSals = salaryDividendPayments.filter(t => t.month === month)
+        for (const ds of divSals) {
+          monthDividends.push({
+            id: ds.date + '::' + ds.name,
+            date: ds.date,
+            recipient: ds.name,
+            note: ds.note,
+            amount: ds.amount,
+          })
+        }
+        monthDividends.sort((x, y) => x.date.localeCompare(y.date))
+        const dividend_paid = monthDividends.reduce((s, t) => s + t.amount, 0)
+
+        // Transfers (informational movement)
+        const monthTransfers = allTransfers.filter(t => t.month === month)
+        const transfers_in = monthTransfers.map(t => ({
+          id: t.id,
+          date: t.transfer_date ? new Date(t.transfer_date).toISOString().slice(0, 10) : '',
+          from_account_id: t.from_account_id,
+          from_account_name: t.from_account_name,
+          to_account_id: t.to_account_id,
+          to_account_name: t.to_account_name,
+          amount: Number(t.amount),
+          note: t.note || '',
+        }))
+        const transfers_in_total = transfers_in.reduce((s, t) => s + t.amount, 0)
+
+        // Totals calculations
+        const net_income = totalIncomeAccrued - totalRefundsAccrued
+        const total_operating_expenses = salary_paid + operating_expenses_paid + obnal_commissions_paid
+        const operating_profit = net_income - total_operating_expenses
+        const profit_before_distribution = operating_profit - non_operating_expenses_paid
+        const retained_profit = profit_before_distribution - dividend_paid - withdrawal_paid
+
+        return {
+          month,
+          accounts: monthAccounts,
+          refunds: {
+            accrued: totalRefundsAccrued,
+            paid: totalRefundsAccrued,
+            details: monthRefunds,
+          },
+          salary: {
+            accrued: salary_paid,
+            paid: salary_paid,
+            details: monthSalaryDetails,
+          },
+          operating_expenses: {
+            paid: operating_expenses_paid,
+            details: monthOperatingExpDetails,
+          },
+          obnal_commissions: {
+            paid: obnal_commissions_paid,
+            transactions: obnalCommObj.transactions,
+          },
+          non_operating_expenses: {
+            paid: non_operating_expenses_paid,
+            details: monthNonOperatingExpDetails,
+          },
+          expenses: {
+            accrued: operating_expenses_paid + obnal_commissions_paid,
+            paid: operating_expenses_paid + obnal_commissions_paid,
+            details: combinedExpenseDetails,
+          },
+          withdrawals: {
+            paid: withdrawal_paid,
+            transactions: monthWithdrawals,
+          },
+          dividends: {
+            paid: dividend_paid,
+            transactions: monthDividends,
+          },
+          transfers: {
+            total_amount: transfers_in_total,
+            items: transfers_in,
+          },
+          totals: {
+            income_accrued: totalIncomeAccrued,
+            refunds_accrued: totalRefundsAccrued,
+            net_income,
+            salary_paid,
+            operating_expenses_paid: operating_expenses_paid + obnal_commissions_paid,
+            total_operating_expenses,
+            operating_profit,
+            non_operating_expenses_paid,
+            profit_before_distribution,
+            dividends_paid: dividend_paid,
+            withdrawals_paid: withdrawal_paid,
+            retained_profit,
+          },
+        }
+      })
+
+      return {
+        months,
+        accounts,
+        rows,
+      }
+    }
+  )
+
   // GET /api/reports/osv/child/:childId
   app.get<{
     Params: { childId: string }

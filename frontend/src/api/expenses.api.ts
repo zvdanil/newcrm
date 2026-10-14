@@ -23,6 +23,7 @@ export interface Expense {
   status: 'pending' | 'paid'
   is_instant: boolean
   is_dividend: boolean
+  is_non_operating?: boolean
   is_advance: boolean
   is_advance_return: boolean
   staff_id: string | null
@@ -112,6 +113,7 @@ export const expensesApi = {
     status?: 'pending' | 'paid' | ''
     from?: string
     to?: string
+    search?: string
     is_dividend?: boolean
     include_salary?: boolean
     limit?: number
@@ -123,6 +125,7 @@ export const expensesApi = {
     if (params.status)                 q.set('status', params.status)
     if (params.from)                   q.set('from', params.from)
     if (params.to)                     q.set('to', params.to)
+    if (params.search?.trim())         q.set('search', params.search.trim())
     if (params.is_dividend !== undefined) q.set('is_dividend', String(params.is_dividend))
     if (params.include_salary)         q.set('include_salary', 'true')
     if (params.limit)                  q.set('limit', String(params.limit))
@@ -139,6 +142,7 @@ export const expensesApi = {
     payment_date?: string
     is_instant?: boolean
     is_dividend?: boolean
+    is_non_operating?: boolean
     note?: string
     is_advance?: boolean
     staff_id?: string
@@ -157,6 +161,7 @@ export const expensesApi = {
     accrual_date?: string
     payment_date?: string | null
     is_dividend?: boolean
+    is_non_operating?: boolean
     note?: string | null
     edit_note?: string
   }) => {

@@ -465,6 +465,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     payment_date:     initial?.payment_date?.slice(0, 10) ?? '',
     is_instant:       initial?.is_instant ?? true,
     is_dividend:      initial?.is_dividend ?? false,
+    is_non_operating: initial?.is_non_operating ?? false,
     note:             initial?.note ?? '',
     is_advance:       initial?.is_advance ?? false,
     staff_id:         initial?.staff_id ?? '',
@@ -539,6 +540,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         accrual_date: form.accrual_date,
         payment_date: form.payment_date || null,
         is_dividend:  form.is_dividend,
+        is_non_operating: form.is_non_operating,
         note:      form.note || null,
         edit_note: editNote.trim() || undefined,
       })
@@ -552,6 +554,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         payment_date:     form.payment_date || undefined,
         is_instant:       form.is_instant,
         is_dividend:      form.is_dividend,
+        is_non_operating: form.is_non_operating,
         note:             form.note || undefined,
         is_advance:       form.is_advance,
         staff_id:         form.is_advance ? (form.staff_id || undefined) : undefined,
@@ -683,26 +686,48 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
       })()}
 
       {isEdit ? (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Причина правки</label>
-          <input type="text" value={editNote}
-            onChange={e => setEditNote(e.target.value)}
-            placeholder="Хто, що і чому змінено..."
-            className="w-full text-sm border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.is_dividend}
+                onChange={e => setForm(f => ({ ...f, is_dividend: e.target.checked }))}
+                className="rounded text-iris-600 focus:ring-iris-500" />
+              Дивіденд / вивід коштів
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.is_non_operating}
+                onChange={e => setForm(f => ({ ...f, is_non_operating: e.target.checked }))}
+                className="rounded text-purple-600 focus:ring-purple-500" />
+              Неопераційні витрати
+            </label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Причина правки</label>
+            <input type="text" value={editNote}
+              onChange={e => setEditNote(e.target.value)}
+              placeholder="Хто, що і чому змінено..."
+              className="w-full text-sm border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
+          </div>
         </div>
       ) : (
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center gap-6">
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={form.is_instant}
               onChange={e => setForm(f => ({ ...f, is_instant: e.target.checked }))}
-              className="rounded" />
+              className="rounded text-iris-600 focus:ring-iris-500" />
             Миттєвий (одразу оплачено)
           </label>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" checked={form.is_dividend}
               onChange={e => setForm(f => ({ ...f, is_dividend: e.target.checked }))}
-              className="rounded" />
+              className="rounded text-iris-600 focus:ring-iris-500" />
             Дивіденд / вивід коштів
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={form.is_non_operating}
+              onChange={e => setForm(f => ({ ...f, is_non_operating: e.target.checked }))}
+              className="rounded text-purple-600 focus:ring-purple-500" />
+            Неопераційні витрати
           </label>
         </div>
       )}
@@ -1569,6 +1594,12 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
           )}
           {!isSalary && expense.is_advance_return && (
             <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-medium">повернення авансу</span>
+          )}
+          {!isSalary && expense.is_non_operating && (
+            <span className="text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-medium">неопераційна</span>
+          )}
+          {!isSalary && expense.is_dividend && (
+            <span className="text-xs bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-medium">дивіденд</span>
           )}
           <span>{categoryLabel(expense)}</span>
           {isSalary && expense.staff_name && (

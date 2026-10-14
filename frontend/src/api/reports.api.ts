@@ -131,6 +131,15 @@ export const reportsApi = {
     return data
   },
 
+  getPnL3: async (from?: string, to?: string, account_ids?: string[]): Promise<PnL3Report> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to)   params.set('to', to)
+    if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
+    const { data } = await apiClient.get<PnL3Report>(`/reports/pnl3?${params}`)
+    return data
+  },
+
   getChildOSV: async (childId: string, params?: { start_date?: string; end_date?: string; account_id?: string }) => {
     const { data } = await apiClient.get<ChildOSVReportResponse>(`/reports/osv/child/${childId}`, { params })
     return data
@@ -283,4 +292,51 @@ export interface PnL2Report {
   months: string[]
   accounts: Array<{ id: string; name: string }>
   rows: PnL2Row[]
+}
+
+export interface PnL3TransferItem {
+  id: string
+  date: string
+  from_account_id: string
+  from_account_name: string
+  to_account_id: string
+  to_account_name: string
+  amount: number
+  note: string
+}
+
+export interface PnL3Totals {
+  income_accrued: number
+  refunds_accrued: number
+  net_income: number
+  salary_paid: number
+  operating_expenses_paid: number
+  total_operating_expenses: number
+  operating_profit: number
+  non_operating_expenses_paid: number
+  profit_before_distribution: number
+  dividends_paid: number
+  withdrawals_paid: number
+  retained_profit: number
+}
+
+export interface PnL3Row {
+  month: string
+  accounts: PnL2Account[]
+  refunds: { accrued: number; paid: number; details: PnL2Account[] }
+  salary: { accrued: number; paid: number; details: PnL2StaffDetail[] }
+  operating_expenses: { paid: number; details: PnL2CategoryDetail[] }
+  obnal_commissions: { paid: number; transactions: PnL2WithdrawalTxDetail[] }
+  non_operating_expenses: { paid: number; details: PnL2CategoryDetail[] }
+  expenses: { accrued: number; paid: number; details: PnL2CategoryDetail[] }
+  withdrawals: { paid: number; transactions: PnL2WithdrawalTxDetail[] }
+  dividends: { paid: number; transactions: PnL2DividendTxDetail[] }
+  transfers: { total_amount: number; items: PnL3TransferItem[] }
+  totals: PnL3Totals
+}
+
+export interface PnL3Report {
+  months: string[]
+  accounts: Array<{ id: string; name: string }>
+  rows: PnL3Row[]
 }
