@@ -1339,6 +1339,8 @@ export async function reportsRoutes(app: FastifyInstance) {
 
         const m = fmtMonth(new Date(e.payment_date))
         const paidDateStr = new Date(e.payment_date).toISOString().slice(0, 10)
+        const catId = e.category_id ?? 'uncategorized'
+        const catName = e.category_name ?? 'Без категорії'
         let totalAmount = Number(e.amount)
 
         // A. Dividends
@@ -1359,8 +1361,18 @@ export async function reportsRoutes(app: FastifyInstance) {
         // B. Obnal commission ("% за вывод" or cash withdrawal fee)
         const noteLower = (e.note || '').toLowerCase()
         const isObnalComm = (
-          (e.account_name === 'Готівка' || noteLower.includes('% за вывод')) &&
-          (noteLower.includes('% за вывод') || noteLower.includes('зняття') || noteLower.includes('комісі'))
+          (catId === withdrawalCatId && (
+            noteLower.includes('% за вывод') ||
+            noteLower.includes('% за вивід') ||
+            noteLower.includes('зняття') ||
+            noteLower.includes('снятие') ||
+            noteLower.includes('комісі') ||
+            noteLower.includes('комисси') ||
+            noteLower.includes('обнал') ||
+            e.account_name === 'Готівка'
+          )) ||
+          noteLower.includes('% за вывод') ||
+          noteLower.includes('% за вивід')
         )
         if (isObnalComm) {
           if (!obnalCommissionsMap[m]) obnalCommissionsMap[m] = { paid: 0, transactions: [] }
@@ -1381,8 +1393,6 @@ export async function reportsRoutes(app: FastifyInstance) {
 
           // If there is a remaining real expense beyond the transfer (e.g. 77 330 - 60 000 = 17 330)
           if (remainingExpense > 0) {
-            const catId = e.category_id ?? 'uncategorized'
-            const catName = e.category_name ?? 'Без категорії'
             const targetMap = e.is_non_operating ? nonOperatingExpMap : operatingExpMap
 
             if (!targetMap[m]) targetMap[m] = {}
@@ -1403,8 +1413,6 @@ export async function reportsRoutes(app: FastifyInstance) {
         }
 
         // D. Withdrawal category without transfer and without dividend (owner cash drawings)
-        const catId = e.category_id ?? 'uncategorized'
-        const catName = e.category_name ?? 'Без категорії'
         if (catId === withdrawalCatId) {
           withdrawalsTxList.push({
             month: m,
@@ -1566,12 +1574,21 @@ export async function reportsRoutes(app: FastifyInstance) {
             })
           }
         }
-        monthOperatingExpDetails.sort((x, y) => y.paid - x.paid)
-
         // Obnal Commissions
         const obnalCommObj = obnalCommissionsMap[month] ?? { paid: 0, transactions: [] }
         const obnal_commissions_paid = obnalCommObj.paid
         obnalCommObj.transactions.sort((x, y) => x.date.localeCompare(y.date))
+
+        if (obnal_commissions_paid > 0) {
+          monthOperatingExpDetails.push({
+            category_id: 'obnal_commissions',
+            category_name: 'Комісії за обнал',
+            accrued: obnal_commissions_paid,
+            paid: obnal_commissions_paid,
+            transactions: obnalCommObj.transactions.map(t => ({ ...t, type: 'paid' as const })),
+          })
+        }
+        monthOperatingExpDetails.sort((x, y) => y.paid - x.paid)
 
         // Non-operating Expenses (paid)
         const monthNonOperatingExpDetails = []
@@ -1675,7 +1692,7 @@ export async function reportsRoutes(app: FastifyInstance) {
             details: monthSalaryDetails,
           },
           operating_expenses: {
-            paid: operating_expenses_paid,
+            paid: operating_expenses_paid + obnal_commissions_paid,
             details: monthOperatingExpDetails,
           },
           obnal_commissions: {

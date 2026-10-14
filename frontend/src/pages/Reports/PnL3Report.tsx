@@ -44,9 +44,9 @@ const incomeAccrued = (r: PnL3Row) => r.totals?.income_accrued ?? r.accounts.red
 const refundsAccrued = (r: PnL3Row) => r.totals?.refunds_accrued ?? (r.refunds?.accrued ?? 0)
 const netIncome = (r: PnL3Row) => r.totals?.net_income ?? (incomeAccrued(r) - refundsAccrued(r))
 const salaryPaid = (r: PnL3Row) => r.salary.paid
-const operatingExpensesPaid = (r: PnL3Row) => r.operating_expenses?.paid ?? r.expenses.paid
+const operatingExpensesPaid = (r: PnL3Row) => r.totals?.operating_expenses_paid ?? (r.operating_expenses?.paid ?? r.expenses.paid)
 const obnalCommissionsPaid = (r: PnL3Row) => r.obnal_commissions?.paid ?? 0
-const totalOperatingExpenses = (r: PnL3Row) => r.totals?.total_operating_expenses ?? (salaryPaid(r) + operatingExpensesPaid(r) + obnalCommissionsPaid(r))
+const totalOperatingExpenses = (r: PnL3Row) => r.totals?.total_operating_expenses ?? (salaryPaid(r) + operatingExpensesPaid(r))
 const opProfit = (r: PnL3Row) => r.totals?.operating_profit ?? (netIncome(r) - totalOperatingExpenses(r))
 const nonOperatingPaid = (r: PnL3Row) => r.non_operating_expenses?.paid ?? 0
 const profitBeforeDistribution = (r: PnL3Row) => r.totals?.profit_before_distribution ?? (opProfit(r) - nonOperatingPaid(r))
@@ -206,12 +206,6 @@ export function PnL3Report() {
       getOperatingCategoryPaidTransactions(c.id).forEach(tx =>
         addRow(`        ${tx.date}  ${tx.note || '(без примітки)'}`, r => tx.payments[r.month] ?? 0))
     })
-    const hasObnalComm = rows.some(r => obnalCommissionsPaid(r) > 0)
-    if (hasObnalComm) {
-      addRow('  Комісії за обнал', obnalCommissionsPaid)
-      getObnalCommissionTransactions().forEach(tx =>
-        addRow(`    ${tx.date}  ${tx.note || '(без примітки)'}`, r => r.month === tx.month ? tx.amount : 0))
-    }
     addRow('Всього операційних витрат', totalOperatingExpenses)
     addRow('Операційний прибуток', opProfit)
 
@@ -504,18 +498,6 @@ export function PnL3Report() {
                       </React.Fragment>
                     )
                   })}
-
-                  {/* Obnal commissions in operating expenses */}
-                  {rows.some(r => obnalCommissionsPaid(r) > 0) && (
-                    <>
-                      <DataRow label="Комісії за обнал" level={0} bg="bg-gray-50" expandKey="obnal_commissions" get={obnalCommissionsPaid} />
-                      {expanded['obnal_commissions'] && getObnalCommissionTransactions().map(tx => (
-                        <DataRow key={tx.id} level={1} bg="bg-gray-50" title={tx.note} emptyAsDash
-                          label={<><span className="font-semibold text-gray-400 mr-2">{tx.date}</span>{tx.note || '(без примітки)'}</>}
-                          get={r => r.month === tx.month ? tx.amount : 0} />
-                      ))}
-                    </>
-                  )}
 
                   <TotalRow label="Всього операційних витрат" get={totalOperatingExpenses} cls="bg-amber-50 text-amber-950 border-amber-100" />
 
