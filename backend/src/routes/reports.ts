@@ -1235,7 +1235,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         // 4. Dividend payouts
         db.selectFrom('dividend_payouts as dp')
           .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
-          .select(['dp.id', 'ep.name as participant_name'])
+          .select(['dp.id', 'ep.name as participant_name', 'dp.gross_amount', 'dp.expense_id'])
+          .where('dp.is_deleted', '=', false)
           .execute(),
 
         // 5. Account transfers (all internal transfers / obnal)
@@ -1344,7 +1345,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         let totalAmount = Number(e.amount)
 
         // A. Dividends
-        if (e.is_dividend) {
+        if (e.is_dividend || e.dividend_payout_id) {
           const divAmount = e.dividend_amount != null ? Number(e.dividend_amount) : totalAmount
           dividendExpensesList.push({
             month: m,
@@ -1658,16 +1659,26 @@ export async function reportsRoutes(app: FastifyInstance) {
         const monthDividends = []
         const divExps = dividendExpensesList.filter(t => t.month === month)
         for (const de of divExps) {
-          const recipient = de.dividend_payout_id
-            ? (dividendPayouts.find(p => p.id === de.dividend_payout_id)?.participant_name ?? '')
-            : ''
-          monthDividends.push({
-            id: de.id,
-            date: de.date,
-            recipient,
-            note: de.note,
-            amount: de.amount,
-          })
+          const linkedPayouts = dividendPayouts.filter(p => (p.expense_id && p.expense_id === de.id) || p.id === de.dividend_payout_id)
+          if (linkedPayouts.length > 0) {
+            for (const lp of linkedPayouts) {
+              monthDividends.push({
+                id: `${de.id}-${lp.id}`,
+                date: de.date,
+                recipient: lp.participant_name,
+                note: de.note,
+                amount: Number(lp.gross_amount),
+              })
+            }
+          } else {
+            monthDividends.push({
+              id: de.id,
+              date: de.date,
+              recipient: '',
+              note: de.note,
+              amount: de.amount,
+            })
+          }
         }
         const divSals = salaryDividendPayments.filter(t => t.month === month)
         for (const ds of divSals) {

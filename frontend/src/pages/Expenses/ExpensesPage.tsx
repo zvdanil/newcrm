@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { expensesApi, salaryPaymentsApi, type Expense, type ExpenseCategory, type StaffAdvancePool, type SalaryPayment } from '../../api/expenses.api'
 import { staffApi, type StaffMember } from '../../api/staff.api'
 import { accountsApi } from '../../api/accounts.api'
+import { dividendsApi, type EquityParticipant } from '../../api/dividends.api'
 import { useCanAccess } from '../../hooks/useCanAccess'
 import { today as todayStr, firstOfMonth } from '../../utils/dateStr'
 
@@ -1056,37 +1057,149 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
   onSuccess: () => void
 }) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const amount = Number(expense.amount)
+
+  const { data: participants = [], isLoading: isLoadingParticipants } = useQuery({
+    queryKey: ['dividends', 'participants'],
+    queryFn: dividendsApi.getParticipants,
+  })
+
+  const { data: dividendSettings } = useQuery({
+    queryKey: ['dividends', 'settings'],
+    queryFn: dividendsApi.getSettings,
+  })
+
+  const activeParticipants = useMemo(
+    () => participants.filter(p => p.is_active),
+    [participants]
+  )
 
   const [dividendAmountStr, setDividendAmountStr] = useState(
     expense.dividend_amount != null ? String(Number(expense.dividend_amount)) : String(amount)
   )
   const [payoutType, setPayoutType] = useState<'cash' | 'cashless'>('cash')
   const [taxPct, setTaxPct] = useState('0')
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([])
+  const [hasInitializedParticipants, setHasInitializedParticipants] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Initialize tax percentage from settings
+  useEffect(() => {
+    if (dividendSettings?.default_tax_pct && taxPct === '0') {
+      setTaxPct(String(Number(dividendSettings.default_tax_pct)))
+    }
+  }, [dividendSettings])
+
+  // Initialize selected participants from existing payouts or all active
+  useEffect(() => {
+    if (activeParticipants.length === 0 || hasInitializedParticipants) return
+
+    if (expense.dividend_payouts && expense.dividend_payouts.length > 0) {
+      const existingIds = expense.dividend_payouts.map(dp => dp.participant_id)
+      setSelectedParticipantIds(existingIds)
+    } else {
+      setSelectedParticipantIds(activeParticipants.map(p => p.id))
+    }
+    setHasInitializedParticipants(true)
+  }, [activeParticipants, expense.dividend_payouts, hasInitializedParticipants])
 
   const dividendAmount = parseFloat(dividendAmountStr) || 0
   const isPartial = Math.abs(dividendAmount - amount) > 0.001
   const taxAmount = payoutType === 'cashless' ? Math.round(dividendAmount * (parseFloat(taxPct) || 0) * 100) / 10000 : 0
   const netAmount = dividendAmount - taxAmount
 
-  const mutation = useMutation({
+  // Calculate dividend distribution among selected participants according to shares
+  const distributions = useMemo(() => {
+    const selected = activeParticipants.filter(p => selectedParticipantIds.includes(p.id))
+    if (selected.length === 0 || dividendAmount <= 0) return []
+
+    const totalSelectedShare = selected.reduce((sum, p) => sum + Number(p.share_pct), 0)
+    let allocatedSum = 0
+
+    return selected.map((p, idx) => {
+      let partGross = 0
+      if (totalSelectedShare > 0) {
+        if (idx === selected.length - 1) {
+          partGross = Math.max(0, Math.round((dividendAmount - allocatedSum) * 100) / 100)
+        } else {
+          const ratio = Number(p.share_pct) / totalSelectedShare
+          partGross = Math.round(dividendAmount * ratio * 100) / 100
+          allocatedSum += partGross
+        }
+      } else {
+        if (idx === selected.length - 1) {
+          partGross = Math.max(0, Math.round((dividendAmount - allocatedSum) * 100) / 100)
+        } else {
+          partGross = Math.round((dividendAmount / selected.length) * 100) / 100
+          allocatedSum += partGross
+        }
+      }
+
+      const partTax = payoutType === 'cashless' ? Math.round(partGross * (parseFloat(taxPct) || 0) * 100) / 10000 : 0
+      const partNet = partGross - partTax
+
+      return {
+        participant_id: p.id,
+        name: p.name,
+        share_pct: Number(p.share_pct),
+        effective_pct: totalSelectedShare > 0 ? (Number(p.share_pct) / totalSelectedShare) * 100 : 100 / selected.length,
+        amount: partGross,
+        net: partNet,
+      }
+    })
+  }, [activeParticipants, selectedParticipantIds, dividendAmount, payoutType, taxPct])
+
+  const toggleParticipant = (id: string) => {
+    setSelectedParticipantIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  const selectAll = () => {
+    setSelectedParticipantIds(activeParticipants.map(p => p.id))
+  }
+
+  const clearAll = () => {
+    setSelectedParticipantIds([])
+  }
+
+  const saveMutation = useMutation({
     mutationFn: () => expensesApi.toggleDividend(
       expense.id,
       true,
-      isPartial ? dividendAmount : null
+      isPartial ? dividendAmount : null,
+      {
+        payout_type: payoutType,
+        tax_pct: payoutType === 'cashless' ? parseFloat(taxPct) || 0 : 0,
+        distributions: distributions.map(d => ({
+          participant_id: d.participant_id,
+          amount: d.amount,
+        })),
+      }
     ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['dividends'] })
+      qc.invalidateQueries({ queryKey: ['reports'] })
       onSuccess()
       onClose()
-      const params = new URLSearchParams({ add_expense: expense.id, payout_type: payoutType })
-      if (payoutType === 'cashless') params.set('payout_tax_pct', taxPct)
-      navigate(`/dividends?${params.toString()}`)
     },
     onError: (e: { response?: { data?: { message?: string } } }) => {
       setError(e.response?.data?.message ?? 'Помилка виконання')
+    },
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: () => expensesApi.toggleDividend(expense.id, false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['dividends'] })
+      qc.invalidateQueries({ queryKey: ['reports'] })
+      onSuccess()
+      onClose()
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => {
+      setError(e.response?.data?.message ?? 'Помилка зняття дивіденду')
     },
   })
 
@@ -1095,39 +1208,63 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
     setError(null)
     if (dividendAmount <= 0) return setError('Сума має бути більше 0')
     if (dividendAmount > amount + 0.001) return setError('Сума дивіденду не може перевищувати суму витрати')
-    mutation.mutate()
+    if (activeParticipants.length > 0 && selectedParticipantIds.length === 0) {
+      return setError('Оберіть хоча б одного співвласника для розподілу')
+    }
+    saveMutation.mutate()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[92vh] overflow-y-auto border border-gray-100">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Позначити як дивіденд</h2>
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">₴↑</span>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">
+                {expense.is_dividend ? 'Редагувати виплату дивіденду' : 'Позначити як дивіденд'}
+              </h2>
+              <p className="text-xs text-gray-500">Розподіл суми між співвласниками</p>
+            </div>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+        {/* Expense Info Summary */}
+        <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1.5 border border-gray-100">
           <div className="flex justify-between">
-            <span className="text-gray-500">Рахунок</span>
-            <span className="font-medium">{expense.account_name}</span>
+            <span className="text-gray-500">Рахунок списання</span>
+            <span className="font-medium text-gray-800">{expense.account_name}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-500">Сума витрати</span>
-            <span className="font-mono font-medium">{fmt(expense.amount)}</span>
+            <span className="font-mono font-semibold text-gray-900">{fmt(expense.amount)} ₴</span>
           </div>
           {expense.note && (
             <div className="flex justify-between gap-4">
               <span className="text-gray-500 shrink-0">Опис</span>
-              <span className="text-gray-700 text-right">{fmtNote(expense.note)}</span>
+              <span className="text-gray-700 text-right truncate">{fmtNote(expense.note)}</span>
             </div>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Dividend Amount Input */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Сума дивіденду, ₴ *
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-medium text-gray-700">
+                Сума дивіденду до розподілу, ₴ *
+              </label>
+              {isPartial && (
+                <button
+                  type="button"
+                  onClick={() => setDividendAmountStr(String(amount))}
+                  className="text-[11px] text-iris-600 hover:text-iris-800"
+                >
+                  Скинути до повної суми
+                </button>
+              )}
+            </div>
             <input
               type="number"
               min="0.01"
@@ -1135,69 +1272,195 @@ function DividendMarkDialog({ expense, onClose, onSuccess }: {
               step="0.01"
               value={dividendAmountStr}
               onChange={e => setDividendAmountStr(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500"
               autoFocus
             />
-            <p className="text-xs text-gray-400 mt-1">
-              Можна вказати частину суми. За замовчуванням — повна сума витрати.
-            </p>
+            {isPartial && (
+              <div className="mt-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 text-xs text-amber-800 flex justify-between items-center">
+                <span>Часткова сума дивіденду:</span>
+                <span className="font-mono font-semibold">{dividendAmount.toFixed(2)} ₴ з {amount.toFixed(2)} ₴</span>
+              </div>
+            )}
           </div>
 
-          {isPartial && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
-              Часткова сума: <span className="font-mono font-semibold">{dividendAmount.toFixed(2)} ₴</span> з{' '}
-              <span className="font-mono">{amount.toFixed(2)} ₴</span>
+          {/* Participants Distribution Section */}
+          <div className="border border-purple-100 bg-purple-50/20 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                  Співвласники (Розподіл часток)
+                </span>
+                <p className="text-[11px] text-gray-500">
+                  Виберіть учасників — сума ділиться згідно з їхніми долями
+                </p>
+              </div>
+              {activeParticipants.length > 1 && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAll}
+                    className="text-[11px] text-purple-700 hover:text-purple-900 font-medium hover:underline"
+                  >
+                    Всі
+                  </button>
+                  <span className="text-gray-300">•</span>
+                  <button
+                    type="button"
+                    onClick={clearAll}
+                    className="text-[11px] text-gray-500 hover:text-gray-800 hover:underline"
+                  >
+                    Очистити
+                  </button>
+                </div>
+              )}
             </div>
-          )}
 
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Тип виплати</label>
-            <select
-              value={payoutType}
-              onChange={e => setPayoutType(e.target.value as 'cash' | 'cashless')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
-            >
-              <option value="cash">Готівка (100% в залік)</option>
-              <option value="cashless">Безготівка (з очисткою)</option>
-            </select>
+            {isLoadingParticipants ? (
+              <div className="text-xs text-gray-400 py-3 text-center">Завантаження співвласників...</div>
+            ) : activeParticipants.length === 0 ? (
+              <div className="text-xs text-gray-500 bg-white rounded-lg p-3 border border-gray-200">
+                Не знайдено активних співвласників у розділі Дивіденди → Налаштування.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {activeParticipants.map(p => {
+                  const isChecked = selectedParticipantIds.includes(p.id)
+                  const dist = distributions.find(d => d.participant_id === p.id)
+
+                  return (
+                    <label
+                      key={p.id}
+                      className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                        isChecked
+                          ? 'bg-white border-purple-300 shadow-xs'
+                          : 'bg-white/60 border-gray-200 opacity-60 hover:opacity-90'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleParticipant(p.id)}
+                          className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-gray-900 leading-tight">
+                            {p.name}
+                          </div>
+                          <div className="text-[11px] text-gray-500">
+                            частка: <span className="font-semibold text-gray-700">{Number(p.share_pct)}%</span>
+                            {isChecked && dist && Math.abs(dist.effective_pct - Number(p.share_pct)) > 0.01 && (
+                              <span className="text-purple-600 ml-1">
+                                (норм. {dist.effective_pct.toFixed(1)}%)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        {isChecked && dist ? (
+                          <>
+                            <div className="font-mono text-sm font-semibold text-purple-900">
+                              {dist.amount.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴
+                            </div>
+                            {payoutType === 'cashless' && (
+                              <div className="text-[10px] text-gray-500 font-mono">
+                                чистими: {dist.net.toFixed(2)} ₴
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 font-mono">—</span>
+                        )}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Payout Type & Tax */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Тип виплати</label>
+              <select
+                value={payoutType}
+                onChange={e => setPayoutType(e.target.value as 'cash' | 'cashless')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 bg-white"
+              >
+                <option value="cash">Готівка (100% в залік)</option>
+                <option value="cashless">Безготівка (з очисткою)</option>
+              </select>
+            </div>
+
+            {payoutType === 'cashless' ? (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Податок (очистка), %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={taxPct}
+                  onChange={e => setTaxPct(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500"
+                />
+              </div>
+            ) : (
+              <div className="flex items-end pb-2">
+                <span className="text-xs text-gray-400">Без податку / 100% на руки</span>
+              </div>
+            )}
           </div>
 
           {payoutType === 'cashless' && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Відсоток очистки (Податок), %</label>
-              <input
-                type="number"
-                min="0" max="100" step="0.1"
-                value={taxPct}
-                onChange={e => setTaxPct(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-iris-500/30 focus:border-iris-500"
-              />
-              <div className="mt-1 flex justify-between text-xs text-gray-400">
-                <span>Податок: <span className="font-mono">{taxAmount.toFixed(2)} ₴</span></span>
-                <span>Net: <span className="font-mono font-semibold text-gray-700">{netAmount.toFixed(2)} ₴</span></span>
-              </div>
+            <div className="bg-gray-50 rounded-lg p-2.5 text-xs text-gray-600 flex justify-between border border-gray-200">
+              <span>Податок: <span className="font-mono font-medium text-gray-900">{taxAmount.toFixed(2)} ₴</span></span>
+              <span>Чистими (Net): <span className="font-mono font-bold text-gray-900">{netAmount.toFixed(2)} ₴</span></span>
             </div>
           )}
 
           {error && (
-            <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>
+            <div className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-200">
+              {error}
+            </div>
           )}
 
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Скасувати
-            </button>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex-1 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
-            >
-              {mutation.isPending ? 'Збереження...' : 'Позначити'}
-            </button>
+          {/* Dialog Action Buttons */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+            {expense.is_dividend ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Зняти позначку дивіденду? Всі розподілені виплати буде скасовано.')) {
+                    removeMutation.mutate()
+                  }
+                }}
+                disabled={removeMutation.isPending || saveMutation.isPending}
+                className="px-3 py-2 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors font-medium border border-transparent hover:border-red-200"
+              >
+                {removeMutation.isPending ? 'Зняття...' : 'Зняти дивіденд'}
+              </button>
+            ) : <div />}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Скасувати
+              </button>
+              <button
+                type="submit"
+                disabled={saveMutation.isPending || removeMutation.isPending}
+                className="px-5 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 shadow-xs"
+              >
+                {saveMutation.isPending ? 'Збереження...' : (expense.is_dividend ? 'Зберегти зміни' : 'Позначити')}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1296,10 +1559,21 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
 
         <div className="flex flex-wrap gap-1.5">
           {expense.is_dividend && (
-            <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
-              дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
+            <span
+              onClick={() => isOwner && setMarkingDividend(true)}
+              className={`text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1 ${
+                isOwner ? 'cursor-pointer hover:bg-purple-200 transition-colors' : ''
+              }`}
+              title={isOwner ? "Клікніть для перегляду або редагування дивіденду" : undefined}
+            >
+              <span>дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
                 ? ` (${Number(expense.dividend_amount).toFixed(2)} ₴)`
-                : ''}
+                : ''}</span>
+              {expense.dividend_payouts && expense.dividend_payouts.length > 0 && (
+                <span className="opacity-80">
+                  : {expense.dividend_payouts.map(dp => `${dp.participant_name} (${Number(dp.amount).toFixed(0)} ₴)`).join(', ')}
+                </span>
+              )}
             </span>
           )}
           {expense.is_advance && (
@@ -1401,16 +1675,17 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
                 </button>
               )}
               {isOwner && (
-                expense.is_dividend ? (
-                  <button onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
-                    disabled={removeDividendMutation.isPending}
-                    className="text-xs px-2 py-1 rounded border border-purple-200 transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
-                  >₴↑</button>
-                ) : (
-                  <button onClick={() => setMarkingDividend(true)}
-                    className="text-xs px-2 py-1 rounded border border-gray-200 transition-colors text-gray-500 hover:text-purple-600 hover:bg-purple-50"
-                  >₴↑</button>
-                )
+                <button
+                  onClick={() => setMarkingDividend(true)}
+                  className={`text-xs px-2 py-1 rounded border transition-colors ${
+                    expense.is_dividend
+                      ? 'border-purple-200 bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      : 'border-gray-200 text-gray-500 hover:text-purple-600 hover:bg-purple-50'
+                  }`}
+                  title={expense.is_dividend ? "Редагувати або зняти дивіденд" : "Позначити як дивіденд"}
+                >
+                  ₴↑
+                </button>
               )}
               {isOwner && (
                 expense.withdrawal_transfer_id ? (
@@ -1501,10 +1776,21 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
             <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">ЗП</span>
           )}
           {expense.is_dividend && (
-            <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">
-              дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
+            <span
+              onClick={() => isOwner && setMarkingDividend(true)}
+              className={`text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1 ${
+                isOwner ? 'cursor-pointer hover:bg-purple-200 transition-colors' : ''
+              }`}
+              title={isOwner ? "Клікніть для перегляду або редагування дивіденду" : undefined}
+            >
+              <span>дивіденд{expense.dividend_amount != null && Math.abs(Number(expense.dividend_amount) - Number(expense.amount)) > 0.001
                 ? ` (${Number(expense.dividend_amount).toFixed(2)} ₴)`
-                : ''}
+                : ''}</span>
+              {expense.dividend_payouts && expense.dividend_payouts.length > 0 && (
+                <span className="opacity-80">
+                  : {expense.dividend_payouts.map(dp => `${dp.participant_name} (${Number(dp.amount).toFixed(0)} ₴)`).join(', ')}
+                </span>
+              )}
             </span>
           )}
           {!isSalary && expense.is_advance && (
@@ -1638,24 +1924,17 @@ function ExpenseRow({ expense, isOwner, isAdmin, categories, accounts, onRefresh
                 </button>
               )}
               {isOwner && (
-                expense.is_dividend ? (
-                  <button
-                    onClick={() => { if (window.confirm('Зняти позначку дивіденду?')) removeDividendMutation.mutate() }}
-                    disabled={removeDividendMutation.isPending}
-                    className="text-xs px-2 py-1 rounded transition-colors bg-purple-100 text-purple-700 hover:bg-purple-200"
-                    title="Зняти позначку дивіденду"
-                  >
-                    ₴↑
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setMarkingDividend(true)}
-                    className="text-xs px-2 py-1 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50"
-                    title="Позначити як дивіденд"
-                  >
-                    ₴↑
-                  </button>
-                )
+                <button
+                  onClick={() => setMarkingDividend(true)}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    expense.is_dividend
+                      ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                      : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+                  }`}
+                  title={expense.is_dividend ? "Редагувати або зняти дивіденд" : "Позначити як дивіденд"}
+                >
+                  ₴↑
+                </button>
               )}
               {isOwner && (
                 expense.withdrawal_transfer_id ? (

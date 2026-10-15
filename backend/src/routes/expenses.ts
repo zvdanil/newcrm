@@ -240,6 +240,20 @@ export async function expensesRoutes(app: FastifyInstance) {
               )
           ) ELSE NULL END`.as('utilized_advance_remaining_balance')
         )
+        .select(
+          sql<unknown>`COALESCE((
+            SELECT json_agg(json_build_object(
+              'payout_id', dp.id,
+              'participant_id', dp.participant_id,
+              'participant_name', ep.name,
+              'amount', dp.gross_amount,
+              'net_amount', dp.net_amount
+            ))
+            FROM dividend_payouts dp
+            JOIN equity_participants ep ON ep.id = dp.participant_id
+            WHERE (dp.expense_id = e.id OR dp.id = e.dividend_payout_id) AND dp.is_deleted = false
+          ), '[]'::json)`.as('dividend_payouts')
+        )
         .where('e.is_deleted', '=', false)
 
       if (req.query.account_id) q = q.where('e.account_id', '=', req.query.account_id)
@@ -820,13 +834,15 @@ export async function expensesRoutes(app: FastifyInstance) {
       if (!expense) return reply.status(404).send({ error: 'NotFound' })
 
       await db.transaction().execute(async (trx) => {
-        // Soft delete the linked dividend payout if exists
-        if (expense.dividend_payout_id) {
-          await trx.updateTable('dividend_payouts')
-            .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
-            .where('id', '=', expense.dividend_payout_id)
-            .execute()
-        }
+        // Soft delete all linked dividend payouts if exist
+        await trx.updateTable('dividend_payouts')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+          .where((eb) => eb.or([
+            eb('expense_id', '=', expense.id),
+            ...(expense.dividend_payout_id ? [eb('id', '=', expense.dividend_payout_id)] : [])
+          ]))
+          .where('is_deleted', '=', false)
+          .execute()
 
         // Cleanup withdrawal side effects
         if (expense.withdrawal_transfer_id) {
@@ -1225,45 +1241,117 @@ export async function expensesRoutes(app: FastifyInstance) {
     }
   )
 
-  // PUT /api/expenses/:id/dividend — set/clear is_dividend with optional partial amount (Owner only)
-  app.put<{ Params: { id: string }; Body: { is_dividend: boolean; dividend_amount?: number | null } }>(
+  // PUT /api/expenses/:id/dividend — set/clear is_dividend with optional partial amount & participant distributions (Owner only)
+  app.put<{ 
+    Params: { id: string }
+    Body: { 
+      is_dividend: boolean
+      dividend_amount?: number | null
+      payout_type?: 'cash' | 'cashless'
+      tax_pct?: number
+      note?: string
+      distributions?: Array<{
+        participant_id: string
+        amount: number
+      }>
+    } 
+  }>(
     '/:id/dividend',
     { preHandler: requireRole('owner') },
     async (req, reply) => {
-      const { is_dividend, dividend_amount } = req.body
+      const { is_dividend, dividend_amount, payout_type = 'cash', tax_pct = 0, note, distributions } = req.body
 
       const expense = await db.selectFrom('expenses')
-        .select(['id', 'amount'])
+        .select(['id', 'amount', 'payment_date', 'accrual_date', 'note', 'dividend_payout_id'])
         .where('id', '=', req.params.id)
         .where('is_deleted', '=', false)
         .executeTakeFirst()
       if (!expense) return reply.status(404).send({ error: 'NotFound' })
 
-      if (is_dividend && dividend_amount != null) {
-        const maxAmount = parseFloat(expense.amount as string)
-        if (!Number.isFinite(dividend_amount) || dividend_amount <= 0) {
-          return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду має бути більше 0' })
-        }
-        if (dividend_amount > maxAmount + 0.001) {
-          return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду не може перевищувати суму витрати' })
-        }
-      }
-
-      const updates: Record<string, unknown> = { is_dividend }
       if (!is_dividend) {
-        updates.dividend_amount = null
-      } else {
-        updates.dividend_amount = dividend_amount != null ? dividend_amount : null
+        await db.transaction().execute(async (trx) => {
+          // Soft-delete any linked payouts
+          await trx.updateTable('dividend_payouts')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+            .where((eb) => eb.or([
+              eb('expense_id', '=', expense.id),
+              ...(expense.dividend_payout_id ? [eb('id', '=', expense.dividend_payout_id)] : [])
+            ]))
+            .where('is_deleted', '=', false)
+            .execute()
+
+          await trx.updateTable('expenses')
+            .set({ is_dividend: false, dividend_amount: null, dividend_payout_id: null })
+            .where('id', '=', req.params.id)
+            .execute()
+        })
+        return { ok: true, is_dividend: false }
       }
 
-      const updated = await db.updateTable('expenses')
-        .set(updates)
-        .where('id', '=', req.params.id)
-        .where('is_deleted', '=', false)
-        .returningAll()
-        .executeTakeFirst()
-      if (!updated) return reply.status(404).send({ error: 'NotFound' })
-      return updated
+      const maxAmount = parseFloat(expense.amount as string)
+      const targetDivAmount = dividend_amount != null ? Number(dividend_amount) : maxAmount
+      if (!Number.isFinite(targetDivAmount) || targetDivAmount <= 0) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду має бути більше 0' })
+      }
+      if (targetDivAmount > maxAmount + 0.001) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Сума дивіденду не може перевищувати суму витрати' })
+      }
+
+      let firstPayoutId: string | null = null
+
+      await db.transaction().execute(async (trx) => {
+        // Soft delete prior payouts for this expense
+        await trx.updateTable('dividend_payouts')
+          .set({ is_deleted: true, deleted_at: new Date().toISOString(), deleted_by: req.user.sub })
+          .where((eb) => eb.or([
+            eb('expense_id', '=', expense.id),
+            ...(expense.dividend_payout_id ? [eb('id', '=', expense.dividend_payout_id)] : [])
+          ]))
+          .where('is_deleted', '=', false)
+          .execute()
+
+        if (Array.isArray(distributions) && distributions.length > 0) {
+          const dateStr = expense.payment_date 
+            ? new Date(expense.payment_date).toISOString().slice(0, 10)
+            : (expense.accrual_date ? new Date(expense.accrual_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10))
+
+          for (const dist of distributions) {
+            const distGross = Number(dist.amount)
+            if (distGross <= 0) continue
+            const distNet = payout_type === 'cashless'
+              ? distGross * (1 - (Number(tax_pct) || 0) / 100)
+              : distGross
+
+            const p = await trx.insertInto('dividend_payouts')
+              .values({
+                participant_id: dist.participant_id,
+                expense_id: expense.id,
+                date: dateStr,
+                type: payout_type,
+                tax_pct: payout_type === 'cashless' ? (Number(tax_pct) || 0) : 0,
+                gross_amount: distGross,
+                net_amount: distNet,
+                note: note ? note : (expense.note ? `Виплата дивідендів: ${expense.note}` : 'Виплата дивідендів'),
+                created_by: req.user.sub,
+              })
+              .returning('id')
+              .executeTakeFirstOrThrow()
+
+            if (!firstPayoutId) firstPayoutId = p.id
+          }
+        }
+
+        await trx.updateTable('expenses')
+          .set({
+            is_dividend: true,
+            dividend_amount: targetDivAmount,
+            dividend_payout_id: firstPayoutId,
+          })
+          .where('id', '=', req.params.id)
+          .execute()
+      })
+
+      return { ok: true, is_dividend: true, dividend_amount: targetDivAmount, dividend_payout_id: firstPayoutId }
     }
   )
 

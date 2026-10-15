@@ -37,6 +37,13 @@ export interface Expense {
   withdrawal_amount: string | null
   dividend_payout_id: string | null
   dividend_amount: string | null
+  dividend_payouts?: Array<{
+    payout_id: string
+    participant_id: string
+    participant_name: string
+    amount: number
+    net_amount: number
+  }>
   note: string | null
   created_by_email: string | null
   created_at: string
@@ -191,8 +198,25 @@ export const expensesApi = {
     return data
   },
 
-  toggleDividend: async (id: string, is_dividend: boolean, dividend_amount?: number | null) => {
-    const { data } = await apiClient.put<Expense>(`/expenses/${id}/dividend`, { is_dividend, dividend_amount })
+  toggleDividend: async (
+    id: string,
+    is_dividend: boolean,
+    dividend_amount?: number | null,
+    extra?: {
+      payout_type?: 'cash' | 'cashless'
+      tax_pct?: number
+      note?: string
+      distributions?: Array<{
+        participant_id: string
+        amount: number
+      }>
+    }
+  ) => {
+    const { data } = await apiClient.put<Expense>(`/expenses/${id}/dividend`, {
+      is_dividend,
+      dividend_amount,
+      ...extra,
+    })
     return data
   },
 

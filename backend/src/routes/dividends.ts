@@ -226,7 +226,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
       .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
       .select([
         'dp.id', 'dp.date', 'dp.type', 'dp.tax_pct', 'dp.gross_amount', 'dp.net_amount', 'dp.note', 'dp.created_at',
-        'dp.participant_id', 'ep.name as participant_name'
+        'dp.participant_id', 'dp.expense_id', 'dp.salary_tx_id', 'ep.name as participant_name'
       ])
       .where('dp.is_deleted', '=', false)
     if (from) payoutsQuery = payoutsQuery.where('dp.date', '>=', from as any)
@@ -240,7 +240,10 @@ export async function dividendsRoutes(app: FastifyInstance) {
     const expenses = await db.selectFrom('expenses as e')
       .leftJoin('accounts as a', 'a.id', 'e.account_id')
       .select(['e.id', 'e.amount', 'e.dividend_amount', 'e.note', 'e.dividend_payout_id', 'a.name as account_name'])
-      .where('e.dividend_payout_id', 'is not', null)
+      .where((eb) => eb.or([
+        eb('e.dividend_payout_id', 'is not', null),
+        eb('e.is_dividend', '=', true)
+      ]))
       .where('e.is_deleted', '=', false)
       .execute()
 
@@ -255,8 +258,8 @@ export async function dividendsRoutes(app: FastifyInstance) {
     return payouts.map(p => ({
       ...p,
       sources: [
-        ...expenses.filter(e => e.dividend_payout_id === p.id),
-        ...salaries.filter(s => s.dividend_payout_id === p.id).map(s => ({ ...s, is_salary: true }))
+        ...expenses.filter(e => e.dividend_payout_id === p.id || (p.expense_id && p.expense_id === e.id)),
+        ...salaries.filter(s => s.dividend_payout_id === p.id || (p.salary_tx_id && p.salary_tx_id === s.id)).map(s => ({ ...s, is_salary: true }))
       ]
     }))
   })
@@ -359,6 +362,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
             await trx.updateTable('expenses')
               .set({ 
                 dividend_payout_id: payout.id,
+                is_dividend: true,
                 status: 'paid',
                 payment_date: dateStr
               })
@@ -366,7 +370,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
               .execute()
           } else if (src.type === 'existing_salary') {
             await trx.updateTable('salary_transactions')
-              .set({ dividend_payout_id: payout.id })
+              .set({ dividend_payout_id: payout.id, is_dividend: true })
               .where('id', '=', src.expense_id)
               .execute()
           }

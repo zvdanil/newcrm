@@ -665,6 +665,8 @@ export interface DividendSettingsTable {
 export interface DividendPayoutsTable {
   id:             Generated<string>
   participant_id: string
+  expense_id:     string | null
+  salary_tx_id:   string | null
   date:           ColumnType<Date, string, string>
   type:           'cash' | 'cashless'
   tax_pct:        ColumnType<string, number | string, number | string>
