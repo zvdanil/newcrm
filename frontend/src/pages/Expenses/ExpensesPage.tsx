@@ -462,9 +462,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
     category_id:      initial?.category_id ?? '',
     amount:           initial ? fmt(initial.amount ?? 0) : '',
     accrual_date:     initial?.accrual_date?.slice(0, 10) ?? today,
-    payment_date:     initial?.payment_date?.slice(0, 10) ?? '',
-    is_instant:       initial?.is_instant ?? true,
-    is_dividend:      initial?.is_dividend ?? false,
+    payment_date:     initial?.payment_date?.slice(0, 10) ?? today,
     is_non_operating: initial?.is_non_operating ?? false,
     note:             initial?.note ?? '',
     is_advance:       initial?.is_advance ?? false,
@@ -539,7 +537,6 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         amount,
         accrual_date: form.accrual_date,
         payment_date: form.payment_date || null,
-        is_dividend:  form.is_dividend,
         is_non_operating: form.is_non_operating,
         note:      form.note || null,
         edit_note: editNote.trim() || undefined,
@@ -551,9 +548,8 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         category_id:      form.category_id || undefined,
         amount:           totalBill,
         accrual_date:     form.accrual_date,
-        payment_date:     form.payment_date || undefined,
-        is_instant:       form.is_instant,
-        is_dividend:      form.is_dividend,
+        payment_date:     form.payment_date || form.accrual_date,
+        is_instant:       true,
         is_non_operating: form.is_non_operating,
         note:             form.note || undefined,
         is_advance:       form.is_advance,
@@ -638,69 +634,37 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         )}
       </div>
 
-      {(() => {
-        const showPaymentDate = form.is_instant || (isEdit && initial?.status === 'paid')
-        if (showPaymentDate) {
-          return (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
-                  <input type="date" value={form.accrual_date}
-                    onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value }))}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Дата сплати</label>
-                  <input type="date" value={form.payment_date}
-                    onChange={e => setForm(f => ({ ...f, payment_date: e.target.value }))}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
-                <input type="text" placeholder="Опис витрати" value={form.note}
-                  onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-              </div>
-            </>
-          )
-        } else {
-          return (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
-                <input type="date" value={form.accrual_date}
-                  onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value }))}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
-                <input type="text" placeholder="Опис витрати" value={form.note}
-                  onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
-              </div>
-            </div>
-          )
-        }
-      })()}
-
-      {isEdit ? (
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-6">
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={form.is_dividend}
-                onChange={e => setForm(f => ({ ...f, is_dividend: e.target.checked }))}
-                className="rounded text-iris-600 focus:ring-iris-500" />
-              Дивіденд / вивід коштів
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={form.is_non_operating}
-                onChange={e => setForm(f => ({ ...f, is_non_operating: e.target.checked }))}
-                className="rounded text-purple-600 focus:ring-purple-500" />
-              Неопераційні витрати
-            </label>
+      <div>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Дата нарахування</label>
+            <input type="date" value={form.accrual_date}
+              onChange={e => setForm(f => ({ ...f, accrual_date: e.target.value, payment_date: f.payment_date || e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Дата сплати</label>
+            <input type="date" value={form.payment_date}
+              onChange={e => setForm(f => ({ ...f, payment_date: e.target.value }))}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Нотатка</label>
+          <input type="text" placeholder="Опис витрати" value={form.note}
+            onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+        </div>
+      </div>
+
+      <div className="space-y-3 pt-1">
+        <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+          <input type="checkbox" checked={form.is_non_operating}
+            onChange={e => setForm(f => ({ ...f, is_non_operating: e.target.checked }))}
+            className="rounded text-purple-600 focus:ring-purple-500" />
+          Неопераційні витрати
+        </label>
+        {isEdit && (
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Причина правки</label>
             <input type="text" value={editNote}
@@ -708,29 +672,8 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
               placeholder="Хто, що і чому змінено..."
               className="w-full text-sm border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400" />
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-6">
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" checked={form.is_instant}
-              onChange={e => setForm(f => ({ ...f, is_instant: e.target.checked }))}
-              className="rounded text-iris-600 focus:ring-iris-500" />
-            Миттєвий (одразу оплачено)
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" checked={form.is_dividend}
-              onChange={e => setForm(f => ({ ...f, is_dividend: e.target.checked }))}
-              className="rounded text-iris-600 focus:ring-iris-500" />
-            Дивіденд / вивід коштів
-          </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" checked={form.is_non_operating}
-              onChange={e => setForm(f => ({ ...f, is_non_operating: e.target.checked }))}
-              className="rounded text-purple-600 focus:ring-purple-500" />
-            Неопераційні витрати
-          </label>
-        </div>
-      )}
+        )}
+      </div>
 
       {!isEdit && (
         <div className="pt-2 border-t border-iris-100">
