@@ -1490,11 +1490,36 @@ export async function reportsRoutes(app: FastifyInstance) {
           detailsList.sort((x, y) => y.accrued - x.accrued)
           totalIncomeAccrued += accrued
 
+          const accTransfersIn = allTransfers
+            .filter(t => t.month === month && t.to_account_id === a.id)
+            .map(t => ({
+              id: t.id,
+              date: t.transfer_date ? new Date(t.transfer_date).toISOString().slice(0, 10) : '',
+              from_account_name: t.from_account_name,
+              to_account_name: t.to_account_name,
+              amount: Number(t.amount),
+              note: t.note || '',
+            }))
+          const accTransfersOut = allTransfers
+            .filter(t => t.month === month && t.from_account_id === a.id)
+            .map(t => ({
+              id: t.id,
+              date: t.transfer_date ? new Date(t.transfer_date).toISOString().slice(0, 10) : '',
+              from_account_name: t.from_account_name,
+              to_account_name: t.to_account_name,
+              amount: Number(t.amount),
+              note: t.note || '',
+            }))
+
           return {
             account_id: a.id,
             name: a.name,
             accrued,
             paid: accrued, // for UI display
+            transfers_in: accTransfersIn.reduce((s, t) => s + t.amount, 0),
+            transfers_out: accTransfersOut.reduce((s, t) => s + t.amount, 0),
+            transfers_in_items: accTransfersIn,
+            transfers_out_items: accTransfersOut,
             details: detailsList,
           }
         })

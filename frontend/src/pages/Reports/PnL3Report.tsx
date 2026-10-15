@@ -45,7 +45,6 @@ const refundsAccrued = (r: PnL3Row) => r.totals?.refunds_accrued ?? (r.refunds?.
 const netIncome = (r: PnL3Row) => r.totals?.net_income ?? (incomeAccrued(r) - refundsAccrued(r))
 const salaryPaid = (r: PnL3Row) => r.salary.paid
 const operatingExpensesPaid = (r: PnL3Row) => r.totals?.operating_expenses_paid ?? (r.operating_expenses?.paid ?? r.expenses.paid)
-const obnalCommissionsPaid = (r: PnL3Row) => r.obnal_commissions?.paid ?? 0
 const totalOperatingExpenses = (r: PnL3Row) => r.totals?.total_operating_expenses ?? (salaryPaid(r) + operatingExpensesPaid(r))
 const opProfit = (r: PnL3Row) => r.totals?.operating_profit ?? (netIncome(r) - totalOperatingExpenses(r))
 const nonOperatingPaid = (r: PnL3Row) => r.non_operating_expenses?.paid ?? 0
@@ -131,10 +130,6 @@ export function PnL3Report() {
     })
     return Object.values(map).sort((x, y) => x.date.localeCompare(y.date))
   }
-
-  const getObnalCommissionTransactions = () =>
-    rows.flatMap(r => (r.obnal_commissions?.transactions ?? []).map(t => ({ ...t, month: r.month })))
-      .sort((x, y) => x.date.localeCompare(y.date))
 
   const getUniqueNonOpCategories = () =>
     uniq(rows.flatMap(r => (r.non_operating_expenses?.details ?? []).map(d => [d.category_id, d.category_name, d.paid] as [string, string, number])))
@@ -361,6 +356,30 @@ export function PnL3Report() {
             </React.Fragment>
           )
         })}
+
+        {/* Informational transfers under the account (e.g. Obnal into Готівка) */}
+        {prefix === 'inc' && rows.some(r => ((getAcc(r, a.id)?.transfers_in ?? 0) > 0 || (getAcc(r, a.id)?.transfers_out ?? 0) > 0)) && (
+          <>
+            {rows.some(r => (getAcc(r, a.id)?.transfers_in ?? 0) > 0) && (
+              <DataRow
+                label={<span className="text-slate-500 italic">↳ Отримано з обналу / переказів (довідково)</span>}
+                level={1}
+                bg="bg-slate-50/50"
+                emptyAsDash
+                get={r => getAcc(r, a.id)?.transfers_in ?? 0}
+              />
+            )}
+            {rows.some(r => (getAcc(r, a.id)?.transfers_out ?? 0) > 0) && (
+              <DataRow
+                label={<span className="text-slate-500 italic">↳ Передано на обнал / перекази (довідково)</span>}
+                level={1}
+                bg="bg-slate-50/50"
+                emptyAsDash
+                get={r => -(getAcc(r, a.id)?.transfers_out ?? 0)}
+              />
+            )}
+          </>
+        )}
       </React.Fragment>
     )
   })
@@ -570,6 +589,43 @@ export function PnL3Report() {
                           </>}
                           get={r => r.month === tx.month ? tx.amount : 0} />
                       ))}
+                    </>
+                  )}
+
+                  {/* CURRENT ACCOUNT BALANCES */}
+                  {accountsList && accountsList.length > 0 && (
+                    <>
+                      <SectionHeader label="ПІДСУМКОВИЙ СТАН РАХУНКІВ (АКТУАЛЬНИЙ ЗАЛИШОК НА ЗАРАЗ)" />
+                      {accountsList
+                        .filter(a => selectedAccounts.length === 0 || selectedAccounts.includes(a.id))
+                        .map((acc, idx) => {
+                          const balNum = parseFloat(acc.balance) || 0
+                          return (
+                            <tr key={acc.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="sticky left-0 z-10 px-4 py-2 border-r border-gray-200 font-medium text-gray-700 flex items-center justify-between">
+                                <span>{acc.name}</span>
+                                <span className="text-[11px] text-gray-400 font-normal">поточний баланс</span>
+                              </td>
+                              <td colSpan={months.length} className="px-4 py-2 text-right font-mono font-semibold border-r border-gray-200">
+                                <span className={balNum >= 0 ? 'text-gray-900' : 'text-red-600'}>
+                                  {fmtMoney(balNum)} ₴
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      <tr className="bg-slate-100 font-bold border-t-2 border-b-2 border-slate-300">
+                        <td className="sticky left-0 z-10 bg-slate-100 px-4 py-2.5 border-r border-gray-200 text-slate-900">
+                          Всього грошей на рахунках
+                        </td>
+                        <td colSpan={months.length} className="px-4 py-2.5 text-right font-mono text-base text-slate-950 border-r border-gray-200">
+                          {fmtMoney(
+                            accountsList
+                              .filter(a => selectedAccounts.length === 0 || selectedAccounts.includes(a.id))
+                              .reduce((s, a) => s + (parseFloat(a.balance) || 0), 0)
+                          )} ₴
+                        </td>
+                      </tr>
                     </>
                   )}
                 </tbody>

@@ -237,6 +237,10 @@ export interface PnL2Account {
   name: string
   accrued: number
   paid: number
+  transfers_in?: number
+  transfers_out?: number
+  transfers_in_items?: PnL3TransferItem[]
+  transfers_out_items?: PnL3TransferItem[]
   details: PnL2ActivityDetail[]
 }
 
