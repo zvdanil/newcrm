@@ -767,15 +767,15 @@ export async function salaryRoutes(app: FastifyInstance) {
 
   // ── Salary Payments — Expenses view ────────────────────────────────────────
 
-  // GET /api/salary/payments?account_id=&from=&to=&is_dividend=
+  // GET /api/salary/payments?account_id=&from=&to=&is_dividend=&search=
   // Returns all PAYMENT transactions (for display in Витрати / Зарплата tab)
   app.get<{
-    Querystring: { account_id?: string; from?: string; to?: string; is_dividend?: string }
+    Querystring: { account_id?: string; from?: string; to?: string; is_dividend?: string; search?: string }
   }>(
     '/salary/payments',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
-      const { account_id, from, to, is_dividend } = req.query
+      const { account_id, from, to, is_dividend, search } = req.query
 
       let q = db
         .selectFrom('salary_transactions as st')
@@ -799,6 +799,25 @@ export async function salaryRoutes(app: FastifyInstance) {
       if (to)                 q = q.where('st.transaction_date', '<=', new Date(to))
       if (is_dividend === 'true')  q = q.where('st.is_dividend', '=', true)
       if (is_dividend === 'false') q = q.where('st.is_dividend', '=', false)
+
+      const searchTrimmed = search?.trim()
+      if (searchTrimmed) {
+        const pattern = `%${searchTrimmed}%`
+        const numClean = searchTrimmed.replace(/\s+/g, '').replace(',', '.')
+        const numPattern = `%${numClean}%`
+        q = q.where((eb) => {
+          const conditions = [
+            eb('s.full_name', 'ilike', pattern),
+            eb('st.note', 'ilike', pattern),
+            eb('ac.name', 'ilike', pattern),
+            sql<boolean>`st.gross_amount::text ILIKE ${numPattern}`,
+          ]
+          if (numClean !== searchTrimmed) {
+            conditions.push(eb('st.note', 'ilike', numPattern))
+          }
+          return eb.or(conditions)
+        })
+      }
 
       const rows = await q.execute()
 

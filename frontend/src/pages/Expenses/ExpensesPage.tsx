@@ -2595,6 +2595,7 @@ export function ExpensesPage() {
     from:        '',
     to:          '',
     is_dividend: undefined as boolean | undefined,
+    search:      '',
   })
 
   const { data: salaryData, isLoading: salaryLoading } = useQuery({
@@ -2604,6 +2605,7 @@ export function ExpensesPage() {
       from:        salaryFilters.from || undefined,
       to:          salaryFilters.to || undefined,
       is_dividend: salaryFilters.is_dividend,
+      search:      salaryFilters.search.trim() || undefined,
     }),
     enabled: tab === 'salary',
   })
@@ -2630,6 +2632,7 @@ export function ExpensesPage() {
 
   let expenses = expensesData?.data ?? []
   let transfers = transfersData
+  let salaryPayments = salaryData?.data ?? []
 
   // Local filtering
   if (filters.account_ids.length > 0) {
@@ -2655,6 +2658,15 @@ export function ExpensesPage() {
       String(t.amount).includes(q)
     )
   }
+  if (salaryFilters.search.trim()) {
+    const q = salaryFilters.search.trim().toLowerCase()
+    salaryPayments = salaryPayments.filter(p =>
+      p.staff_name.toLowerCase().includes(q) ||
+      (p.note || '').toLowerCase().includes(q) ||
+      (p.account_name || '').toLowerCase().includes(q) ||
+      String(p.gross_amount).includes(q)
+    )
+  }
 
   const realExpenseTotal  = expenses.filter(e => !e.is_advance && !e.is_advance_return).reduce((sum, e) => sum + Number(e.amount), 0)
   const advanceIssuedTotal = expenses.filter(e => e.is_advance).reduce((sum, e) => sum + Number(e.amount), 0)
@@ -2663,10 +2675,13 @@ export function ExpensesPage() {
 
   const hasFilters = !!(filters.account_ids.length > 0 || filters.category_id || filters.status || filters.from !== firstOfMonth() || filters.to || filters.is_dividend !== undefined || filters.search)
 
-  const salaryPayments   = salaryData?.data ?? []
-  const salaryTotal      = salaryData?.total_amount ?? 0
-  const salaryCount      = salaryData?.total ?? 0
-  const hasSalaryFilters = !!(salaryFilters.account_id || salaryFilters.from || salaryFilters.to || salaryFilters.is_dividend !== undefined)
+  const salaryTotal = salaryFilters.search.trim()
+    ? salaryPayments.reduce((s, p) => s + Number(p.gross_amount), 0)
+    : (salaryData?.total_amount ?? 0)
+  const salaryCount = salaryFilters.search.trim()
+    ? salaryPayments.length
+    : (salaryData?.total ?? 0)
+  const hasSalaryFilters = !!(salaryFilters.account_id || salaryFilters.from || salaryFilters.to || salaryFilters.is_dividend !== undefined || salaryFilters.search.trim())
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'expenses',   label: 'Журнал витрат' },
@@ -2823,6 +2838,15 @@ export function ExpensesPage() {
             </select>
           </div>
           <div>
+            <label className="block text-xs text-gray-500 mb-1">Пошук</label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+              <input type="text" value={salaryFilters.search} placeholder="Співробітник, нотатка..."
+                onChange={e => setSalaryFilters(f => ({ ...f, search: e.target.value }))}
+                className="text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-2 w-48 focus:outline-none focus:ring-2 focus:ring-iris-500" />
+            </div>
+          </div>
+          <div>
             <label className="block text-xs text-gray-500 mb-1">Тип</label>
             <select
               value={salaryFilters.is_dividend === undefined ? '' : String(salaryFilters.is_dividend)}
@@ -2849,7 +2873,7 @@ export function ExpensesPage() {
               className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
           </div>
           {hasSalaryFilters && (
-            <button onClick={() => setSalaryFilters({ account_id: '', from: '', to: '', is_dividend: undefined })}
+            <button onClick={() => setSalaryFilters({ account_id: '', from: '', to: '', is_dividend: undefined, search: '' })}
               className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2">
               Скинути
             </button>

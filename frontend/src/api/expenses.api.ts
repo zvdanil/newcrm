@@ -329,12 +329,14 @@ export const salaryPaymentsApi = {
     from?: string
     to?: string
     is_dividend?: boolean
+    search?: string
   } = {}): Promise<SalaryPaymentsResponse> => {
     const q = new URLSearchParams()
     if (params.account_id)             q.set('account_id', params.account_id)
     if (params.from)                   q.set('from', params.from)
     if (params.to)                     q.set('to', params.to)
     if (params.is_dividend !== undefined) q.set('is_dividend', String(params.is_dividend))
+    if (params.search)                 q.set('search', params.search)
     const { data } = await apiClient.get<SalaryPaymentsResponse>(`/salary/payments?${q}`)
     return data
   },
