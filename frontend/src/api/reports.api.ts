@@ -51,6 +51,12 @@ export interface ARAnalyticsMonthRow {
   balance_end_month: number
 }
 
+export interface OtherAccountBalance {
+  account_id: string
+  account_name: string
+  current_balance: number
+}
+
 export interface ARAnalyticsRow {
   child_id: string
   child_name: string
@@ -66,6 +72,10 @@ export interface ARAnalyticsRow {
   balance_end: number
   current_balance: number
   months: ARAnalyticsMonthRow[]
+  other_accounts?: OtherAccountBalance[]
+  net_balance?: number
+  has_cross_imbalance?: boolean
+  cross_prepayment_total?: number
 }
 
 export interface ARAnalyticsTotals {
@@ -88,6 +98,7 @@ export interface ARAnalyticsFilters {
   account_ids: string[]
   balance_mode: 'all' | 'debtors' | 'advances'
   is_active: '' | 'true' | 'false'
+  only_imbalances?: boolean
 }
 
 export const reportsApi = {
@@ -110,6 +121,7 @@ export const reportsApi = {
     if (filters.account_ids.length) params.set('account_ids', filters.account_ids.join(','))
     params.set('balance_mode', filters.balance_mode)
     if (filters.is_active) params.set('is_active', filters.is_active)
+    if (filters.only_imbalances) params.set('only_imbalances', 'true')
     const { data } = await apiClient.get<ARAnalyticsReport>(`/reports/ar-analytics?${params}`)
     return data
   },

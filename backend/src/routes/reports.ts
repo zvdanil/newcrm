@@ -314,6 +314,7 @@ export async function reportsRoutes(app: FastifyInstance) {
       account_ids?: string  // comma-separated UUIDs
       balance_mode?: string // 'all' | 'debtors' | 'advances'
       is_active?: string    // 'true' | 'false' | ''
+      only_imbalances?: string // 'true' | 'false' | ''
     }
   }>(
     '/ar-analytics',
@@ -325,6 +326,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         account_ids: accountIdsRaw,
         balance_mode = 'all',
         is_active,
+        only_imbalances,
       } = request.query
 
       if (!from_month || !to_month) {
@@ -409,17 +411,15 @@ export async function reportsRoutes(app: FastifyInstance) {
           'p.phone as primary_parent_phone',
         ])
 
-      // ── 4. Accounts ──
-      let accountsQ = db.selectFrom('accounts').select(['id', 'name'])
-      if (accountIds.length > 0) accountsQ = accountsQ.where('id', 'in', accountIds)
+      // ── 4. Accounts (all accounts loaded so we have names for other accounts too) ──
+      const accountsQ = db.selectFrom('accounts').select(['id', 'name'])
 
       // ── 5. Initial balances ──
       let initQ = db.selectFrom('initial_balances').select(['child_id', 'account_id', 'amount'])
       if (accountIds.length > 0) initQ = initQ.where('account_id', 'in', accountIds)
 
-      // ── 6. Current balances ──
-      let curQ = db.selectFrom('child_balances').select(['child_id', 'account_id', 'balance'])
-      if (accountIds.length > 0) curQ = curQ.where('account_id', 'in', accountIds)
+      // ── 6. Current balances (all accounts loaded to detect cross-account balances) ──
+      const curQ = db.selectFrom('child_balances').select(['child_id', 'account_id', 'balance'])
 
       const [summaryRows, monthlyRows, childMeta, accountMeta, initBals, curBals] = await Promise.all([
         summaryQ.execute(),
@@ -435,6 +435,22 @@ export async function reportsRoutes(app: FastifyInstance) {
       const accountMetaMap = new Map(accountMeta.map(r => [r.id, r]))
       const initBalMap     = new Map(initBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.amount)]))
       const curBalMap      = new Map(curBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.balance)]))
+
+      // Build map of all active/non-zero balances per child across all accounts
+      const childAllBalancesMap = new Map<string, Array<{ account_id: string; account_name: string; current_balance: number }>>()
+      for (const cb of curBals) {
+        const bal = Number(cb.balance)
+        if (Math.abs(bal) < 0.005) continue
+        const acc = accountMetaMap.get(cb.account_id)
+        if (!childAllBalancesMap.has(cb.child_id)) {
+          childAllBalancesMap.set(cb.child_id, [])
+        }
+        childAllBalancesMap.get(cb.child_id)!.push({
+          account_id: cb.account_id,
+          account_name: acc?.name ?? '—',
+          current_balance: bal,
+        })
+      }
 
       // Monthly lookup: `child_id:account_id` → Map<month_YYYY-MM-01, {credits, debits}>
       const monthlyMap = new Map<string, Map<string, { credits: number; debits: number }>>()
@@ -489,6 +505,14 @@ export async function reportsRoutes(app: FastifyInstance) {
             }
           })
 
+          const allChildBals = childAllBalancesMap.get(sr.child_id) ?? []
+          const net_balance = allChildBals.reduce((sum, b) => sum + b.current_balance, 0)
+          const hasDebt = allChildBals.some(b => b.current_balance < -0.005)
+          const hasAdvance = allChildBals.some(b => b.current_balance > 0.005)
+          const has_cross_imbalance = hasDebt && hasAdvance
+          const other_accounts = allChildBals.filter(b => b.account_id !== sr.account_id)
+          const cross_prepayment_total = other_accounts.filter(b => b.current_balance > 0.005).reduce((s, b) => s + b.current_balance, 0)
+
           return {
             child_id:             sr.child_id,
             child_name:           child?.child_name ?? '—',
@@ -504,6 +528,10 @@ export async function reportsRoutes(app: FastifyInstance) {
             balance_end,
             current_balance: curBal,
             months,
+            other_accounts,
+            net_balance,
+            has_cross_imbalance,
+            cross_prepayment_total,
           }
         })
         // is_active filter
@@ -516,6 +544,11 @@ export async function reportsRoutes(app: FastifyInstance) {
         .filter(r => {
           if (balance_mode === 'debtors')  return r.current_balance < -0.005
           if (balance_mode === 'advances') return r.current_balance >  0.005
+          return true
+        })
+        // only_imbalances filter
+        .filter(r => {
+          if (only_imbalances === 'true' && !r.has_cross_imbalance) return false
           return true
         })
         // Sort: biggest debt (most negative) first, then by name

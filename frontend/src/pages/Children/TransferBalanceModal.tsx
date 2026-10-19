@@ -21,13 +21,25 @@ interface TransferBalanceModalProps {
   accounts: AccountOption[]
   balances: BalanceOption[]
   onClose: () => void
+  defaultFromAccountId?: string
+  defaultToAccountId?: string
+  defaultAmount?: number | string
 }
 
 function fmt(n: number) {
   return `${n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} грн`
 }
 
-export function TransferBalanceModal({ childId, isOpen, accounts, balances, onClose }: TransferBalanceModalProps) {
+export function TransferBalanceModal({
+  childId,
+  isOpen,
+  accounts,
+  balances,
+  onClose,
+  defaultFromAccountId,
+  defaultToAccountId,
+  defaultAmount,
+}: TransferBalanceModalProps) {
   const qc = useQueryClient()
   const [fromAccountId, setFromAccountId] = useState('')
   const [toAccountId, setToAccountId] = useState('')
@@ -42,16 +54,17 @@ export function TransferBalanceModal({ childId, isOpen, accounts, balances, onCl
   useEffect(() => {
     if (!isOpen) return
     setError(null)
-    setAmount('')
+    setAmount(defaultAmount != null && Number(defaultAmount) > 0 ? String(defaultAmount) : '')
     setNote('')
     setDate(today())
-    // Default source: account with the largest positive balance
+    // Default source: account with the largest positive balance or defaultFromAccountId
     const positive = [...balances].filter((b) => Number(b.balance) > 0).sort((a, b) => Number(b.balance) - Number(a.balance))
-    const from = positive[0]?.account_id ?? balances[0]?.account_id ?? ''
+    const from = defaultFromAccountId ?? positive[0]?.account_id ?? balances[0]?.account_id ?? ''
     setFromAccountId(from)
-    setToAccountId(activeAccounts.find((a) => a.id !== from)?.id ?? '')
+    const to = defaultToAccountId ?? activeAccounts.find((a) => a.id !== from)?.id ?? ''
+    setToAccountId(to)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen])
+  }, [isOpen, defaultFromAccountId, defaultToAccountId, defaultAmount])
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -67,6 +80,7 @@ export function TransferBalanceModal({ childId, isOpen, accounts, balances, onCl
       qc.invalidateQueries({ queryKey: ['ledger', childId] })
       qc.invalidateQueries({ queryKey: ['childOSV', childId] })
       qc.invalidateQueries({ queryKey: ['open-accruals', childId] })
+      qc.invalidateQueries({ queryKey: ['report-ar-analytics'] })
       onClose()
     },
     onError: (err: unknown) => {
