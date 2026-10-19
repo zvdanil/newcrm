@@ -1939,74 +1939,78 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           </div>
 
           {/* Monthly summary */}
-          <div className="grid grid-cols-7 gap-3 pt-2 border-t border-gray-100">
-            <div className="col-span-7 mb-0.5">
+          <div className="pt-2 border-t border-gray-100">
+            <div className="mb-1">
               <span className="text-xs text-gray-400 font-medium">Поточний місяць</span>
             </div>
-            {[
-              { label: 'Нараховано (gross)', value: summary.gross, color: 'text-gray-900' },
-              { label: 'Утримання', value: -summary.deduction, color: 'text-red-600' },
-              { label: 'До виплати (net)', value: summary.net, color: 'text-iris-700 font-semibold' },
-              { label: 'Виплачено', value: summary.paid, color: 'text-green-700' },
-              {
-                label: 'Оплачено за минулий період',
-                value: summary.paidPreviousPeriod,
-                color: summary.paidPreviousPeriod > 0 ? 'text-green-700 font-semibold' : 'text-gray-400',
-              },
-              {
-                label: summary.balance > 0 ? 'Борг у цьому місяці' : summary.balance < 0 ? 'Переплата у місяці' : 'Залишок',
-                value: summary.balance,
-                color: summary.balance > 0
-                  ? 'text-red-600 font-semibold'
-                  : summary.balance < 0
-                    ? 'text-green-700 font-semibold'
-                    : 'text-gray-400',
-                displayValue: summary.balance < 0 ? fmt(Math.abs(summary.balance)) : undefined,
-              },
-              {
-                label: 'Борг мин. місяців',
-                value: summary.debtPreviousPeriods,
-                color: summary.debtPreviousPeriods > 0 ? 'text-red-700 font-semibold' : 'text-gray-400',
-              },
-            ].map(({ label, value, color, displayValue }) => (
-              <div key={label} className="text-center">
-                <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-                <p className={`text-sm font-mono ${color}`}>
-                  {displayValue !== undefined ? displayValue : `${value < 0 ? '−' : ''}${fmt(Math.abs(value))}`}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* All-time total summary */}
-          {totalSummary && (
-            <div className="grid grid-cols-5 gap-3 pt-2 border-t border-gray-200 bg-gray-50 -mx-5 px-5 pb-2 rounded-b-xl">
-              <div className="col-span-5 mb-0.5">
-                <span className="text-xs text-gray-500 font-medium">За весь час</span>
-              </div>
+            <div className="flex flex-col divide-y divide-gray-100 md:divide-y-0 md:grid md:grid-cols-7 md:gap-3">
               {[
-                { label: 'Нараховано (gross)', value: totalSummary.gross, color: 'text-gray-700' },
-                { label: 'Утримання', value: -totalSummary.deduction, color: 'text-red-500' },
-                { label: 'До виплати (net)', value: totalSummary.net, color: 'text-iris-700 font-semibold' },
-                { label: 'Виплачено', value: totalSummary.paid, color: 'text-green-700' },
+                { label: 'Нараховано (gross)', value: summary.gross, color: 'text-gray-900' },
+                { label: 'Утримання', value: -summary.deduction, color: 'text-red-600' },
+                { label: 'До виплати (net)', value: summary.net, color: 'text-iris-700 font-semibold' },
+                { label: 'Виплачено', value: summary.paid, color: 'text-green-700' },
                 {
-                  label: totalSummary.balance > 0 ? 'Поточний борг' : totalSummary.balance < 0 ? 'Поточна переплата' : 'Поточний борг',
-                  value: totalSummary.balance,
-                  color: totalSummary.balance > 0
-                    ? 'text-red-600 font-bold'
-                    : totalSummary.balance < 0
-                      ? 'text-green-700 font-bold'
+                  label: 'Оплачено за минулий період',
+                  value: summary.paidPreviousPeriod,
+                  color: summary.paidPreviousPeriod > 0 ? 'text-green-700 font-semibold' : 'text-gray-400',
+                },
+                {
+                  label: summary.balance > 0 ? 'Борг у цьому місяці' : summary.balance < 0 ? 'Переплата у місяці' : 'Залишок',
+                  value: summary.balance,
+                  color: summary.balance > 0
+                    ? 'text-red-600 font-semibold'
+                    : summary.balance < 0
+                      ? 'text-green-700 font-semibold'
                       : 'text-gray-400',
-                  displayValue: totalSummary.balance < 0 ? fmt(Math.abs(totalSummary.balance)) : undefined,
+                  displayValue: summary.balance < 0 ? fmt(Math.abs(summary.balance)) : undefined,
+                },
+                {
+                  label: 'Борг мин. місяців',
+                  value: summary.debtPreviousPeriods,
+                  color: summary.debtPreviousPeriods > 0 ? 'text-red-700 font-semibold' : 'text-gray-400',
                 },
               ].map(({ label, value, color, displayValue }) => (
-                <div key={label} className="text-center">
-                  <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                <div key={label} className="flex justify-between items-center py-1.5 md:py-0 md:block md:text-center">
+                  <p className="text-xs text-gray-500 md:mb-0.5">{label}</p>
                   <p className={`text-sm font-mono ${color}`}>
                     {displayValue !== undefined ? displayValue : `${value < 0 ? '−' : ''}${fmt(Math.abs(value))}`}
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* All-time total summary */}
+          {totalSummary && (
+            <div className="pt-2 border-t border-gray-200 bg-gray-50 -mx-5 px-5 pb-2.5 rounded-b-xl">
+              <div className="mb-1">
+                <span className="text-xs text-gray-500 font-medium">За весь час</span>
+              </div>
+              <div className="flex flex-col divide-y divide-gray-200/60 md:divide-y-0 md:grid md:grid-cols-5 md:gap-3">
+                {[
+                  { label: 'Нараховано (gross)', value: totalSummary.gross, color: 'text-gray-700' },
+                  { label: 'Утримання', value: -totalSummary.deduction, color: 'text-red-500' },
+                  { label: 'До виплати (net)', value: totalSummary.net, color: 'text-iris-700 font-semibold' },
+                  { label: 'Виплачено', value: totalSummary.paid, color: 'text-green-700' },
+                  {
+                    label: totalSummary.balance > 0 ? 'Поточний борг' : totalSummary.balance < 0 ? 'Поточна переплата' : 'Поточний борг',
+                    value: totalSummary.balance,
+                    color: totalSummary.balance > 0
+                      ? 'text-red-600 font-bold'
+                      : totalSummary.balance < 0
+                        ? 'text-green-700 font-bold'
+                        : 'text-gray-400',
+                    displayValue: totalSummary.balance < 0 ? fmt(Math.abs(totalSummary.balance)) : undefined,
+                  },
+                ].map(({ label, value, color, displayValue }) => (
+                  <div key={label} className="flex justify-between items-center py-1.5 md:py-0 md:block md:text-center">
+                    <p className="text-xs text-gray-500 md:text-gray-400 md:mb-0.5">{label}</p>
+                    <p className={`text-sm font-mono ${color}`}>
+                      {displayValue !== undefined ? displayValue : `${value < 0 ? '−' : ''}${fmt(Math.abs(value))}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </>
