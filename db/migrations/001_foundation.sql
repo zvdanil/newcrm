@@ -130,7 +130,6 @@ CREATE TRIGGER trg_children_updated_at
 
 -- ============================================================
 -- SEED: Начальные данные (группы + Owner-аккаунт)
--- Пароль owner: "iris2024" (хэш bcrypt 12 раундов)
 -- ============================================================
 INSERT INTO groups (name, sort_order) VALUES
   ('Молодша',        1),
@@ -140,6 +139,6 @@ INSERT INTO groups (name, sort_order) VALUES
 
 INSERT INTO users (email, password_hash, role) VALUES (
   'owner@iris.local',
-  '$2b$12$90Gj4glBpCdZyhtRz2X5kO5xD9A9pJmIAYxrOD5kpoXbR38fE5.ly',  -- iris2024
+  '$2b$12$B95AAMZHO1cOB/1djN9xVe0XA6iHWR.M/OX/e5Kmq3QuJWGJVs2p.',
   'owner'
 );

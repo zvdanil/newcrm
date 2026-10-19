@@ -48,7 +48,7 @@ export function LoginPage() {
               required
               autoComplete="email"
               className="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500"
-              placeholder="owner@iris.local"
+              placeholder="your@email.com"
             />
           </div>
 
@@ -79,10 +79,6 @@ export function LoginPage() {
             {loading ? 'Вхід...' : 'Увійти'}
           </button>
         </form>
-
-        <p className="text-center text-xs text-gray-400 mt-4">
-          Demo: owner@iris.local / iris2024
-        </p>
       </div>
     </div>
   )
