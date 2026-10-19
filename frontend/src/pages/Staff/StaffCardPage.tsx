@@ -1611,44 +1611,40 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-      {/* Header with month nav */}
-      <div className="flex items-center justify-between">
+      {/* Header: Row 1 - Title and month nav */}
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-900">Фінансова Iсторія</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <button onClick={() => setMonth(m => monthNav(m, -1))} className="text-gray-400 hover:text-gray-700 px-2 py-1">←</button>
           <span className="text-sm font-medium text-gray-800 min-w-[90px] text-center">
             {new Date(month + '-01').toLocaleString('uk', { month: 'long', year: 'numeric' })}
           </span>
           <button onClick={() => setMonth(m => monthNav(m, 1))} disabled={month >= maxMonth}
             className="text-gray-400 hover:text-gray-700 disabled:opacity-30 px-2 py-1">→</button>
-          {isAdmin && (
-            <button
-              onClick={handleRecalc}
-              disabled={recalcPending}
-              title="Перерахувати всі нарахування за місяць"
-              className="text-xs px-2 py-1 text-gray-400 hover:text-iris-600 disabled:opacity-40 transition-colors border border-gray-200 rounded-lg hover:border-iris-300"
-            >
-              {recalcPending ? '...' : '↻'}
-            </button>
-          )}
         </div>
-        {isAdmin && (
-          <div className="flex gap-2">
-            {!showManual && !showPay && (
-              <>
-                <button onClick={() => setShowManual(true)}
-                  className="text-xs px-3 py-1.5 border border-iris-200 text-iris-600 rounded-lg hover:bg-iris-50">
-                  + Нарахування
-                </button>
-                <button onClick={() => setShowPay(true)}
-                  className="text-xs px-3 py-1.5 bg-green-700 text-white rounded-lg hover:bg-green-800">
-                  Виплатити ЗП
-                </button>
-              </>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Header: Row 2 - Recalculate, accrual, and payout action buttons */}
+      {isAdmin && !showManual && !showPay && (
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          <button
+            onClick={handleRecalc}
+            disabled={recalcPending}
+            title="Перерахувати всі нарахування за місяць"
+            className="text-xs px-2.5 py-1.5 text-gray-500 hover:text-iris-600 disabled:opacity-40 transition-colors border border-gray-200 rounded-lg hover:border-iris-300"
+          >
+            {recalcPending ? '...' : '↻ Перерахувати'}
+          </button>
+          <button onClick={() => setShowManual(true)}
+            className="text-xs px-3 py-1.5 border border-iris-200 text-iris-600 rounded-lg hover:bg-iris-50">
+            + Нарахування
+          </button>
+          <button onClick={() => setShowPay(true)}
+            className="text-xs px-3 py-1.5 bg-green-700 text-white rounded-lg hover:bg-green-800">
+            Виплатити ЗП
+          </button>
+        </div>
+      )}
 
       {showPay && <PayForm staffId={staffId} onDone={() => setShowPay(false)} />}
       {showManual && <ManualAccrualForm staffId={staffId} rates={rates} onDone={() => setShowManual(false)} />}
@@ -1941,7 +1937,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           {/* Monthly summary */}
           <div className="pt-2 border-t border-gray-100">
             <div className="mb-1">
-              <span className="text-xs text-gray-400 font-medium">Поточний місяць</span>
+              <span className="text-xs font-bold text-orange-600">Поточний місяць</span>
             </div>
             <div className="flex flex-col divide-y divide-gray-100 md:divide-y-0 md:grid md:grid-cols-7 md:gap-3">
               {[
@@ -1984,7 +1980,7 @@ function FinancialHistoryBlock({ staffId, isAdmin }: { staffId: string; isAdmin:
           {totalSummary && (
             <div className="pt-2 border-t border-gray-200 bg-gray-50 -mx-5 px-5 pb-2.5 rounded-b-xl">
               <div className="mb-1">
-                <span className="text-xs text-gray-500 font-medium">За весь час</span>
+                <span className="text-xs font-bold text-blue-600">За весь час</span>
               </div>
               <div className="flex flex-col divide-y divide-gray-200/60 md:divide-y-0 md:grid md:grid-cols-5 md:gap-3">
                 {[
