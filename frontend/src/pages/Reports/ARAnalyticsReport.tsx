@@ -484,17 +484,29 @@ export function ARAnalyticsReport() {
       g.current_balance   += r.current_balance
       g.account_rows.push(r)
     }
+
+    // In grouped view, cross-account imbalance strictly requires at least 2 accounts with opposing balances
+    for (const g of map.values()) {
+      const hasDebt = g.account_rows.some(ar => ar.current_balance < -0.005)
+      const hasAdvance = g.account_rows.some(ar => ar.current_balance > 0.005)
+      g.has_cross_imbalance = g.account_rows.length > 1 && hasDebt && hasAdvance
+    }
+
     return Array.from(map.values())
   }, [rows])
 
   // Count children with cross-account imbalance in current result
   const imbalanceCount = useMemo(() => {
-    const seen = new Set<string>()
-    for (const r of rows) {
-      if (r.has_cross_imbalance) seen.add(r.child_id)
+    if (effectiveViewMode === 'flat') {
+      const seen = new Set<string>()
+      for (const r of rows) {
+        if (r.has_cross_imbalance) seen.add(r.child_id)
+      }
+      return seen.size
+    } else {
+      return childGroups.filter(g => g.has_cross_imbalance).length
     }
-    return seen.size
-  }, [rows])
+  }, [rows, childGroups, effectiveViewMode])
 
   // Expand / collapse handlers
   const toggleFlatRow = (key: string) => {

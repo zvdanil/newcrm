@@ -505,12 +505,21 @@ export async function reportsRoutes(app: FastifyInstance) {
             }
           })
 
+          const isMultiAccountFilter = accountIds.length > 1
           const allChildBals = childAllBalancesMap.get(sr.child_id) ?? []
-          const net_balance = allChildBals.reduce((sum, b) => sum + b.current_balance, 0)
-          const hasDebt = allChildBals.some(b => b.current_balance < -0.005)
-          const hasAdvance = allChildBals.some(b => b.current_balance > 0.005)
+
+          // When multiple specific accounts are chosen (accountIds.length > 1), evaluate cross-account
+          // imbalance strictly WITHIN the selected accounts.
+          // When 1 account is chosen (or all accounts), evaluate across all accounts.
+          const scopedChildBals = isMultiAccountFilter
+            ? allChildBals.filter(b => accountIds.includes(b.account_id))
+            : allChildBals
+
+          const net_balance = scopedChildBals.reduce((sum, b) => sum + b.current_balance, 0)
+          const hasDebt = scopedChildBals.some(b => b.current_balance < -0.005)
+          const hasAdvance = scopedChildBals.some(b => b.current_balance > 0.005)
           const has_cross_imbalance = hasDebt && hasAdvance
-          const other_accounts = allChildBals.filter(b => b.account_id !== sr.account_id)
+          const other_accounts = scopedChildBals.filter(b => b.account_id !== sr.account_id)
           const cross_prepayment_total = other_accounts.filter(b => b.current_balance > 0.005).reduce((s, b) => s + b.current_balance, 0)
 
           return {
