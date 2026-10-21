@@ -292,126 +292,108 @@ export async function recalcSmartPerChildBenefit(rateId: string, billingMonth: s
  * computes delta per billing_month, creates CORRECTION transactions.
  *
  * Supported source types: auto_per_lesson, auto_per_child, auto_fixed_monthly,
- * manual with quantity in metadata.
+ * Retroactive recalculation when a manual rate is created backdated.
+ * Directly recalculates gross_amount for all ACCRUALs attached to oldRateId
+ * in the retro period that have quantity (e.g. hourly) or are based on monthly_by_day/revenue.
+ * Manual accruals without quantity (fixed amounts) are skipped without modification.
+ * Prevents duplicates by not creating CORRECTION records and directly updating ACCRUALs.
  */
 export async function recalcRetroAccruals(
   staffId:      string,
   oldRateId:    string,
   newRateId:    string,
   newRateValue: number,
-  fromDate:     Date,
-): Promise<{ corrections: number }> {
-  const today = new Date()
-
-  const accruals = await db
+  fromDate:     Date | string,
+  toDate?:      Date | string | null,
+): Promise<{ updated: number }> {
+  let q = db
     .selectFrom('salary_transactions')
-    .select(['gross_amount', 'deduction_pct', 'billing_month', 'transaction_date', 'metadata_json'])
+    .select(['id', 'gross_amount', 'deduction_pct', 'billing_month', 'transaction_date', 'metadata_json', 'edit_note'])
     .where('staff_id',   '=', staffId)
     .where('rate_id',    '=', oldRateId)
     .where('type',       '=', 'ACCRUAL')
     .where('is_deleted', '=', false)
-    .where('transaction_date', '>=', fromDate)
-    .where('transaction_date', '<=', today)
-    .execute()
+    .where('transaction_date', '>=', castAsDate(fromDate))
 
-  if (accruals.length === 0) return { corrections: 0 }
+  if (toDate) {
+    q = q.where('transaction_date', '<=', castAsDate(toDate))
+  }
 
-  // Fetch new rate deduction_pct for CORRECTION entries
+  const accruals = await q.execute()
+
+  if (accruals.length === 0) return { updated: 0 }
+
+  // Fetch new rate deduction_pct
   const newRate = await db
     .selectFrom('staff_rates')
-    .select('deduction_pct')
+    .select(['deduction_pct', 'value_mode'])
     .where('id', '=', newRateId)
     .executeTakeFirst()
   const deductionPct = newRate ? Number(newRate.deduction_pct) : 0
 
-  // Aggregate delta per billing_month
-  const monthDelta = new Map<string, number>()
+  let updatedCount = 0
 
   for (const accrual of accruals) {
     const meta      = accrual.metadata_json as Record<string, unknown> | null
     const source    = meta?.source as string | undefined
     const quantity  = typeof meta?.quantity === 'number' ? meta.quantity as number : null
     const revenue   = typeof meta?.revenue  === 'number' ? meta.revenue  as number : null
-    const oldAmount = Number(accrual.gross_amount)
 
-    let newAmount: number
+    let newAmount: number | null = null
+    const updatedMeta: Record<string, unknown> = { ...(meta ?? {}) }
 
     if (revenue !== null) {
       // percent_of_revenue mode — reapply new % to the same revenue base
       newAmount = Math.round(revenue * newRateValue / 100 * 100) / 100
+      updatedMeta.rate_pct = newRateValue
     } else if (source === 'manual_daily') {
       // monthly_by_day: recompute daily rate from new monthly rate
       const workingDays = typeof meta?.working_days === 'number' ? meta.working_days as number
         : workingDaysInMonthFromDate(accrual.transaction_date as Date | string)
       newAmount = Math.round(newRateValue / workingDays * 100) / 100
+      updatedMeta.monthly_rate = newRateValue
+      updatedMeta.daily_rate = newAmount
     } else if (quantity !== null && quantity > 0) {
       // fixed mode with quantity: per_lesson (qty=1), per_child (qty=N), hourly/manual
       newAmount = Math.round(quantity * newRateValue * 100) / 100
-    } else if (source === 'auto_fixed_monthly') {
-      newAmount = newRateValue
+      updatedMeta.rate_value = newRateValue
     } else {
-      // free-form manual without quantity — skip
+      // free-form manual without quantity — skip, preserve user-set amount
       continue
     }
 
-    const delta = Math.round((newAmount - oldAmount) * 100) / 100
-    if (Math.abs(delta) < 0.001) continue
+    if (newAmount !== null) {
+      const editNoteSuffix = `Ретроперерахунок за новою ставкою ${newRateValue} грн`
+      const newEditNote = accrual.edit_note
+        ? `${accrual.edit_note}; ${editNoteSuffix}`
+        : editNoteSuffix
 
-    const billingRaw = accrual.billing_month as unknown
-    const billing = toLocalDateString(billingRaw as Date | string)
-    monthDelta.set(billing, (monthDelta.get(billing) ?? 0) + delta)
-  }
-
-  let corrections = 0
-  for (const [billing, delta] of monthDelta) {
-    if (Math.abs(delta) < 0.001) continue
-
-    const billingDate = new Date(billing)
-    const billingStr  = billing  // already 'YYYY-MM-DD'
-
-    // Soft-delete any existing retro CORRECTION for same rate+billing_month
-    // (prevents duplicate if admin re-creates the same retroactive rate)
-    const existingRetro = await db
-      .selectFrom('salary_transactions')
-      .select('id')
-      .where('staff_id',   '=', staffId)
-      .where('rate_id',    '=', newRateId)
-      .where('type',       '=', 'CORRECTION')
-      .where('billing_month', '=', castAsDate(billing))
-      .where('is_deleted', '=', false)
-      .executeTakeFirst()
-
-    if (existingRetro) {
       await db.updateTable('salary_transactions')
-        .set({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .where('id', '=', existingRetro.id)
+        .set({
+          gross_amount:  newAmount,
+          deduction_pct: deductionPct,
+          rate_id:       newRateId,
+          metadata_json: updatedMeta,
+          edit_note:     newEditNote,
+        })
+        .where('id', '=', accrual.id)
         .execute()
+
+      updatedCount++
     }
-
-    await db.insertInto('salary_transactions').values({
-      staff_id:         staffId,
-      rate_id:          newRateId,
-      activity_id:      null,
-      type:             'CORRECTION',
-      gross_amount:     Math.abs(delta),
-      deduction_pct:    deductionPct,
-      transaction_date: billingStr,
-      billing_month:    billingStr,
-      note:             delta > 0
-        ? `Ретро-коригування +${Math.abs(delta).toFixed(2)} грн (нова ставка)`
-        : `Ретро-коригування −${Math.abs(delta).toFixed(2)} грн (нова ставка)`,
-      metadata_json: {
-        source:         'retro_correction',
-        old_rate_id:    oldRateId,
-        new_rate_value: newRateValue,
-        delta,
-      },
-    }).execute()
-
-    corrections++
   }
 
-  return { corrections }
+  // Soft-delete any previous legacy retro CORRECTION records for this staff & period to avoid duplicate ghost corrections
+  await db.updateTable('salary_transactions')
+    .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .where('staff_id', '=', staffId)
+    .where('type', '=', 'CORRECTION')
+    .where('is_deleted', '=', false)
+    .where(sql`metadata_json->>'source'`, '=', 'retro_correction')
+    .where('transaction_date', '>=', castAsDate(fromDate))
+    .execute()
+
+  return { updated: updatedCount }
 }
 
 /** Returns total child billing revenue for an activity on a specific date. */

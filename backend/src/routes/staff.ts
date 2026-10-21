@@ -266,13 +266,25 @@ export async function staffRoutes(app: FastifyInstance) {
           .execute()
 
         // Delete any CORRECTION or ACCRUAL transactions attached to this rate that are now superseded by the new rate
-        await db.updateTable('salary_transactions')
-          .set({ is_deleted: true, deleted_at: new Date().toISOString() })
-          .where('staff_id', '=', req.params.id)
-          .where('rate_id', '=', oldRate.id)
-          .where('type', 'in', ['CORRECTION', 'ACCRUAL'])
-          .where('billing_month', '>=', castAsDate(fromDate))
-          .execute()
+        if (rate_category === 'auto') {
+          await db.updateTable('salary_transactions')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+            .where('staff_id', '=', req.params.id)
+            .where('rate_id', '=', oldRate.id)
+            .where('type', 'in', ['CORRECTION', 'ACCRUAL'])
+            .where('billing_month', '>=', castAsDate(fromDate))
+            .execute()
+        } else {
+          // For manual rates: only soft-delete superseded CORRECTION records.
+          // Keep ACCRUALs intact so they can be directly recalculated with the new rate!
+          await db.updateTable('salary_transactions')
+            .set({ is_deleted: true, deleted_at: new Date().toISOString() })
+            .where('staff_id', '=', req.params.id)
+            .where('rate_id', '=', oldRate.id)
+            .where('type', '=', 'CORRECTION')
+            .where('billing_month', '>=', castAsDate(fromDate))
+            .execute()
+        }
       }
 
       const rate = await db.insertInto('staff_rates').values({
@@ -348,23 +360,21 @@ export async function staffRoutes(app: FastifyInstance) {
       }
 
       // Retro recalculation: if valid_from is in the past, run for all affected old rates
-      const todayObj    = new Date(today)
-      todayObj.setHours(0, 0, 0, 0)
-
-      if (rate_category !== 'auto' && overlappingRates.length > 0 && fromDateObj < todayObj) {
+      if (rate_category !== 'auto' && overlappingRates.length > 0 && fromDate <= today) {
         for (const oldRate of overlappingRates) {
           await recalcRetroAccruals(
             req.params.id,
             oldRate.id,
             rate.id,
             Number(rate_value),
-            fromDateObj,
+            fromDate,
+            valid_to ?? null,
           )
         }
       }
 
-      // Recalc all marks from valid_from through today (inclusive — string comparison avoids tz skew)
-      if (fromDate <= today) {
+      // Recalc all marks from valid_from through today for auto rates (inclusive — string comparison avoids tz skew)
+      if (rate_category === 'auto' && fromDate <= today) {
         await triggerRetroAccruals(req.params.id, activity_id ?? null, fromDateObj, new Date(today))
       }
 
