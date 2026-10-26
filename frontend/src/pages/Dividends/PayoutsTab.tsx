@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { dividendsApi } from '../../api/dividends.api'
 import { CreatePayoutModal } from './CreatePayoutModal'
 
+import { formatDateStr } from '../../utils/dateStr'
+
 export function PayoutsTab({
   prefillExpenseId,
   prefillPayoutType,
@@ -47,7 +49,7 @@ export function PayoutsTab({
   }
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('uk-UA')
+    return formatDateStr(dateStr)
   }
 
   if (isLoading) return <div className="py-8 text-center text-gray-500">Завантаження журналу...</div>

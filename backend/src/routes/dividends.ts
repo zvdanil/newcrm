@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
 import { sql } from 'kysely'
+import { castAsDate } from '../services/dateUtils.js'
 
 export async function dividendsRoutes(app: FastifyInstance) {
 
@@ -138,6 +139,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner') },
     async (req) => {
     const { from, to } = req.query
+    const hasPeriod = Boolean(from || to)
 
     const participants = await db.selectFrom('equity_participants')
       .selectAll()
@@ -147,12 +149,13 @@ export async function dividendsRoutes(app: FastifyInstance) {
     let payoutsQuery = db.selectFrom('dividend_payouts')
       .select(['participant_id', sql<number>`SUM(net_amount)`.as('actual_net')])
       .where('is_deleted', '=', false)
-    if (from) payoutsQuery = payoutsQuery.where('date', '>=', from as any)
-    if (to) payoutsQuery = payoutsQuery.where('date', '<=', to as any)
+    if (from) payoutsQuery = payoutsQuery.where('date', '>=', castAsDate(from))
+    if (to) payoutsQuery = payoutsQuery.where('date', '<=', castAsDate(to))
     const payouts = await payoutsQuery.groupBy('participant_id').execute()
 
     const settings = await db.selectFrom('dividend_settings').selectAll().where('id', '=', 1).executeTakeFirst()
-    const initialSkewAmount = settings ? Number(settings.initial_skew_amount) : 0
+    // Initial skew is a historical opening balance adjustment and must only apply to all-time calculations
+    const initialSkewAmount = (!hasPeriod && settings) ? Number(settings.initial_skew_amount) : 0
     const initialSkewFavoredId = settings ? settings.initial_skew_participant_id : null
     const favoredParticipant = participants.find(p => p.id === initialSkewFavoredId)
     const favShare = favoredParticipant ? Number(favoredParticipant.share_pct) : 0
@@ -199,7 +202,7 @@ export async function dividendsRoutes(app: FastifyInstance) {
     })
 
     const targetTotalNet = maxRatio
-    const leveling = balances.map(b => {
+    const leveling = hasPeriod ? [] : balances.map(b => {
       const requiredNet = (targetTotalNet * (b.share_pct / 100)) - b.actual_net
       return {
         participant_id: b.id,
@@ -225,12 +228,22 @@ export async function dividendsRoutes(app: FastifyInstance) {
     let payoutsQuery = db.selectFrom('dividend_payouts as dp')
       .innerJoin('equity_participants as ep', 'ep.id', 'dp.participant_id')
       .select([
-        'dp.id', 'dp.date', 'dp.type', 'dp.tax_pct', 'dp.gross_amount', 'dp.net_amount', 'dp.note', 'dp.created_at',
-        'dp.participant_id', 'dp.expense_id', 'dp.salary_tx_id', 'ep.name as participant_name'
+        'dp.id',
+        sql<string>`dp.date::text`.as('date'),
+        'dp.type',
+        'dp.tax_pct',
+        'dp.gross_amount',
+        'dp.net_amount',
+        'dp.note',
+        'dp.created_at',
+        'dp.participant_id',
+        'dp.expense_id',
+        'dp.salary_tx_id',
+        'ep.name as participant_name'
       ])
       .where('dp.is_deleted', '=', false)
-    if (from) payoutsQuery = payoutsQuery.where('dp.date', '>=', from as any)
-    if (to) payoutsQuery = payoutsQuery.where('dp.date', '<=', to as any)
+    if (from) payoutsQuery = payoutsQuery.where('dp.date', '>=', castAsDate(from))
+    if (to) payoutsQuery = payoutsQuery.where('dp.date', '<=', castAsDate(to))
     const payouts = await payoutsQuery
       .orderBy('dp.date', 'desc')
       .orderBy('dp.created_at', 'desc')

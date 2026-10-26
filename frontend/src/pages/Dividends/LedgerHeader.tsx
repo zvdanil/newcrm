@@ -18,12 +18,18 @@ export function LedgerHeader({ ledger, hasPeriod }: { ledger: DividendLedger; ha
             <span className="font-medium text-gray-900">{formatMoney(ledger.total_net)} ₴</span>
           </p>
         </div>
-        <button
-          onClick={() => setShowLeveling(true)}
-          className="px-4 py-2 bg-iris-50 text-iris-700 hover:bg-iris-100 rounded-lg font-medium text-sm transition-colors"
-        >
-          Вирівняти баланс
-        </button>
+        {!hasPeriod ? (
+          <button
+            onClick={() => setShowLeveling(true)}
+            className="px-4 py-2 bg-iris-50 text-iris-700 hover:bg-iris-100 rounded-lg font-medium text-sm transition-colors"
+          >
+            Вирівняти баланс
+          </button>
+        ) : (
+          <span className="text-xs text-gray-400 italic">
+            Вирівнювання часток розраховується за весь час
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
