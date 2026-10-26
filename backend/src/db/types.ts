@@ -313,6 +313,7 @@ export interface AccountTransfersTable {
   note:            string | null
   created_by:      string | null
   created_at:      Generated<Date>
+  commission_expense_id: string | null
 }
 
 export interface InterAccountImbalancesTable {

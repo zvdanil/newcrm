@@ -89,6 +89,7 @@ export interface AccountTransfer {
   commission: string
   transfer_date: string
   note: string | null
+  commission_expense_id?: string | null
   created_at: string
 }
 

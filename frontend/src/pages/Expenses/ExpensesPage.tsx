@@ -731,8 +731,14 @@ function TransferForm({ accounts, onSave, onCancel }: {
 
   const mutation = useMutation({
     mutationFn: expensesApi.createTransfer,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transfers'] }); onSave() },
-    onError: () => setError('Помилка збереження'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      qc.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('report') })
+      onSave()
+    },
+    onError: (err: any) => setError(err.response?.data?.message || 'Помилка збереження'),
   })
 
   function handleSubmit(e: React.FormEvent) {
@@ -742,11 +748,14 @@ function TransferForm({ accounts, onSave, onCancel }: {
     if (form.from_account_id === form.to_account_id) return setError('Рахунки повинні різнитися')
     const amount = parseFloat(form.amount)
     if (!amount || amount <= 0) return setError('Введіть суму')
+    const commission = parseFloat(form.commission) || 0
+    if (commission < 0) return setError('Комісія не може бути відʼємною')
+    if (commission >= amount) return setError('Комісія не може перевищувати суму переказу')
     mutation.mutate({
       from_account_id: form.from_account_id,
       to_account_id:   form.to_account_id,
       amount,
-      commission: parseFloat(form.commission) || 0,
+      commission,
       transfer_date: form.transfer_date,
       note: form.note || undefined,
     })
@@ -2621,7 +2630,12 @@ export function ExpensesPage() {
 
   const deleteTransferMutation = useMutation({
     mutationFn: expensesApi.deleteTransfer,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transfers'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      qc.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('report') })
+    },
   })
 
   const { data: advancePools = [] } = useQuery({

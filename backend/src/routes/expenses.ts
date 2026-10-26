@@ -1367,7 +1367,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         .innerJoin('accounts as fa', 'fa.id', 't.from_account_id')
         .innerJoin('accounts as ta', 'ta.id', 't.to_account_id')
         .select([
-          't.id', 't.amount', 't.commission', 't.transfer_date', 't.note', 't.created_at',
+          't.id', 't.amount', 't.commission', 't.commission_expense_id', 't.transfer_date', 't.note', 't.created_at',
           't.from_account_id', 'fa.name as from_account_name',
           't.to_account_id', 'ta.name as to_account_name',
         ])
@@ -1403,19 +1403,61 @@ export async function expensesRoutes(app: FastifyInstance) {
       if (!from_account_id || !to_account_id) return reply.status(400).send({ error: 'BadRequest', message: 'from_account_id та to_account_id є обовʼязковими' })
       if (from_account_id === to_account_id) return reply.status(400).send({ error: 'BadRequest', message: 'Рахунки повинні різнитися' })
       if (!amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
+      const commAmount = Number(commission) || 0
+      if (commAmount < 0) return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути відʼємною' })
+      if (commAmount >= amount) return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може перевищувати суму переказу' })
 
-      const row = await db.insertInto('account_transfers')
-        .values({
-          from_account_id,
-          to_account_id,
-          amount,
-          commission,
-          transfer_date: transfer_date ?? new Date().toISOString().slice(0, 10),
-          note: note ?? null,
-          created_by: req.user.sub,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow()
+      const dateStr = transfer_date ?? new Date().toISOString().slice(0, 10)
+
+      const row = await db.transaction().execute(async (trx) => {
+        let commissionExpenseId: string | null = null
+
+        if (commAmount > 0) {
+          const withdrawalCategory = await trx.selectFrom('expense_categories')
+            .select('id')
+            .where('name', '=', 'Вивід коштів')
+            .executeTakeFirst()
+          const categoryId = withdrawalCategory ? withdrawalCategory.id : null
+
+          const fromAcc = await trx.selectFrom('accounts').select('name').where('id', '=', from_account_id).executeTakeFirst()
+          const toAcc   = await trx.selectFrom('accounts').select('name').where('id', '=', to_account_id).executeTakeFirst()
+          const expNote = `Комісія за переказ: ${fromAcc?.name ?? ''} → ${toAcc?.name ?? ''}${note ? ` (${note})` : ''}`
+
+          const exp = await trx.insertInto('expenses')
+            .values({
+              account_id:   to_account_id,
+              category_id:  categoryId,
+              amount:       commAmount,
+              accrual_date: dateStr,
+              payment_date: dateStr,
+              status:       'paid',
+              is_instant:   true,
+              is_dividend:  false,
+              note:         expNote,
+              created_by:   req.user.sub,
+            })
+            .returningAll()
+            .executeTakeFirstOrThrow()
+
+          commissionExpenseId = exp.id
+        }
+
+        const transfer = await trx.insertInto('account_transfers')
+          .values({
+            from_account_id,
+            to_account_id,
+            amount,
+            commission: commAmount,
+            transfer_date: dateStr,
+            note: note ?? null,
+            created_by: req.user.sub,
+            commission_expense_id: commissionExpenseId,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow()
+
+        return transfer
+      })
 
       return reply.status(201).send(row)
     }
@@ -1426,10 +1468,44 @@ export async function expensesRoutes(app: FastifyInstance) {
     '/transfers/:id',
     { preHandler: requireRole('owner') },
     async (req, reply) => {
-      const deleted = await db.deleteFrom('account_transfers')
-        .where('id', '=', req.params.id)
-        .returningAll()
-        .executeTakeFirst()
+      const deleted = await db.transaction().execute(async (trx) => {
+        const transfer = await trx.selectFrom('account_transfers')
+          .selectAll()
+          .where('id', '=', req.params.id)
+          .executeTakeFirst()
+        if (!transfer) return null
+
+        if (transfer.commission_expense_id) {
+          await trx.updateTable('expenses')
+            .set({
+              is_deleted: true,
+              deleted_at: new Date().toISOString(),
+              deleted_by: req.user.sub,
+            })
+            .where('id', '=', transfer.commission_expense_id)
+            .execute()
+        } else if (Number(transfer.commission) > 0) {
+          await trx.updateTable('expenses')
+            .set({
+              is_deleted: true,
+              deleted_at: new Date().toISOString(),
+              deleted_by: req.user.sub,
+            })
+            .where('account_id', '=', transfer.to_account_id)
+            .where('amount', '=', transfer.commission)
+            .where('accrual_date', '=', transfer.transfer_date)
+            .where('note', 'like', 'Комісія за переказ%')
+            .where('is_deleted', '=', false)
+            .execute()
+        }
+
+        await trx.deleteFrom('account_transfers')
+          .where('id', '=', req.params.id)
+          .execute()
+
+        return transfer
+      })
+
       if (!deleted) return reply.status(404).send({ error: 'NotFound' })
       return { ok: true }
     }
