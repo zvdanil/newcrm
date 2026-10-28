@@ -92,7 +92,16 @@ export interface ARAnalyticsReport {
   period_months: string[]
 }
 
-export interface InvoiceServiceItem {
+export interface InvoiceConsumedServiceItem {
+  activity_id?: string
+  activity_name: string
+  tariff_type?: string
+  month?: string
+  visit_count?: number
+  amount: number
+}
+
+export interface InvoiceSubscriptionItem {
   activity_id?: string
   activity_name: string
   tariff_type?: string
@@ -105,8 +114,10 @@ export interface InvoicesAndPaymentsAccountDetail {
   account_name: string
   account_type?: string
   balance_start: number
-  services_items: InvoiceServiceItem[]
-  services_total: number
+  consumed_services: InvoiceConsumedServiceItem[]
+  consumed_services_total: number
+  subscriptions: InvoiceSubscriptionItem[]
+  subscriptions_total: number
   invoice_total: number
   paid_in_period: number
   paid_after_period: number
@@ -121,7 +132,8 @@ export interface InvoicesAndPaymentsChildRow {
   family_name: string | null
   primary_parent_phone: string | null
   balance_start: number
-  services_total: number
+  consumed_services_total: number
+  subscriptions_total: number
   invoice_total: number
   paid_in_period: number
   paid_after_period: number
@@ -132,7 +144,8 @@ export interface InvoicesAndPaymentsChildRow {
 
 export interface InvoicesAndPaymentsTotals {
   invoice_total: number
-  services_total: number
+  consumed_services_total: number
+  subscriptions_total: number
   paid_in_period: number
   paid_after_period: number
   balance_end: number

@@ -106,16 +106,15 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
         {/* Invoiced to pay */}
         <td className="px-3 py-3 text-right tabular-nums text-sm font-semibold text-gray-900">
           <div>{fmtMoney(row.invoice_total)} ₴</div>
-          {row.balance_start !== 0 && (
-            <div className="text-[11px] text-gray-400 font-normal">
-              послуги: {fmtMoney(row.services_total)} ₴ ·{' '}
-              {row.balance_start < 0 ? (
-                <span className="text-red-500">борг на поч.: {fmtMoney(Math.abs(row.balance_start))} ₴</span>
-              ) : (
-                <span className="text-emerald-600">аванс на поч.: {fmtMoney(row.balance_start)} ₴</span>
-              )}
-            </div>
-          )}
+          <div className="text-[11px] text-gray-400 font-normal">
+            абонементи: {fmtMoney(row.subscriptions_total)} ₴
+            {row.balance_start < -0.005 && (
+              <span className="text-red-500"> · борг на поч.: {fmtMoney(Math.abs(row.balance_start))} ₴</span>
+            )}
+            {row.balance_start > 0.005 && (
+              <span className="text-emerald-600"> · аванс на поч.: {fmtMoney(row.balance_start)} ₴</span>
+            )}
+          </div>
         </td>
 
         {/* Paid in period */}
@@ -155,10 +154,11 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
       {isExpanded && (
         <tr className="bg-gray-50/70 border-b border-gray-200">
           <td colSpan={8} className="px-6 py-4">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                  Деталізація рахунків та послуг ({row.child_name})
+            <div className="space-y-5">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700 flex items-center gap-2">
+                  <span>📋 Деталізація рахунку на оплату:</span>
+                  <span className="text-iris-600 font-semibold">{row.child_name}</span>
                 </h4>
                 <div className="text-xs text-gray-500">
                   Кількість рахунків: <span className="font-semibold">{row.accounts.length}</span>
@@ -171,7 +171,7 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                   className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden"
                 >
                   {/* Account Header */}
-                  <div className="px-4 py-3 bg-gray-50/80 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-gray-800 text-sm">{acc.account_name}</span>
                       {acc.account_type && (
@@ -182,27 +182,27 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                     </div>
 
                     <div className="flex items-center gap-3 text-xs flex-wrap">
-                      <span className="text-gray-500">
-                        До сплати за рахунком:{' '}
+                      <span className="text-gray-600">
+                        Виставлено до сплати:{' '}
                         <strong className="text-gray-900 font-mono text-sm">
                           {fmtMoney(acc.invoice_total)} ₴
                         </strong>
                       </span>
-                      <span className="text-gray-400">|</span>
+                      <span className="text-gray-300">|</span>
                       <span className="text-emerald-700">
                         Сплачено у періоді:{' '}
                         <strong className="font-mono">+{fmtMoney(acc.paid_in_period)} ₴</strong>
                       </span>
                       {acc.paid_after_period > 0 && (
                         <>
-                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-300">|</span>
                           <span className="text-blue-700">
                             Сплачено пізніше:{' '}
                             <strong className="font-mono">+{fmtMoney(acc.paid_after_period)} ₴</strong>
                           </span>
                         </>
                       )}
-                      <span className="text-gray-400">|</span>
+                      <span className="text-gray-300">|</span>
                       <span>
                         Кінець періоду:{' '}
                         <strong className={`font-mono ${balanceClass(acc.balance_end)}`}>
@@ -213,86 +213,158 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                   </div>
 
                   {/* Account Content */}
-                  <div className="p-4 space-y-3">
-                    {/* Services Breakdown Table */}
-                    {acc.services_items.length > 0 ? (
-                      <div className="border border-gray-100 rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
-                            <tr>
-                              <th className="px-3 py-2 text-left font-medium">Послуга / Абонемент</th>
-                              <th className="px-3 py-2 text-left font-medium">Період</th>
-                              <th className="px-3 py-2 text-left font-medium">Тип</th>
-                              <th className="px-3 py-2 text-right font-medium">Сума (₴)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {acc.services_items.map((srv, idx) => (
-                              <tr key={idx} className="hover:bg-gray-50/50">
-                                <td className="px-3 py-2 text-gray-800 font-medium">
-                                  {srv.activity_name}
+                  <div className="p-4 space-y-4">
+                    {/* ── SECTION 1: Previous Month Consumed Services ── */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>📦</span>
+                          <span>Спожиті послуги за минулий місяць:</span>
+                        </h5>
+                        <span className="text-xs font-medium text-gray-500">
+                          Всього: <strong className="font-mono text-gray-800">{fmtMoney(acc.consumed_services_total)} ₴</strong>
+                        </span>
+                      </div>
+
+                      {acc.consumed_services.length > 0 ? (
+                        <div className="border border-gray-100 rounded-lg overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium">Послуга</th>
+                                <th className="px-3 py-2 text-left font-medium">Місяць споживання</th>
+                                <th className="px-3 py-2 text-center font-medium">Кількість занять</th>
+                                <th className="px-3 py-2 text-right font-medium">Сума (₴)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {acc.consumed_services.map((srv, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50/50">
+                                  <td className="px-3 py-2 text-gray-800 font-medium">
+                                    {srv.activity_name}
+                                  </td>
+                                  <td className="px-3 py-2 text-gray-500">
+                                    {srv.month ? fmtMonth(srv.month) : 'минулий місяць'}
+                                  </td>
+                                  <td className="px-3 py-2 text-center text-gray-600">
+                                    {srv.visit_count && srv.visit_count > 0 ? (
+                                      <span className="px-1.5 py-0.5 rounded bg-gray-100 font-medium text-[11px]">
+                                        {srv.visit_count} {srv.visit_count === 1 ? 'заняття' : 'занять'}
+                                      </span>
+                                    ) : (
+                                      '—'
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
+                                    {fmtMoney(srv.amount)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-gray-50/60 border-t border-gray-100 font-semibold text-gray-700">
+                              <tr>
+                                <td colSpan={3} className="px-3 py-2">
+                                  Всього за спожиті послуги:
                                 </td>
-                                <td className="px-3 py-2 text-gray-500">
-                                  {srv.month ? fmtMonth(srv.month) : '—'}
-                                </td>
-                                <td className="px-3 py-2 text-gray-400">
-                                  {srv.tariff_type === 'monthly'
-                                    ? 'Абонемент (місяць)'
-                                    : srv.tariff_type === 'smart'
-                                    ? 'Розумний абонемент'
-                                    : srv.tariff_type === 'per_lesson'
-                                    ? 'Заняття по факту'
-                                    : 'Послуга'}
-                                </td>
-                                <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
-                                  {fmtMoney(srv.amount)}
+                                <td className="px-3 py-2 text-right font-mono text-gray-900">
+                                  {fmtMoney(acc.consumed_services_total)} ₴
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                          <tfoot className="bg-gray-50/60 border-t border-gray-100 font-semibold text-gray-700">
-                            <tr>
-                              <td colSpan={3} className="px-3 py-2">
-                                Всього за послуги та абонементи:
-                              </td>
-                              <td className="px-3 py-2 text-right font-mono text-gray-900">
-                                {fmtMoney(acc.services_total)} ₴
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-gray-400 italic py-1">
-                        Немає виставлених послуг або абонементів за обраний період.
-                      </div>
-                    )}
+                            </tfoot>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400 italic py-1 px-1">
+                          Немає спожитих разових послуг за минулий місяць.
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Financial Summary for this account */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs">
-                      <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                    {/* ── SECTION 2: Current Month Subscriptions ── */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h5 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>🎫</span>
+                          <span>Абонементи послуг на обраний період:</span>
+                        </h5>
+                        <span className="text-xs font-medium text-gray-500">
+                          Всього: <strong className="font-mono text-gray-800">{fmtMoney(acc.subscriptions_total)} ₴</strong>
+                        </span>
+                      </div>
+
+                      {acc.subscriptions.length > 0 ? (
+                        <div className="border border-gray-100 rounded-lg overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50/80 text-gray-500 border-b border-gray-100">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium">Абонемент / Активність</th>
+                                <th className="px-3 py-2 text-left font-medium">Період</th>
+                                <th className="px-3 py-2 text-left font-medium">Тип тарифу</th>
+                                <th className="px-3 py-2 text-right font-medium">Сума (₴)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {acc.subscriptions.map((sub, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50/50">
+                                  <td className="px-3 py-2 text-gray-800 font-medium">
+                                    {sub.activity_name}
+                                  </td>
+                                  <td className="px-3 py-2 text-gray-500">
+                                    {sub.month ? fmtMonth(sub.month) : 'обраний період'}
+                                  </td>
+                                  <td className="px-3 py-2 text-gray-400">
+                                    {sub.tariff_type === 'smart' ? 'Розумний абонемент' : 'Місячний абонемент'}
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
+                                    {fmtMoney(sub.amount)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-gray-50/60 border-t border-gray-100 font-semibold text-gray-700">
+                              <tr>
+                                <td colSpan={3} className="px-3 py-2">
+                                  Всього за абонементи:
+                                </td>
+                                <td className="px-3 py-2 text-right font-mono text-gray-900">
+                                  {fmtMoney(acc.subscriptions_total)} ₴
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-gray-400 italic py-1 px-1">
+                          Немає діючих абонементів на обраний період.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── SECTION 3: Financial Summary Cards for this account ── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs border-t border-gray-100">
+                      <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
                         <span className="text-gray-500 block">Баланс на початок періоду</span>
                         <span className={`text-sm font-bold font-mono mt-0.5 block ${balanceClass(acc.balance_start)}`}>
                           {fmtMoney(acc.balance_start)} ₴
                         </span>
                         <span className="text-[10px] text-gray-400">
-                          {acc.balance_start < 0 ? 'борг' : acc.balance_start > 0 ? 'переплата / аванс' : '0'}
+                          {acc.balance_start < 0 ? 'борг (в т.ч. спожиті послуги)' : acc.balance_start > 0 ? 'переплата / аванс' : 'нульовий'}
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-iris-50/50 border border-iris-100">
-                        <span className="text-iris-700 font-medium block">Виставлено до сплати</span>
-                        <span className="text-sm font-bold font-mono text-iris-900 mt-0.5 block">
+                      <div className="p-2.5 rounded-lg bg-iris-50/60 border border-iris-200">
+                        <span className="text-iris-800 font-medium block">Виставлено до сплати</span>
+                        <span className="text-sm font-bold font-mono text-iris-950 mt-0.5 block">
                           {fmtMoney(acc.invoice_total)} ₴
                         </span>
-                        <span className="text-[10px] text-iris-500">
-                          {acc.services_total > 0 ? `послуги: ${fmtMoney(acc.services_total)}` : 'за рахунком'}
+                        <span className="text-[10px] text-iris-600">
+                          абонементи: {fmtMoney(acc.subscriptions_total)} ₴
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-100">
-                        <span className="text-emerald-700 font-medium block">Оплачено у періоді</span>
-                        <span className="text-sm font-bold font-mono text-emerald-800 mt-0.5 block">
+                      <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200">
+                        <span className="text-emerald-800 font-medium block">Оплачено у періоді</span>
+                        <span className="text-sm font-bold font-mono text-emerald-900 mt-0.5 block">
                           +{fmtMoney(acc.paid_in_period)} ₴
                         </span>
                         <span className="text-[10px] text-emerald-600">
@@ -302,13 +374,13 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+                      <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
                         <span className="text-gray-500 block">Баланс на кінець періоду</span>
                         <span className={`text-sm font-bold font-mono mt-0.5 block ${balanceClass(acc.balance_end)}`}>
                           {fmtMoney(acc.balance_end)} ₴
                         </span>
                         <span className="text-[10px] text-gray-400">
-                          поточний: {fmtMoney(acc.current_balance)} ₴
+                          поточний на сьогодні: {fmtMoney(acc.current_balance)} ₴
                         </span>
                       </div>
                     </div>
@@ -402,6 +474,8 @@ export function InvoicesAndPaymentsReport() {
       'Телефон',
       'Рахунки',
       'Виставлено до сплати',
+      'Спожиті послуги (мин. місяць)',
+      'Абонементи',
       'Оплачено у періоді',
       'Оплачено після періоду',
       'Баланс на кінець періоду',
@@ -414,6 +488,8 @@ export function InvoicesAndPaymentsReport() {
       `"${r.primary_parent_phone ?? ''}"`,
       `"${r.accounts.map((a) => a.account_name).join(', ')}"`,
       r.invoice_total.toFixed(2),
+      r.consumed_services_total.toFixed(2),
+      r.subscriptions_total.toFixed(2),
       r.paid_in_period.toFixed(2),
       r.paid_after_period.toFixed(2),
       r.balance_end.toFixed(2),
@@ -592,7 +668,17 @@ export function InvoicesAndPaymentsReport() {
             <span className="text-base font-bold font-mono text-gray-900 mt-1 block">
               {fmtMoney(report.totals.invoice_total)} ₴
             </span>
-            <span className="text-[11px] text-gray-400">послуги: {fmtMoney(report.totals.services_total)} ₴</span>
+            <span className="text-[11px] text-gray-400">
+              абонементи: {fmtMoney(report.totals.subscriptions_total)} ₴
+            </span>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs">
+            <span className="text-xs text-amber-700 font-medium block">Послуги (мин. місяць)</span>
+            <span className="text-base font-bold font-mono text-amber-800 mt-1 block">
+              {fmtMoney(report.totals.consumed_services_total)} ₴
+            </span>
+            <span className="text-[11px] text-amber-600">разові занять</span>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs">
@@ -632,18 +718,6 @@ export function InvoicesAndPaymentsReport() {
             </span>
             <span className="text-[11px] text-gray-400">на сьогодні</span>
           </div>
-
-          <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs">
-            <span className="text-xs text-gray-500 block">Клієнтів у звіті</span>
-            <span className="text-base font-bold text-gray-800 mt-1 block">
-              {report.totals.children_count}
-            </span>
-            <span className="text-[11px] text-gray-400">
-              {filteredRows.length !== report.totals.children_count
-                ? `показано: ${filteredRows.length}`
-                : 'дітей'}
-            </span>
-          </div>
         </div>
       )}
 
@@ -667,7 +741,7 @@ export function InvoicesAndPaymentsReport() {
             <button
               type="button"
               onClick={expandAll}
-              className="text-xs text-iris-600 hover:text-iris-800 font-medium px-2 py-1 rounded hover:bg-iris-50 transition-colors"
+              className="text-xs text-iris-600 hover:text-iris-800 font-medium px-2 py-1 rounded hover:bg-iris-50 transition-colors cursor-pointer"
             >
               Розгорнути всі деталі
             </button>
@@ -675,7 +749,7 @@ export function InvoicesAndPaymentsReport() {
             <button
               type="button"
               onClick={collapseAll}
-              className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded hover:bg-gray-100 transition-colors cursor-pointer"
             >
               Згорнути всі
             </button>
