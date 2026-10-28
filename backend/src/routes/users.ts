@@ -208,7 +208,12 @@ export async function usersRoutes(app: FastifyInstance) {
 
       const hash = await bcrypt.hash(req.body.password, 10)
       await db.updateTable('users')
-        .set({ password_hash: hash, updated_at: new Date() })
+        .set({
+          password_hash: hash,
+          failed_login_attempts: 0,
+          locked_until: null,
+          updated_at: new Date(),
+        })
         .where('id', '=', req.params.id).execute()
       return { ok: true }
     }

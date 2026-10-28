@@ -21,8 +21,9 @@ export function LoginPage() {
       const { token, user } = await authApi.login(email, password)
       setAuth(user, token)
       navigate('/children')
-    } catch {
-      setError('Невірний email або пароль')
+    } catch (err: any) {
+      const serverMessage = err?.response?.data?.message
+      setError(serverMessage || 'Невірний email або пароль')
     } finally {
       setLoading(false)
     }

@@ -93,7 +93,12 @@ export async function inviteRoutes(app: FastifyInstance) {
         .where('email', '=', invite.email.toLowerCase()).executeTakeFirst()
       if (!user) return reply.status(404).send({ error: 'UserNotFound' })
       await db.updateTable('users')
-        .set({ password_hash: hash, updated_at: new Date() })
+        .set({
+          password_hash: hash,
+          failed_login_attempts: 0,
+          locked_until: null,
+          updated_at: new Date(),
+        })
         .where('id', '=', user.id).execute()
     }
 

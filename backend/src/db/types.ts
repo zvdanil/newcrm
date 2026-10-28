@@ -11,6 +11,8 @@ export interface UsersTable {
   staff_id: string | null
   parent_id: string | null
   is_active: Generated<boolean>
+  failed_login_attempts: Generated<number>
+  locked_until: ColumnType<Date | null, string | Date | null, string | Date | null>
   created_at: Generated<Date>
   updated_at: Generated<Date>
 }

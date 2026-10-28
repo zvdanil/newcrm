@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import rateLimit from '@fastify/rate-limit'
 import staticPlugin from '@fastify/static'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -54,6 +55,10 @@ await app.register(cors, {
 
 await app.register(jwt, {
   secret: process.env.JWT_SECRET ?? 'dev_secret_change_in_production',
+})
+
+await app.register(rateLimit, {
+  global: false,
 })
 
 // Health check
