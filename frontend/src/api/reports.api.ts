@@ -92,6 +92,68 @@ export interface ARAnalyticsReport {
   period_months: string[]
 }
 
+export interface InvoiceServiceItem {
+  activity_id?: string
+  activity_name: string
+  tariff_type?: string
+  month?: string
+  amount: number
+}
+
+export interface InvoicesAndPaymentsAccountDetail {
+  account_id: string
+  account_name: string
+  account_type?: string
+  balance_start: number
+  services_items: InvoiceServiceItem[]
+  services_total: number
+  invoice_total: number
+  paid_in_period: number
+  paid_after_period: number
+  balance_end: number
+  current_balance: number
+}
+
+export interface InvoicesAndPaymentsChildRow {
+  child_id: string
+  child_name: string
+  is_active: boolean
+  family_name: string | null
+  primary_parent_phone: string | null
+  balance_start: number
+  services_total: number
+  invoice_total: number
+  paid_in_period: number
+  paid_after_period: number
+  balance_end: number
+  current_balance: number
+  accounts: InvoicesAndPaymentsAccountDetail[]
+}
+
+export interface InvoicesAndPaymentsTotals {
+  invoice_total: number
+  services_total: number
+  paid_in_period: number
+  paid_after_period: number
+  balance_end: number
+  current_balance: number
+  children_count: number
+}
+
+export interface InvoicesAndPaymentsReport {
+  rows: InvoicesAndPaymentsChildRow[]
+  totals: InvoicesAndPaymentsTotals
+  period_months: string[]
+}
+
+export interface InvoicesAndPaymentsFilters {
+  from_month: string
+  to_month: string
+  account_ids: string[]
+  is_active: '' | 'true' | 'false'
+  debt_filter: 'all' | 'debt_period_end' | 'debt_today'
+}
+
 export interface ARAnalyticsFilters {
   from_month: string           // YYYY-MM
   to_month: string             // YYYY-MM
@@ -102,6 +164,17 @@ export interface ARAnalyticsFilters {
 }
 
 export const reportsApi = {
+  getInvoicesAndPayments: async (filters: InvoicesAndPaymentsFilters): Promise<InvoicesAndPaymentsReport> => {
+    const params = new URLSearchParams()
+    params.set('from_month', filters.from_month)
+    params.set('to_month', filters.to_month)
+    if (filters.account_ids.length) params.set('account_ids', filters.account_ids.join(','))
+    if (filters.is_active) params.set('is_active', filters.is_active)
+    if (filters.debt_filter) params.set('debt_filter', filters.debt_filter)
+    const { data } = await apiClient.get<InvoicesAndPaymentsReport>(`/reports/invoices-and-payments?${params}`)
+    return data
+  },
+
   getAccountsReceivable: async (filters: ARFilters): Promise<ARReport> => {
     const params = new URLSearchParams()
     if (filters.from_month)           params.set('from_month', filters.from_month)

@@ -8,6 +8,7 @@ import { PnLReport } from './PnLReport'
 import { PnL2Report } from './PnL2Report'
 import { PnL3Report } from './PnL3Report'
 import { ARAnalyticsReport } from './ARAnalyticsReport'
+import { InvoicesAndPaymentsReport } from './InvoicesAndPaymentsReport'
 import { useCanAccess } from '../../hooks/useCanAccess'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -34,7 +35,7 @@ const EMPTY_FILTERS: ARFilters = {
 
 export function ReportsPage() {
   const canViewPnL = useCanAccess('owner', 'admin', 'accountant')
-  const [activeTab, setActiveTab] = useState<'ar' | 'pnl' | 'pnl2' | 'pnl3' | 'analytics'>('ar')
+  const [activeTab, setActiveTab] = useState<'ar' | 'pnl' | 'pnl2' | 'pnl3' | 'analytics' | 'invoices_payments'>('ar')
   const [filters, setFilters]         = useState<ARFilters>(EMPTY_FILTERS)
   const [committed, setCommitted]     = useState<ARFilters | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -93,7 +94,7 @@ export function ReportsPage() {
       r.primary_parent_phone ?? '',
     ])
     const csv = [header, ...csvRows].map((row) => row.map((v) => `"${v}"`).join(';')).join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href = url; a.download = `debt-report-${currentYM()}.csv`; a.click()
@@ -111,8 +112,9 @@ export function ReportsPage() {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'ar' as const,        label: 'Дебіторська заборгованість' },
-            { id: 'analytics' as const, label: 'Аналітика AR' },
+            { id: 'ar' as const,                label: 'Дебіторська заборгованість' },
+            { id: 'invoices_payments' as const, label: 'Рахунки та оплати' },
+            { id: 'analytics' as const,         label: 'Аналітика AR' },
             ...(canViewPnL ? [
               { id: 'pnl' as const, label: 'PnL' },
               { id: 'pnl2' as const, label: 'PnL 2' },
@@ -134,10 +136,11 @@ export function ReportsPage() {
         </nav>
       </div>
 
-      {activeTab === 'pnl'       && <PnLReport />}
-      {activeTab === 'pnl2'      && <PnL2Report />}
-      {activeTab === 'pnl3'      && <PnL3Report />}
-      {activeTab === 'analytics' && <ARAnalyticsReport />}
+      {activeTab === 'invoices_payments' && <InvoicesAndPaymentsReport />}
+      {activeTab === 'pnl'               && <PnLReport />}
+      {activeTab === 'pnl2'              && <PnL2Report />}
+      {activeTab === 'pnl3'              && <PnL3Report />}
+      {activeTab === 'analytics'         && <ARAnalyticsReport />}
 
       {activeTab === 'ar' && <>
 

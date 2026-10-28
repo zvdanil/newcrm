@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { sql, type SqlBool } from 'kysely'
 import { db } from '../db/index.js'
 import { authenticate, requireRole } from '../plugins/authenticate.js'
+import { getChildIndividualTariff, getEffectivePrice } from '../services/billingRunService.js'
 
 export async function reportsRoutes(app: FastifyInstance) {
   // GET /api/reports/accounts-receivable
@@ -2154,5 +2155,434 @@ export async function reportsRoutes(app: FastifyInstance) {
       }
     }
   )
+
+  // ── Invoices and Payments Report (Рахунки та оплати) ─────────────────────────
+  // GET /api/reports/invoices-and-payments
+  app.get<{
+    Querystring: {
+      from_month?: string
+      to_month?: string
+      account_ids?: string
+      is_active?: string
+      debt_filter?: string
+    }
+  }>(
+    '/invoices-and-payments',
+    { preHandler: authenticate },
+    async (request) => {
+      const curYM = new Date().toISOString().slice(0, 7)
+      const from_month = request.query.from_month || curYM
+      const to_month = request.query.to_month || curYM
+      const accountIdsRaw = request.query.account_ids
+      const isActiveFilter = request.query.is_active ?? 'true'
+      const debtFilter = request.query.debt_filter || 'all'
+
+      const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
+
+      const fromDate = new Date(`${from_month}-01T00:00:00.000Z`)
+      const [toY, toM] = to_month.split('-').map(Number)
+      const lastDayTo = new Date(toY, toM, 0).getDate()
+      const toDate = new Date(`${to_month}-${String(lastDayTo).padStart(2, '0')}T23:59:59.999Z`)
+
+      // Period months list
+      const periodMonths: string[] = []
+      let mCur = new Date(`${from_month}-01T00:00:00.000Z`)
+      const mEnd = new Date(`${to_month}-01T00:00:00.000Z`)
+      while (mCur <= mEnd) {
+        const y = mCur.getFullYear()
+        const m = String(mCur.getMonth() + 1).padStart(2, '0')
+        periodMonths.push(`${y}-${m}`)
+        mCur.setMonth(mCur.getMonth() + 1)
+      }
+
+      // 1. Transaction summary per child + account
+      let summaryQ = db
+        .selectFrom('transactions as t')
+        .select([
+          't.child_id',
+          't.account_id',
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) < ${fromDate} THEN t.amount ELSE 0 END)`.as('credits_before'),
+          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) < ${fromDate} THEN t.amount ELSE 0 END)`.as('debits_before'),
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('credits_in_period'),
+          sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate} THEN t.amount ELSE 0 END)`.as('debits_in_period'),
+          sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) > ${toDate} THEN t.amount ELSE 0 END)`.as('credits_after_period'),
+        ])
+        .where('t.is_deleted', '=', false)
+        .groupBy(['t.child_id', 't.account_id'])
+
+      if (accountIds.length > 0) {
+        summaryQ = summaryQ.where('t.account_id', 'in', accountIds)
+      }
+
+      // 2. Child metadata
+      let childMetaQ = db
+        .selectFrom('children as c')
+        .leftJoin('families as f', 'f.id', 'c.family_id')
+        .leftJoin('parents as p', 'p.id', 'f.primary_parent_id')
+        .select([
+          'c.id as child_id',
+          'c.full_name as child_name',
+          'c.is_active',
+          'f.name as family_name',
+          'p.phone as primary_parent_phone',
+        ])
+
+      if (isActiveFilter === 'true') {
+        childMetaQ = childMetaQ.where('c.is_active', '=', true)
+      } else if (isActiveFilter === 'false') {
+        childMetaQ = childMetaQ.where('c.is_active', '=', false)
+      }
+
+      // 3. Accounts
+      let accountsQ = db.selectFrom('accounts').select(['id', 'name', 'type'])
+      if (accountIds.length > 0) {
+        accountsQ = accountsQ.where('id', 'in', accountIds)
+      }
+
+      // 4. Initial balances
+      let initQ = db.selectFrom('initial_balances').select(['child_id', 'account_id', 'amount'])
+      if (accountIds.length > 0) {
+        initQ = initQ.where('account_id', 'in', accountIds)
+      }
+
+      // 5. Current balances
+      let curQ = db.selectFrom('child_balances').select(['child_id', 'account_id', 'balance'])
+      if (accountIds.length > 0) {
+        curQ = curQ.where('account_id', 'in', accountIds)
+      }
+
+      // 6. Active/frozen enrollments
+      let enrollmentsQ = db
+        .selectFrom('enrollments as e')
+        .innerJoin('activities as a', 'a.id', 'e.activity_id')
+        .innerJoin('accounts as ac', 'ac.id', 'e.account_id')
+        .select([
+          'e.id as enrollment_id',
+          'e.child_id',
+          'e.account_id',
+          'e.activity_id',
+          'e.status as enrollment_status',
+          'e.start_date',
+          'e.end_date',
+          'a.name as activity_name',
+          'a.tariff_type as activity_tariff_type',
+          'ac.name as account_name',
+        ])
+        .where('e.status', 'in', ['active', 'frozen'])
+
+      if (accountIds.length > 0) {
+        enrollmentsQ = enrollmentsQ.where('e.account_id', 'in', accountIds)
+      }
+
+      // 7. Accrual transactions within period for consumable / actual services
+      let accrualTxsQ = db
+        .selectFrom('transactions as t')
+        .leftJoin('activities as a', 'a.id', 't.activity_id')
+        .select([
+          't.child_id',
+          't.account_id',
+          't.activity_id',
+          't.amount',
+          't.type',
+          't.note',
+          'a.name as activity_name',
+          'a.tariff_type as activity_tariff_type',
+          sql<string>`to_char(COALESCE(t.billing_month, date_trunc('month', t.transaction_date)), 'YYYY-MM')`.as('month'),
+        ])
+        .where('t.is_deleted', '=', false)
+        .where('t.type', 'in', ['ACCRUAL', 'REFUND'])
+        .where(sql<SqlBool>`COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate}`)
+        .where(sql<SqlBool>`COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate}`)
+
+      if (accountIds.length > 0) {
+        accrualTxsQ = accrualTxsQ.where('t.account_id', 'in', accountIds)
+      }
+
+      const [summaryRows, childMeta, accountMeta, initBals, curBals, enrollments, accrualTxs] = await Promise.all([
+        summaryQ.execute(),
+        childMetaQ.execute(),
+        accountsQ.execute(),
+        initQ.execute(),
+        curQ.execute(),
+        enrollmentsQ.execute(),
+        accrualTxsQ.execute(),
+      ])
+
+      const childMetaMap = new Map(childMeta.map(r => [r.child_id, r]))
+      const accountMetaMap = new Map(accountMeta.map(r => [r.id, r]))
+      const initBalMap = new Map(initBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.amount)]))
+      const curBalMap = new Map(curBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.balance)]))
+
+      // Pre-calculate subscriptions forecast for each month in periodMonths
+      // Map: `${child_id}:${account_id}` -> Array of items
+      const monthSubscriptionsMap = new Map<string, Array<{
+        activity_id: string
+        activity_name: string
+        tariff_type: string
+        month: string
+        amount: number
+        account_id: string
+        child_id: string
+      }>>()
+
+      // Process monthly expected prices for enrollments per month in period
+      for (const ym of periodMonths) {
+        const [y, m] = ym.split('-').map(Number)
+        const monthStart = new Date(Date.UTC(y, m - 1, 1))
+        const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+        const monthEnd = new Date(Date.UTC(y, m - 1, lastDay, 23, 59, 59, 999))
+
+        // Find applicable enrollments
+        const applicableEnrollments = enrollments.filter(e => {
+          const s = new Date(String(e.start_date))
+          const eEnd = e.end_date ? new Date(String(e.end_date)) : null
+          return s <= monthEnd && (!eEnd || eEnd >= monthStart)
+        })
+
+        // Evaluate expected price
+        const prices = await Promise.all(
+          applicableEnrollments.map(async (e) => {
+            if (e.enrollment_status === 'frozen') return 0
+            const ind = await getChildIndividualTariff(e.child_id, e.activity_id, monthStart)
+            const effectiveType = ind ? ind.tariff_type : e.activity_tariff_type
+            if (effectiveType === 'monthly' || effectiveType === 'smart') {
+              if (ind) {
+                return Math.round(parseFloat(ind.price as string) * 100) / 100
+              }
+              const p = await getEffectivePrice(e.child_id, e.activity_id, monthStart)
+              return p && p > 0 ? p : 0
+            }
+            return 0
+          })
+        )
+
+        for (let i = 0; i < applicableEnrollments.length; i++) {
+          const e = applicableEnrollments[i]
+          const price = prices[i]
+          if (price > 0) {
+            const key = `${e.child_id}:${e.account_id}`
+            if (!monthSubscriptionsMap.has(key)) monthSubscriptionsMap.set(key, [])
+            monthSubscriptionsMap.get(key)!.push({
+              activity_id: e.activity_id,
+              activity_name: e.activity_name,
+              tariff_type: e.activity_tariff_type,
+              month: ym,
+              amount: price,
+              account_id: e.account_id,
+              child_id: e.child_id,
+            })
+          }
+        }
+      }
+
+      // Group accrual transactions: `${child_id}:${account_id}` -> array
+      const accrualsMap = new Map<string, typeof accrualTxs>()
+      for (const tx of accrualTxs) {
+        const key = `${tx.child_id}:${tx.account_id}`
+        if (!accrualsMap.has(key)) accrualsMap.set(key, [])
+        accrualsMap.get(key)!.push(tx)
+      }
+
+      // Group summaries: child_id -> array of account summaries
+      const summaryByChild = new Map<string, typeof summaryRows>()
+      for (const sr of summaryRows) {
+        if (!summaryByChild.has(sr.child_id)) summaryByChild.set(sr.child_id, [])
+        summaryByChild.get(sr.child_id)!.push(sr)
+      }
+
+      // Collect all distinct child IDs
+      const allChildIds = new Set<string>()
+      for (const c of childMeta) allChildIds.add(c.child_id)
+      for (const sr of summaryRows) allChildIds.add(sr.child_id)
+      for (const e of enrollments) allChildIds.add(e.child_id)
+
+      const rows: any[] = []
+
+      for (const childId of allChildIds) {
+        const meta = childMetaMap.get(childId)
+        if (!meta) continue // filtered out by isActive or not found
+
+        // Get all accounts for this child:
+        // either from summaryRows, enrollments, or child_balances
+        const childAccIds = new Set<string>()
+        const childSummaries = summaryByChild.get(childId) ?? []
+        for (const cs of childSummaries) childAccIds.add(cs.account_id)
+        for (const e of enrollments) {
+          if (e.child_id === childId) childAccIds.add(e.account_id)
+        }
+        for (const cb of curBals) {
+          if (cb.child_id === childId && (accountIds.length === 0 || accountIds.includes(cb.account_id))) {
+            childAccIds.add(cb.account_id)
+          }
+        }
+
+        if (childAccIds.size === 0) continue
+
+        const accountDetails: any[] = []
+        let child_balance_start = 0
+        let child_services_total = 0
+        let child_invoice_total = 0
+        let child_paid_in_period = 0
+        let child_paid_after_period = 0
+        let child_balance_end = 0
+        let child_current_balance = 0
+
+        for (const accId of childAccIds) {
+          const acc = accountMetaMap.get(accId)
+          if (!acc) continue
+
+          const pairKey = `${childId}:${accId}`
+          const sr = childSummaries.find(s => s.account_id === accId)
+          const initBal = initBalMap.get(pairKey) ?? 0
+          const curBal = curBalMap.get(pairKey) ?? 0
+
+          const credBefore = Number(sr?.credits_before ?? 0)
+          const debBefore = Number(sr?.debits_before ?? 0)
+          const credInPeriod = Number(sr?.credits_in_period ?? 0)
+          const debInPeriod = Number(sr?.debits_in_period ?? 0)
+          const credAfter = Number(sr?.credits_after_period ?? 0)
+
+          const balance_start = initBal + credBefore - debBefore
+          const paid_in_period = credInPeriod
+          const paid_after_period = credAfter
+          const balance_end = balance_start + credInPeriod - debInPeriod
+          const current_balance = curBal
+
+          // Services items: combine forecasted subscriptions and actual accruals
+          const subs = monthSubscriptionsMap.get(pairKey) ?? []
+          const txs = accrualsMap.get(pairKey) ?? []
+
+          // Build a deduplicated/consolidated list of services
+          const serviceItems: Array<{
+            activity_id?: string
+            activity_name: string
+            tariff_type?: string
+            month?: string
+            amount: number
+          }> = []
+
+          // Keep track of activities covered by subscription forecast per month
+          const coveredActivityMonths = new Set<string>()
+
+          for (const sub of subs) {
+            coveredActivityMonths.add(`${sub.activity_id}:${sub.month}`)
+            serviceItems.push({
+              activity_id: sub.activity_id,
+              activity_name: sub.activity_name,
+              tariff_type: sub.tariff_type,
+              month: sub.month,
+              amount: sub.amount,
+            })
+          }
+
+          // Add actual accruals that were not covered by subscription forecast
+          for (const tx of txs) {
+            const txMonth = tx.month
+            const txAmt = Number(tx.amount) * (tx.type === 'REFUND' ? -1 : 1)
+            const actKey = tx.activity_id ? `${tx.activity_id}:${txMonth}` : null
+
+            if (actKey && coveredActivityMonths.has(actKey)) {
+              continue
+            }
+
+            if (txAmt !== 0) {
+              serviceItems.push({
+                activity_id: tx.activity_id ?? undefined,
+                activity_name: tx.activity_name ?? tx.note ?? 'Нарахування за послугу',
+                tariff_type: tx.activity_tariff_type ?? undefined,
+                month: txMonth,
+                amount: txAmt,
+              })
+            }
+          }
+
+          const services_total = serviceItems.reduce((sum, item) => sum + item.amount, 0)
+          // Invoiced amount (Variant B): services + debt on start (or minus advance on start)
+          const invoice_total = Math.max(0, services_total - balance_start)
+
+          child_balance_start += balance_start
+          child_services_total += services_total
+          child_invoice_total += invoice_total
+          child_paid_in_period += paid_in_period
+          child_paid_after_period += paid_after_period
+          child_balance_end += balance_end
+          child_current_balance += current_balance
+
+          accountDetails.push({
+            account_id: accId,
+            account_name: acc.name,
+            account_type: acc.type,
+            balance_start,
+            services_items: serviceItems,
+            services_total,
+            invoice_total,
+            paid_in_period,
+            paid_after_period,
+            balance_end,
+            current_balance,
+          })
+        }
+
+        // Sort accounts by name
+        accountDetails.sort((a, b) => a.account_name.localeCompare(b.account_name, 'uk'))
+
+        // Skip completely empty records (no balance, no invoices, no payments)
+        const isCompletelyEmpty =
+          Math.abs(child_balance_start) < 0.005 &&
+          Math.abs(child_services_total) < 0.005 &&
+          Math.abs(child_invoice_total) < 0.005 &&
+          Math.abs(child_paid_in_period) < 0.005 &&
+          Math.abs(child_paid_after_period) < 0.005 &&
+          Math.abs(child_balance_end) < 0.005 &&
+          Math.abs(child_current_balance) < 0.005
+
+        if (isCompletelyEmpty) continue
+
+        // Debt filtering
+        if (debtFilter === 'debt_period_end' && child_balance_end >= -0.005) {
+          continue
+        }
+        if (debtFilter === 'debt_today' && child_current_balance >= -0.005) {
+          continue
+        }
+
+        rows.push({
+          child_id: meta.child_id,
+          child_name: meta.child_name,
+          is_active: meta.is_active,
+          family_name: meta.family_name,
+          primary_parent_phone: meta.primary_parent_phone,
+          balance_start: child_balance_start,
+          services_total: child_services_total,
+          invoice_total: child_invoice_total,
+          paid_in_period: child_paid_in_period,
+          paid_after_period: child_paid_after_period,
+          balance_end: child_balance_end,
+          current_balance: child_current_balance,
+          accounts: accountDetails,
+        })
+      }
+
+      // Sort children alphabetically
+      rows.sort((a, b) => a.child_name.localeCompare(b.child_name, 'uk'))
+
+      const totals = {
+        invoice_total: rows.reduce((s, r) => s + r.invoice_total, 0),
+        services_total: rows.reduce((s, r) => s + r.services_total, 0),
+        paid_in_period: rows.reduce((s, r) => s + r.paid_in_period, 0),
+        paid_after_period: rows.reduce((s, r) => s + r.paid_after_period, 0),
+        balance_end: rows.reduce((s, r) => s + r.balance_end, 0),
+        current_balance: rows.reduce((s, r) => s + r.current_balance, 0),
+        children_count: rows.length,
+      }
+
+      return {
+        rows,
+        totals,
+        period_months: periodMonths,
+      }
+    }
+  )
 }
+
 
