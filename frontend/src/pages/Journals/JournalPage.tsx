@@ -187,7 +187,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
       )}
 
       {(log.has_note ?? !!log.note) && (
-        <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-500 rounded-full border border-white" />
+        <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-white pointer-events-none" />
       )}
 
       {isIndividual && (

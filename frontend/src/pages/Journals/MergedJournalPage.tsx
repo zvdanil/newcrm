@@ -171,7 +171,7 @@ const AttendanceCell = memo(({ enrollmentId, dateStr, log, frozen, locked, isHig
         <span className="font-black leading-tight">{Number(log.custom_amount).toFixed(0)}</span>
       ) : STATUS_LABEL[log.status as AttendanceStatus]}
       {(log.has_note ?? !!log.note) && (
-        <div className="absolute top-0 right-0 w-1 h-1 bg-red-500 rounded-full border border-white" />
+        <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border border-white pointer-events-none" />
       )}
       {isIndividual && (
         <span className="absolute -top-1 -left-1 px-1 py-0.5 bg-purple-600 text-white text-[7px] font-black rounded-full shadow-sm leading-none z-10">
