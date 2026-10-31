@@ -1138,7 +1138,8 @@ export async function reportsRoutes(app: FastifyInstance) {
     from?: string,
     to?: string,
     accountIdsRaw?: string,
-    salaryBasis: 'payment' | 'accrual' = 'payment'
+    salaryBasis: 'payment' | 'accrual' = 'payment',
+    staffType?: 'all' | 'employee' | 'partner'
   ) {
     const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
 
@@ -1222,6 +1223,7 @@ export async function reportsRoutes(app: FastifyInstance) {
             .select([
               'st.staff_id',
               's.full_name as staff_name',
+              's.type as staff_type',
               'st.type',
               'st.is_dividend',
               'st.note',
@@ -1231,6 +1233,10 @@ export async function reportsRoutes(app: FastifyInstance) {
               sql<string>`COALESCE(SUM(st.gross_amount), 0)`.as('total')
             ])
             .where('st.is_deleted', '=', false)
+
+          if (staffType === 'employee' || staffType === 'partner') {
+            q = q.where('s.type', '=', staffType)
+          }
 
           if (salaryBasis === 'accrual') {
             q = q.where((eb) => eb.or([
@@ -1254,6 +1260,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           q = q.groupBy([
             'st.staff_id',
             's.full_name',
+            's.type',
             'st.type',
             'st.is_dividend',
             'st.note',
@@ -1365,7 +1372,7 @@ export async function reportsRoutes(app: FastifyInstance) {
       }
 
       // 5. Process Salaries (by payment or accrual month)
-      const salaryDetailsMap: Record<string, Record<string, { staff_name: string; accrued: number; paid: number }>> = {}
+      const salaryDetailsMap: Record<string, Record<string, { staff_name: string; staff_type: 'employee' | 'partner'; accrued: number; paid: number }>> = {}
       const salaryDividendPayments: Array<{ month: string; date: string; name: string; note: string; amount: number }> = []
 
       for (const tx of salaryTxDetails) {
@@ -1389,7 +1396,12 @@ export async function reportsRoutes(app: FastifyInstance) {
 
         if (!salaryDetailsMap[m]) salaryDetailsMap[m] = {}
         if (!salaryDetailsMap[m][tx.staff_id]) {
-          salaryDetailsMap[m][tx.staff_id] = { staff_name: tx.staff_name, accrued: 0, paid: 0 }
+          salaryDetailsMap[m][tx.staff_id] = {
+            staff_name: tx.staff_name,
+            staff_type: (tx.staff_type as 'employee' | 'partner') || 'employee',
+            accrued: 0,
+            paid: 0,
+          }
         }
         if (salaryBasis === 'accrual') {
           salaryDetailsMap[m][tx.staff_id].accrued += total
@@ -1638,17 +1650,25 @@ export async function reportsRoutes(app: FastifyInstance) {
           }
         })
 
-        // Salary list (paid)
+        // Salary list
         const monthSalaryDetails = []
         const salMap = salaryDetailsMap[month]
         let salary_paid = 0
+        let employee_paid = 0
+        let partner_paid = 0
         if (salMap) {
           for (const [staffId, obj] of Object.entries(salMap)) {
             salary_paid += obj.paid
+            if (obj.staff_type === 'partner') {
+              partner_paid += obj.paid
+            } else {
+              employee_paid += obj.paid
+            }
             monthSalaryDetails.push({
               staff_id: staffId,
               staff_name: obj.staff_name,
-              accrued: obj.paid,
+              staff_type: obj.staff_type,
+              accrued: obj.accrued || obj.paid,
               paid: obj.paid,
             })
           }
@@ -1797,6 +1817,8 @@ export async function reportsRoutes(app: FastifyInstance) {
           salary: {
             accrued: salary_paid,
             paid: salary_paid,
+            employee_paid,
+            partner_paid,
             details: monthSalaryDetails,
           },
           operating_expenses: {
@@ -1833,6 +1855,8 @@ export async function reportsRoutes(app: FastifyInstance) {
             refunds_accrued: totalRefundsAccrued,
             net_income,
             salary_paid,
+            employee_salary_paid: employee_paid,
+            partner_salary_paid: partner_paid,
             operating_expenses_paid: operating_expenses_paid + obnal_commissions_paid,
             total_operating_expenses,
             operating_profit,
@@ -1853,23 +1877,23 @@ export async function reportsRoutes(app: FastifyInstance) {
     }
 
   // ── PnL 3 Report (Cash Salaries) ─────────────────────────────────────────────
-  // GET /api/reports/pnl3?from=YYYY-MM&to=YYYY-MM&account_ids=...&salary_basis=payment|accrual
-  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string; salary_basis?: 'payment' | 'accrual' } }>(
+  // GET /api/reports/pnl3?from=YYYY-MM&to=YYYY-MM&account_ids=...&salary_basis=payment|accrual&staff_type=all|employee|partner
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string; salary_basis?: 'payment' | 'accrual'; staff_type?: 'all' | 'employee' | 'partner' } }>(
     '/pnl3',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
       const salaryBasis = req.query.salary_basis === 'accrual' ? 'accrual' : 'payment'
-      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, salaryBasis)
+      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, salaryBasis, req.query.staff_type)
     }
   )
 
   // ── PnL 3 Report (Accrued Salaries) ──────────────────────────────────────────
-  // GET /api/reports/pnl3-accrual?from=YYYY-MM&to=YYYY-MM&account_ids=...
-  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string } }>(
+  // GET /api/reports/pnl3-accrual?from=YYYY-MM&to=YYYY-MM&account_ids=...&staff_type=all|employee|partner
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string; staff_type?: 'all' | 'employee' | 'partner' } }>(
     '/pnl3-accrual',
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
-      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, 'accrual')
+      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, 'accrual', req.query.staff_type)
     }
   )
 

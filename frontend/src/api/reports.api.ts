@@ -242,21 +242,23 @@ export const reportsApi = {
     return data
   },
 
-  getPnL3: async (from?: string, to?: string, account_ids?: string[], salary_basis?: 'payment' | 'accrual'): Promise<PnL3Report> => {
+  getPnL3: async (from?: string, to?: string, account_ids?: string[], salary_basis?: 'payment' | 'accrual', staff_type?: 'all' | 'employee' | 'partner'): Promise<PnL3Report> => {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to)   params.set('to', to)
     if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
     if (salary_basis) params.set('salary_basis', salary_basis)
+    if (staff_type && staff_type !== 'all') params.set('staff_type', staff_type)
     const { data } = await apiClient.get<PnL3Report>(`/reports/pnl3?${params}`)
     return data
   },
 
-  getPnL3Accrual: async (from?: string, to?: string, account_ids?: string[]): Promise<PnL3Report> => {
+  getPnL3Accrual: async (from?: string, to?: string, account_ids?: string[], staff_type?: 'all' | 'employee' | 'partner'): Promise<PnL3Report> => {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to)   params.set('to', to)
     if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
+    if (staff_type && staff_type !== 'all') params.set('staff_type', staff_type)
     const { data } = await apiClient.get<PnL3Report>(`/reports/pnl3-accrual?${params}`)
     return data
   },
@@ -368,6 +370,7 @@ export interface PnL2Account {
 export interface PnL2StaffDetail {
   staff_id: string
   staff_name: string
+  staff_type?: 'employee' | 'partner'
   accrued: number
   paid: number
 }
@@ -449,7 +452,7 @@ export interface PnL3Row {
   month: string
   accounts: PnL2Account[]
   refunds: { accrued: number; paid: number; details: PnL2Account[] }
-  salary: { accrued: number; paid: number; details: PnL2StaffDetail[] }
+  salary: { accrued: number; paid: number; employee_paid?: number; partner_paid?: number; details: PnL2StaffDetail[] }
   operating_expenses: { paid: number; details: PnL2CategoryDetail[] }
   obnal_commissions: { paid: number; transactions: PnL2WithdrawalTxDetail[] }
   non_operating_expenses: { paid: number; details: PnL2CategoryDetail[] }

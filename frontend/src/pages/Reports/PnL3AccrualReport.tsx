@@ -58,7 +58,8 @@ const transfersTotal = (r: PnL3Row) => r.transfers?.total_amount ?? 0
 export function PnL3AccrualReport() {
   const [fromMonth, setFromMonth] = useState(sixMonthsAgo())
   const [toMonth, setToMonth] = useState(currentYM())
-  const [committed, setCommitted] = useState<{ from: string; to: string; accountIds: string[] } | null>(null)
+  const [selectedStaffType, setSelectedStaffType] = useState<'all' | 'employee' | 'partner'>('all')
+  const [committed, setCommitted] = useState<{ from: string; to: string; accountIds: string[]; staffType: 'all' | 'employee' | 'partner' } | null>(null)
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const tableRef = useRef<HTMLDivElement>(null)
@@ -70,7 +71,7 @@ export function PnL3AccrualReport() {
 
   const { data, isFetching, isError } = useQuery({
     queryKey: ['report-pnl3-accrual', committed],
-    queryFn: () => reportsApi.getPnL3Accrual(committed!.from, committed!.to, committed!.accountIds),
+    queryFn: () => reportsApi.getPnL3Accrual(committed!.from, committed!.to, committed!.accountIds, committed!.staffType),
     enabled: !!committed,
     staleTime: 0,
   })
@@ -83,7 +84,7 @@ export function PnL3AccrualReport() {
 
   const handleGenerate = () => {
     setExpanded({})
-    setCommitted({ from: fromMonth, to: toMonth, accountIds: selectedAccounts })
+    setCommitted({ from: fromMonth, to: toMonth, accountIds: selectedAccounts, staffType: selectedStaffType })
     setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
   }
 
@@ -112,6 +113,18 @@ export function PnL3AccrualReport() {
   const childrenOf = (getAcc: (r: PnL3Row) => PnL3Row['accounts'][0] | undefined, actId: string) =>
     uniq(rows.flatMap(r => (getAcc(r)?.details.find(d => d.activity_id === actId)?.children ?? [])
       .map(c => [c.child_id, c.child_name, c.accrued] as [string, string, number])))
+
+  const getEmployees = () =>
+    uniq(rows.flatMap(r => r.salary.details.filter(d => (d.staff_type || 'employee') === 'employee').map(d => [d.staff_id, d.staff_name, d.paid] as [string, string, number])))
+
+  const getPartners = () =>
+    uniq(rows.flatMap(r => r.salary.details.filter(d => d.staff_type === 'partner').map(d => [d.staff_id, d.staff_name, d.paid] as [string, string, number])))
+
+  const employeeSalaryPaid = (r: PnL3Row) =>
+    r.salary.employee_paid ?? r.salary.details.filter(d => (d.staff_type || 'employee') === 'employee').reduce((s, d) => s + d.paid, 0)
+
+  const partnerSalaryPaid = (r: PnL3Row) =>
+    r.salary.partner_paid ?? r.salary.details.filter(d => d.staff_type === 'partner').reduce((s, d) => s + d.paid, 0)
 
   const getUniqueStaff = () =>
     uniq(rows.flatMap(r => r.salary.details.map(d => [d.staff_id, d.staff_name, d.paid] as [string, string, number])))
@@ -194,8 +207,15 @@ export function PnL3AccrualReport() {
     addRow('Чистий дохід', netIncome)
 
     addRow('ОПЕРАЦІЙНІ ВИТРАТИ (ЗП нараховано, витрати сплачено)', totalOperatingExpenses)
-    addRow('  Зарплата (нараховано)', salaryAccrued)
-    getUniqueStaff().forEach(s => addRow(`    └ ${s.name}`, r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0))
+    addRow('  Зарплата персоналу (нараховано)', salaryAccrued)
+    if (getEmployees().length > 0) {
+      addRow('    ├ Співробітники (штат)', employeeSalaryPaid)
+      getEmployees().forEach(s => addRow(`        └ ${s.name}`, r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0))
+    }
+    if (getPartners().length > 0) {
+      addRow('    └ Партнери', partnerSalaryPaid)
+      getPartners().forEach(s => addRow(`        └ ${s.name}`, r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0))
+    }
     addRow('  Операційні витрати (сплачено)', operatingExpensesPaid)
     getUniqueOperatingCategories().forEach(c => {
       addRow(`    └ ${c.name}`, r => (r.operating_expenses?.details ?? r.expenses.details).find(d => d.category_id === c.id)?.paid ?? 0)
@@ -408,6 +428,19 @@ export function PnL3AccrualReport() {
             </div>
           </div>
 
+          <div className="space-y-1.5 min-w-[180px]">
+            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Тип персоналу</label>
+            <select
+              value={selectedStaffType}
+              onChange={e => setSelectedStaffType(e.target.value as any)}
+              className="rounded-lg border-gray-300 text-sm shadow-sm focus:border-iris-500 focus:ring-iris-500 bg-white w-full h-[38px]"
+            >
+              <option value="all">Всі (Штат + Партнери)</option>
+              <option value="employee">Тільки співробітники (штат)</option>
+              <option value="partner">Тільки партнери</option>
+            </select>
+          </div>
+
           <div className="space-y-1.5 min-w-[200px] flex-1 max-w-sm">
             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">Рахунки</label>
             <div className="relative group">
@@ -497,10 +530,40 @@ export function PnL3AccrualReport() {
                   <SectionHeader label="ОПЕРАЦІЙНІ ВИТРАТИ (ЗП НАРАХОВАНО, ВИТРАТИ СПЛАЧЕНО)" />
 
                   <DataRow label="Зарплата персоналу (нараховано)" level={0} expandKey="salary" get={salaryAccrued} />
-                  {expanded['salary'] && getUniqueStaff().map(s => (
-                    <DataRow key={s.id} label={s.name} level={1} bg="bg-gray-50"
-                      get={r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0} />
-                  ))}
+                  {expanded['salary'] && (
+                    <>
+                      {getEmployees().length > 0 && (
+                        <>
+                          <DataRow
+                            label={<span className="font-medium text-gray-700">Співробітники (штат)</span>}
+                            level={1}
+                            bg="bg-gray-50"
+                            expandKey={getEmployees().length ? 'salary_employees' : undefined}
+                            get={employeeSalaryPaid}
+                          />
+                          {expanded['salary_employees'] && getEmployees().map(s => (
+                            <DataRow key={s.id} label={s.name} level={2} bg="bg-gray-50"
+                              get={r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0} />
+                          ))}
+                        </>
+                      )}
+                      {getPartners().length > 0 && (
+                        <>
+                          <DataRow
+                            label={<span className="font-medium text-iris-800">Партнери</span>}
+                            level={1}
+                            bg="bg-iris-50/40"
+                            expandKey={getPartners().length ? 'salary_partners' : undefined}
+                            get={partnerSalaryPaid}
+                          />
+                          {expanded['salary_partners'] && getPartners().map(s => (
+                            <DataRow key={s.id} label={<><span className="text-iris-600 font-medium mr-1.5">[Партнер]</span>{s.name}</>} level={2} bg="bg-iris-50/30"
+                              get={r => r.salary.details.find(d => d.staff_id === s.id)?.paid ?? 0} />
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
 
                   <DataRow label="Операційні витрати" level={0} bg="bg-gray-50" expandKey="operating_expenses" get={operatingExpensesPaid} />
                   {expanded['operating_expenses'] && getUniqueOperatingCategories().map(cat => {
