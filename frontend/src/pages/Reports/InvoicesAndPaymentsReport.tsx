@@ -118,8 +118,22 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
         </td>
 
         {/* Paid in period */}
-        <td className="px-3 py-3 text-right tabular-nums text-sm text-emerald-700 font-medium">
-          {row.paid_in_period > 0 ? `+${fmtMoney(row.paid_in_period)} ₴` : '0,00 ₴'}
+        <td className="px-3 py-3 text-right tabular-nums text-sm font-medium">
+          <div className="text-emerald-700">
+            {row.paid_in_period > 0 ? `+${fmtMoney(row.paid_in_period)} ₴` : '0,00 ₴'}
+          </div>
+          {((row.transfers_in_period ?? 0) > 0 || (row.transfers_out_period ?? 0) > 0) && (
+            <div className="text-[11px] text-purple-700 font-normal mt-0.5" title="Внутрішній переброс коштів між рахунками">
+              {row.transfers_in_period === row.transfers_out_period ? (
+                <span>⇄ переброс: {fmtMoney(row.transfers_in_period ?? 0)} ₴</span>
+              ) : (
+                <span>
+                  {(row.transfers_in_period ?? 0) > 0 && `⇄ +${fmtMoney(row.transfers_in_period ?? 0)} ₴ `}
+                  {(row.transfers_out_period ?? 0) > 0 && `⇄ −${fmtMoney(row.transfers_out_period ?? 0)} ₴`}
+                </span>
+              )}
+            </div>
+          )}
         </td>
 
         {/* Paid after period */}
@@ -190,9 +204,22 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                       </span>
                       <span className="text-gray-300">|</span>
                       <span className="text-emerald-700">
-                        Сплачено у періоді:{' '}
+                        Сплачено:{' '}
                         <strong className="font-mono">+{fmtMoney(acc.paid_in_period)} ₴</strong>
                       </span>
+                      {((acc.transfers_in_period ?? 0) > 0 || (acc.transfers_out_period ?? 0) > 0) && (
+                        <>
+                          <span className="text-gray-300">|</span>
+                          <span className="text-purple-700">
+                            Переброс:{' '}
+                            <strong className="font-mono">
+                              {(acc.transfers_in_period ?? 0) > 0 && `+${fmtMoney(acc.transfers_in_period!)} ₴`}
+                              {(acc.transfers_in_period ?? 0) > 0 && (acc.transfers_out_period ?? 0) > 0 && ' / '}
+                              {(acc.transfers_out_period ?? 0) > 0 && `−${fmtMoney(acc.transfers_out_period!)} ₴`}
+                            </strong>
+                          </span>
+                        </>
+                      )}
                       {acc.paid_after_period > 0 && (
                         <>
                           <span className="text-gray-300">|</span>
@@ -362,17 +389,60 @@ function ChildRow({ row, isExpanded, onToggle }: ChildRowProps) {
                         </span>
                       </div>
 
-                      <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200">
-                        <span className="text-emerald-800 font-medium block">Оплачено у періоді</span>
-                        <span className="text-sm font-bold font-mono text-emerald-900 mt-0.5 block">
-                          +{fmtMoney(acc.paid_in_period)} ₴
-                        </span>
-                        <span className="text-[10px] text-emerald-600">
-                          {acc.paid_after_period > 0
-                            ? `+${fmtMoney(acc.paid_after_period)} ₴ сплачено пізніше`
-                            : 'надійшло вчасно'}
-                        </span>
-                      </div>
+                      {((acc.transfers_in_period ?? 0) === 0 && (acc.transfers_out_period ?? 0) === 0) ? (
+                        <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200">
+                          <span className="text-emerald-800 font-medium block">Оплачено у періоді</span>
+                          <span className="text-sm font-bold font-mono text-emerald-900 mt-0.5 block">
+                            +{fmtMoney(acc.paid_in_period)} ₴
+                          </span>
+                          <span className="text-[10px] text-emerald-600">
+                            {acc.paid_after_period > 0
+                              ? `+${fmtMoney(acc.paid_after_period)} ₴ сплачено пізніше`
+                              : 'надійшло вчасно'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-lg bg-white border border-gray-200 shadow-xs flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-emerald-800 font-medium text-[11px] block">Пряма оплата</span>
+                              <span className="text-[10px] text-emerald-600">
+                                {acc.paid_after_period > 0 ? `+${fmtMoney(acc.paid_after_period)} ₴ пізніше` : 'надійшло'}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold font-mono text-emerald-700 mt-0.5 block">
+                              {acc.paid_in_period > 0 ? `+${fmtMoney(acc.paid_in_period)} ₴` : '0,00 ₴'}
+                            </span>
+                          </div>
+
+                          <div className="pt-2 mt-2 border-t border-purple-100 bg-purple-50/70 -mx-2.5 -mb-2.5 p-2 rounded-b-lg space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-semibold text-purple-900 flex items-center gap-1">
+                                <span>⇄</span>
+                                {(acc.transfers_in_period ?? 0) > 0 && (acc.transfers_out_period ?? 0) > 0
+                                  ? 'Переброси'
+                                  : (acc.transfers_in_period ?? 0) > 0
+                                  ? 'Зараховано перебросом'
+                                  : 'Списано перебросом'}
+                              </span>
+                              <span className="font-mono font-bold text-purple-800 text-xs">
+                                {(acc.transfers_in_period ?? 0) > 0 && `+${fmtMoney(acc.transfers_in_period!)} ₴`}
+                                {(acc.transfers_in_period ?? 0) > 0 && (acc.transfers_out_period ?? 0) > 0 && ' / '}
+                                {(acc.transfers_out_period ?? 0) > 0 && `−${fmtMoney(acc.transfers_out_period!)} ₴`}
+                              </span>
+                            </div>
+                            {acc.transfers && acc.transfers.length > 0 && (
+                              <div className="space-y-0.5 text-[10px] text-purple-700/80">
+                                {acc.transfers.map((tr, idx) => (
+                                  <div key={idx} className="truncate" title={tr.note ?? ''}>
+                                    {tr.type === 'TRANSFER_IN' ? '+' : '−'}{fmtMoney(tr.amount)} ₴ {tr.note ? `· ${tr.note}` : ''}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200">
                         <span className="text-gray-500 block">Баланс на кінець періоду</span>
@@ -477,6 +547,7 @@ export function InvoicesAndPaymentsReport() {
       'Спожиті послуги (мин. місяць)',
       'Абонементи',
       'Оплачено у періоді',
+      'Переброси (⇄)',
       'Оплачено після періоду',
       'Баланс на кінець періоду',
       'Поточний баланс',
@@ -491,6 +562,7 @@ export function InvoicesAndPaymentsReport() {
       r.consumed_services_total.toFixed(2),
       r.subscriptions_total.toFixed(2),
       r.paid_in_period.toFixed(2),
+      ((r.transfers_in_period ?? 0) - (r.transfers_out_period ?? 0)).toFixed(2),
       r.paid_after_period.toFixed(2),
       r.balance_end.toFixed(2),
       r.current_balance.toFixed(2),
@@ -686,7 +758,14 @@ export function InvoicesAndPaymentsReport() {
             <span className="text-base font-bold font-mono text-emerald-800 mt-1 block">
               +{fmtMoney(report.totals.paid_in_period)} ₴
             </span>
-            <span className="text-[11px] text-emerald-600">надійшло вчасно</span>
+            <span className="text-[11px] text-emerald-600 flex justify-between items-center">
+              <span>надійшло вчасно</span>
+              {(report.totals.transfers_in_total ?? 0) > 0 && (
+                <span className="text-purple-700 font-medium" title="Внутрішні переброси між рахунками">
+                  ⇄ {fmtMoney(report.totals.transfers_in_total!)} ₴
+                </span>
+              )}
+            </span>
           </div>
 
           <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs">
@@ -812,7 +891,12 @@ export function InvoicesAndPaymentsReport() {
                     {fmtMoney(report.totals.invoice_total)} ₴
                   </td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums text-emerald-700">
-                    +{fmtMoney(report.totals.paid_in_period)} ₴
+                    <div>+{fmtMoney(report.totals.paid_in_period)} ₴</div>
+                    {(report.totals.transfers_in_total ?? 0) > 0 && (
+                      <div className="text-[11px] text-purple-700 font-normal">
+                        ⇄ {fmtMoney(report.totals.transfers_in_total!)} ₴
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-right font-mono tabular-nums text-blue-700">
                     +{fmtMoney(report.totals.paid_after_period)} ₴

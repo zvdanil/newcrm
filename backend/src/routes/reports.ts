@@ -2216,6 +2216,9 @@ export async function reportsRoutes(app: FastifyInstance) {
           't.account_id',
           sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) < ${fromDate} THEN t.amount ELSE 0 END)`.as('credits_before'),
           sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) < ${fromDate} THEN t.amount ELSE 0 END)`.as('debits_before'),
+          sql<string>`SUM(CASE WHEN t.type = 'PAYMENT' AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('payments_in_period'),
+          sql<string>`SUM(CASE WHEN t.type = 'TRANSFER_IN' AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('transfers_in_period'),
+          sql<string>`SUM(CASE WHEN t.type = 'TRANSFER_OUT' AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate} THEN t.amount ELSE 0 END)`.as('transfers_out_period'),
           sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate} THEN t.amount ELSE 0 END)`.as('credits_in_period'),
           sql<string>`SUM(CASE WHEN t.type IN ('ACCRUAL','ADJUSTMENT','TRANSFER_OUT') AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate} THEN t.amount ELSE 0 END)`.as('debits_in_period'),
           sql<string>`SUM(CASE WHEN t.type IN ('PAYMENT','REFUND','REVERSAL','TRANSFER_IN') AND date_trunc('month', t.transaction_date) > ${toDate} THEN t.amount ELSE 0 END)`.as('credits_after_period'),
@@ -2262,6 +2265,28 @@ export async function reportsRoutes(app: FastifyInstance) {
       let curQ = db.selectFrom('child_balances').select(['child_id', 'account_id', 'balance'])
       if (accountIds.length > 0) {
         curQ = curQ.where('account_id', 'in', accountIds)
+      }
+
+      // 5b. Transfers in period with notes
+      let transfersQ = db
+        .selectFrom('transactions as t')
+        .select([
+          't.child_id',
+          't.account_id',
+          't.type',
+          't.amount',
+          't.note',
+          't.transaction_date',
+        ])
+        .where('t.type', 'in', ['TRANSFER_IN', 'TRANSFER_OUT'])
+        .where('t.is_deleted', '=', false)
+        .where(sql<SqlBool>`(
+          (t.type = 'TRANSFER_IN' AND date_trunc('month', t.transaction_date) >= ${fromDate} AND date_trunc('month', t.transaction_date) <= ${toDate})
+          OR
+          (t.type = 'TRANSFER_OUT' AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) >= ${fromDate} AND COALESCE(t.billing_month, date_trunc('month', t.transaction_date)) <= ${toDate})
+        )`)
+      if (accountIds.length > 0) {
+        transfersQ = transfersQ.where('t.account_id', 'in', accountIds)
       }
 
       // 6. Active/frozen enrollments (for current subscriptions)
@@ -2325,7 +2350,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         .where('al.status', 'in', ['present', 'special'])
         .groupBy(['al.child_id', 'al.activity_id', sql`date_trunc('month', al.date)`])
 
-      const [summaryRows, childMeta, accountMeta, initBals, curBals, enrollments, accrualTxs, attendanceRows] =
+      const [summaryRows, childMeta, accountMeta, initBals, curBals, enrollments, accrualTxs, attendanceRows, transferRows] =
         await Promise.all([
           summaryQ.execute(),
           childMetaQ.execute(),
@@ -2335,12 +2360,25 @@ export async function reportsRoutes(app: FastifyInstance) {
           enrollmentsQ.execute(),
           accrualTxsQ.execute(),
           attendanceQ.execute(),
+          transfersQ.execute(),
         ])
 
       const childMetaMap = new Map(childMeta.map(r => [r.child_id, r]))
       const accountMetaMap = new Map(accountMeta.map(r => [r.id, r]))
       const initBalMap = new Map(initBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.amount)]))
       const curBalMap = new Map(curBals.map(r => [`${r.child_id}:${r.account_id}`, Number(r.balance)]))
+
+      // Transfers map: `${childId}:${accountId}` -> Array of transfer items
+      const transfersMap = new Map<string, Array<{ type: 'TRANSFER_IN' | 'TRANSFER_OUT'; amount: number; note: string | null }>>()
+      for (const tr of transferRows) {
+        const pairKey = `${tr.child_id}:${tr.account_id}`
+        if (!transfersMap.has(pairKey)) transfersMap.set(pairKey, [])
+        transfersMap.get(pairKey)!.push({
+          type: tr.type as 'TRANSFER_IN' | 'TRANSFER_OUT',
+          amount: Number(tr.amount),
+          note: tr.note ?? null,
+        })
+      }
 
       // Attendance map: `${childId}:${activityId}:${month}` -> count
       const attendanceMap = new Map<string, number>()
@@ -2485,6 +2523,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         let child_subscriptions_total = 0
         let child_invoice_total = 0
         let child_paid_in_period = 0
+        let child_transfers_in_period = 0
+        let child_transfers_out_period = 0
         let child_paid_after_period = 0
         let child_balance_end = 0
         let child_current_balance = 0
@@ -2500,12 +2540,16 @@ export async function reportsRoutes(app: FastifyInstance) {
 
           const credBefore = Number(sr?.credits_before ?? 0)
           const debBefore = Number(sr?.debits_before ?? 0)
+          const paymentsInPeriod = Number((sr as any)?.payments_in_period ?? 0)
+          const transfersInPeriod = Number((sr as any)?.transfers_in_period ?? 0)
+          const transfersOutPeriod = Number((sr as any)?.transfers_out_period ?? 0)
           const credInPeriod = Number(sr?.credits_in_period ?? 0)
           const debInPeriod = Number(sr?.debits_in_period ?? 0)
           const credAfter = Number(sr?.credits_after_period ?? 0)
 
           const balance_start = initBal + credBefore - debBefore
-          const paid_in_period = credInPeriod
+          // Direct payments from parents (excludes internal balance transfers)
+          const paid_in_period = paymentsInPeriod
           const paid_after_period = credAfter
           const balance_end = balance_start + credInPeriod - debInPeriod
           const current_balance = curBal
@@ -2532,6 +2576,8 @@ export async function reportsRoutes(app: FastifyInstance) {
           child_subscriptions_total += subscriptions_total
           child_invoice_total += invoice_total
           child_paid_in_period += paid_in_period
+          child_transfers_in_period += transfersInPeriod
+          child_transfers_out_period += transfersOutPeriod
           child_paid_after_period += paid_after_period
           child_balance_end += balance_end
           child_current_balance += current_balance
@@ -2548,6 +2594,9 @@ export async function reportsRoutes(app: FastifyInstance) {
             invoice_total,
             paid_in_period,
             paid_after_period,
+            transfers_in_period: transfersInPeriod,
+            transfers_out_period: transfersOutPeriod,
+            transfers: transfersMap.get(pairKey) ?? [],
             balance_end,
             current_balance,
           })
@@ -2563,6 +2612,8 @@ export async function reportsRoutes(app: FastifyInstance) {
           Math.abs(child_subscriptions_total) < 0.005 &&
           Math.abs(child_invoice_total) < 0.005 &&
           Math.abs(child_paid_in_period) < 0.005 &&
+          Math.abs(child_transfers_in_period) < 0.005 &&
+          Math.abs(child_transfers_out_period) < 0.005 &&
           Math.abs(child_paid_after_period) < 0.005 &&
           Math.abs(child_balance_end) < 0.005 &&
           Math.abs(child_current_balance) < 0.005
@@ -2588,6 +2639,8 @@ export async function reportsRoutes(app: FastifyInstance) {
           subscriptions_total: child_subscriptions_total,
           invoice_total: child_invoice_total,
           paid_in_period: child_paid_in_period,
+          transfers_in_period: child_transfers_in_period,
+          transfers_out_period: child_transfers_out_period,
           paid_after_period: child_paid_after_period,
           balance_end: child_balance_end,
           current_balance: child_current_balance,
@@ -2603,6 +2656,8 @@ export async function reportsRoutes(app: FastifyInstance) {
         consumed_services_total: rows.reduce((s, r) => s + r.consumed_services_total, 0),
         subscriptions_total: rows.reduce((s, r) => s + r.subscriptions_total, 0),
         paid_in_period: rows.reduce((s, r) => s + r.paid_in_period, 0),
+        transfers_in_total: rows.reduce((s, r) => s + (r.transfers_in_period ?? 0), 0),
+        transfers_out_total: rows.reduce((s, r) => s + (r.transfers_out_period ?? 0), 0),
         paid_after_period: rows.reduce((s, r) => s + r.paid_after_period, 0),
         balance_end: rows.reduce((s, r) => s + r.balance_end, 0),
         current_balance: rows.reduce((s, r) => s + r.current_balance, 0),

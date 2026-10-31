@@ -109,6 +109,12 @@ export interface InvoiceSubscriptionItem {
   amount: number
 }
 
+export interface InvoiceTransferItem {
+  type: 'TRANSFER_IN' | 'TRANSFER_OUT'
+  amount: number
+  note?: string | null
+}
+
 export interface InvoicesAndPaymentsAccountDetail {
   account_id: string
   account_name: string
@@ -121,6 +127,9 @@ export interface InvoicesAndPaymentsAccountDetail {
   invoice_total: number
   paid_in_period: number
   paid_after_period: number
+  transfers_in_period?: number
+  transfers_out_period?: number
+  transfers?: InvoiceTransferItem[]
   balance_end: number
   current_balance: number
 }
@@ -137,6 +146,8 @@ export interface InvoicesAndPaymentsChildRow {
   invoice_total: number
   paid_in_period: number
   paid_after_period: number
+  transfers_in_period?: number
+  transfers_out_period?: number
   balance_end: number
   current_balance: number
   accounts: InvoicesAndPaymentsAccountDetail[]
@@ -148,6 +159,8 @@ export interface InvoicesAndPaymentsTotals {
   subscriptions_total: number
   paid_in_period: number
   paid_after_period: number
+  transfers_in_total?: number
+  transfers_out_total?: number
   balance_end: number
   current_balance: number
   children_count: number
