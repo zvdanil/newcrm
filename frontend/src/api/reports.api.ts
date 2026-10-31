@@ -242,12 +242,22 @@ export const reportsApi = {
     return data
   },
 
-  getPnL3: async (from?: string, to?: string, account_ids?: string[]): Promise<PnL3Report> => {
+  getPnL3: async (from?: string, to?: string, account_ids?: string[], salary_basis?: 'payment' | 'accrual'): Promise<PnL3Report> => {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to)   params.set('to', to)
     if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
+    if (salary_basis) params.set('salary_basis', salary_basis)
     const { data } = await apiClient.get<PnL3Report>(`/reports/pnl3?${params}`)
+    return data
+  },
+
+  getPnL3Accrual: async (from?: string, to?: string, account_ids?: string[]): Promise<PnL3Report> => {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to)   params.set('to', to)
+    if (account_ids && account_ids.length > 0) params.set('account_ids', account_ids.join(','))
+    const { data } = await apiClient.get<PnL3Report>(`/reports/pnl3-accrual?${params}`)
     return data
   },
 

@@ -1130,16 +1130,17 @@ export async function reportsRoutes(app: FastifyInstance) {
     }
   )
 
-  // ── PnL 3 Report ─────────────────────────────────────────────────────────────
-  // GET /api/reports/pnl3?from=YYYY-MM&to=YYYY-MM&account_ids=...
+  // ── PnL 3 Report Core ────────────────────────────────────────────────────────
   // Mixed-base PnL: Income by accrual minus refunds, expenses by actual payment,
   // internal transfers & obnal isolated, non-operating expenses separate, obnal commissions in OPEX.
-  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string } }>(
-    '/pnl3',
-    { preHandler: requireRole('owner', 'admin', 'accountant') },
-    async (req) => {
-      const { from, to, account_ids: accountIdsRaw } = req.query
-      const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
+  // salaryBasis: 'payment' (standard PnL3) or 'accrual' (PnL3 по нарахуванню ЗП).
+  async function buildPnL3Report(
+    from?: string,
+    to?: string,
+    accountIdsRaw?: string,
+    salaryBasis: 'payment' | 'accrual' = 'payment'
+  ) {
+    const accountIds = accountIdsRaw ? accountIdsRaw.split(',').filter(Boolean) : []
 
       const now = new Date()
       const defaultFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1)
@@ -1214,7 +1215,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           return q.execute()
         })(),
 
-        // 2. Paid salary transactions
+        // 2. Salary transactions (accrual or payment based)
         (() => {
           let q = db.selectFrom('salary_transactions as st')
             .innerJoin('staff as s', 's.id', 'st.staff_id')
@@ -1225,21 +1226,41 @@ export async function reportsRoutes(app: FastifyInstance) {
               'st.is_dividend',
               'st.note',
               'st.transaction_date',
+              sql<string>`to_char(COALESCE(st.billing_month, date_trunc('month', st.transaction_date)), 'YYYY-MM-01')`.as('month_accrual'),
               sql<string>`to_char(date_trunc('month', st.transaction_date), 'YYYY-MM-01')`.as('month_payment'),
               sql<string>`COALESCE(SUM(st.gross_amount), 0)`.as('total')
             ])
             .where('st.is_deleted', '=', false)
-            .where('st.type', '=', 'PAYMENT')
-            .groupBy([
-              'st.staff_id',
-              's.full_name',
-              'st.type',
-              'st.is_dividend',
-              'st.note',
-              'st.transaction_date',
-              sql`date_trunc('month', st.transaction_date)`
-            ])
-          if (accountIds.length > 0) q = q.where('st.account_id', 'in', accountIds)
+
+          if (salaryBasis === 'accrual') {
+            q = q.where((eb) => eb.or([
+              eb('st.type', 'in', ['ACCRUAL', 'CORRECTION']),
+              eb.and([
+                eb('st.type', '=', 'PAYMENT'),
+                eb('st.is_dividend', '=', true)
+              ])
+            ]))
+            if (accountIds.length > 0) {
+              q = q.where((eb) => eb.or([
+                eb('st.account_id', 'in', accountIds),
+                eb('st.account_id', 'is', null)
+              ]))
+            }
+          } else {
+            q = q.where('st.type', '=', 'PAYMENT')
+            if (accountIds.length > 0) q = q.where('st.account_id', 'in', accountIds)
+          }
+
+          q = q.groupBy([
+            'st.staff_id',
+            's.full_name',
+            'st.type',
+            'st.is_dividend',
+            'st.note',
+            'st.transaction_date',
+            sql`COALESCE(st.billing_month, date_trunc('month', st.transaction_date))`,
+            sql`date_trunc('month', st.transaction_date)`
+          ])
           return q.execute()
         })(),
 
@@ -1343,31 +1364,39 @@ export async function reportsRoutes(app: FastifyInstance) {
         }
       }
 
-      // 5. Process Salaries (by payment month)
+      // 5. Process Salaries (by payment or accrual month)
       const salaryDetailsMap: Record<string, Record<string, { staff_name: string; accrued: number; paid: number }>> = {}
       const salaryDividendPayments: Array<{ month: string; date: string; name: string; note: string; amount: number }> = []
 
       for (const tx of salaryTxDetails) {
         const total = Number(tx.total)
         const dateStr = tx.transaction_date ? new Date(tx.transaction_date).toISOString().slice(0, 10) : ''
-        const m = tx.month_payment
 
         if (tx.is_dividend) {
-          salaryDividendPayments.push({
-            month: m,
-            date: dateStr,
-            name: tx.staff_name,
-            note: tx.note || 'Виплата дивідендів (ЗП)',
-            amount: total,
-          })
+          if (tx.type === 'PAYMENT') {
+            salaryDividendPayments.push({
+              month: tx.month_payment,
+              date: dateStr,
+              name: tx.staff_name,
+              note: tx.note || 'Виплата дивідендів (ЗП)',
+              amount: total,
+            })
+          }
           continue
         }
+
+        const m = salaryBasis === 'accrual' ? tx.month_accrual : tx.month_payment
 
         if (!salaryDetailsMap[m]) salaryDetailsMap[m] = {}
         if (!salaryDetailsMap[m][tx.staff_id]) {
           salaryDetailsMap[m][tx.staff_id] = { staff_name: tx.staff_name, accrued: 0, paid: 0 }
         }
-        salaryDetailsMap[m][tx.staff_id].paid += total
+        if (salaryBasis === 'accrual') {
+          salaryDetailsMap[m][tx.staff_id].accrued += total
+          salaryDetailsMap[m][tx.staff_id].paid += total
+        } else {
+          salaryDetailsMap[m][tx.staff_id].paid += total
+        }
       }
 
       // 6. Process Expenses (by payment month)
@@ -1821,6 +1850,26 @@ export async function reportsRoutes(app: FastifyInstance) {
         accounts,
         rows,
       }
+    }
+
+  // ── PnL 3 Report (Cash Salaries) ─────────────────────────────────────────────
+  // GET /api/reports/pnl3?from=YYYY-MM&to=YYYY-MM&account_ids=...&salary_basis=payment|accrual
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string; salary_basis?: 'payment' | 'accrual' } }>(
+    '/pnl3',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      const salaryBasis = req.query.salary_basis === 'accrual' ? 'accrual' : 'payment'
+      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, salaryBasis)
+    }
+  )
+
+  // ── PnL 3 Report (Accrued Salaries) ──────────────────────────────────────────
+  // GET /api/reports/pnl3-accrual?from=YYYY-MM&to=YYYY-MM&account_ids=...
+  app.get<{ Querystring: { from?: string; to?: string; account_ids?: string } }>(
+    '/pnl3-accrual',
+    { preHandler: requireRole('owner', 'admin', 'accountant') },
+    async (req) => {
+      return buildPnL3Report(req.query.from, req.query.to, req.query.account_ids, 'accrual')
     }
   )
 
