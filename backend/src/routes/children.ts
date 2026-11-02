@@ -317,27 +317,54 @@ export async function childrenRoutes(app: FastifyInstance) {
         } else if ((group_start_date || entry_date) && (existingChild.group_id || updates.group_id)) {
           const rawGroupStart = (group_start_date || entry_date)?.trim()
           if (rawGroupStart) {
-            let formattedStart = toDbDateStr(rawGroupStart)
+            const formattedStart = toDbDateStr(rawGroupStart)
             const targetGroupId = updates.group_id || existingChild.group_id
             if (targetGroupId) {
-              const earliestLog = await trx.selectFrom('attendance_logs')
-                .select((eb) => eb.fn.min('date').as('min_date'))
-                .where('child_id', '=', id)
-                .executeTakeFirst()
+              let closeDate = new Date(formattedStart)
+              closeDate.setDate(closeDate.getDate() - 1)
+              const prevCloseDateStr = toDbDateStr(closeDate)
 
-              if (earliestLog?.min_date) {
-                const earliestLogStr = toDbDateStr(earliestLog.min_date as unknown as Date)
-                if (formattedStart > earliestLogStr) {
-                  formattedStart = earliestLogStr
-                }
-              }
-
-              await trx.updateTable('child_group_history')
-                .set({ start_date: formattedStart, updated_at: new Date().toISOString() as unknown as Date })
+              const activeRecord = await trx.selectFrom('child_group_history')
+                .selectAll()
                 .where('child_id', '=', id)
                 .where('group_id', '=', targetGroupId)
                 .where('end_date', 'is', null)
+                .executeTakeFirst()
+
+              const otherHistory = await trx.selectFrom('child_group_history')
+                .selectAll()
+                .where('child_id', '=', id)
+                .where((eb) => activeRecord ? eb('id', '!=', activeRecord.id) : eb.val(true))
+                .orderBy('start_date', 'asc')
                 .execute()
+
+              for (const h of otherHistory) {
+                const hStart = toDbDateStr(h.start_date as unknown as Date)
+                const hEnd = h.end_date ? toDbDateStr(h.end_date as unknown as Date) : null
+
+                if (hStart >= formattedStart) {
+                  await trx.deleteFrom('child_group_history').where('id', '=', h.id).execute()
+                } else if (!hEnd || hEnd >= formattedStart) {
+                  await trx.updateTable('child_group_history')
+                    .set({ end_date: prevCloseDateStr, updated_at: new Date().toISOString() as unknown as Date })
+                    .where('id', '=', h.id)
+                    .execute()
+                }
+              }
+
+              if (activeRecord) {
+                await trx.updateTable('child_group_history')
+                  .set({ start_date: formattedStart, updated_at: new Date().toISOString() as unknown as Date })
+                  .where('id', '=', activeRecord.id)
+                  .execute()
+              } else {
+                await trx.insertInto('child_group_history').values({
+                  child_id: id,
+                  group_id: targetGroupId,
+                  start_date: formattedStart,
+                  end_date: null,
+                }).execute()
+              }
             }
           }
         }
