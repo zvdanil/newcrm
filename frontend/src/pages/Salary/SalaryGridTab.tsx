@@ -207,7 +207,7 @@ export function PaymentDayDialog({
       linked_expense_id: (matchedExpense && linkExpense) ? matchedExpense.id : undefined,
     }),
     onSuccess: () => { invalidateAll(); onClose() },
-    onError:   () => setError('Помилка збереження'),
+    onError:   (e: { response?: { data?: { message?: string } } }) => setError(e.response?.data?.message ?? 'Помилка збереження'),
   })
 
   const deleteMutation = useMutation({
@@ -266,15 +266,15 @@ export function PaymentDayDialog({
               <input
                 type="number" min="0.01" step="0.01" placeholder="0.00"
                 value={form.gross_amount}
-                onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+                onChange={e => { setForm(f => ({ ...f, gross_amount: e.target.value })); setError(null) }}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Рахунок</label>
+              <label className="block text-xs text-gray-600 mb-1">Рахунок *</label>
               <select
                 value={form.account_id}
-                onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
+                onChange={e => { setForm(f => ({ ...f, account_id: e.target.value })); setError(null) }}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
               >
                 <option value="">— не вказано —</option>
@@ -324,8 +324,19 @@ export function PaymentDayDialog({
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
-              onClick={() => { setError(null); addMutation.mutate() }}
-              disabled={addMutation.isPending || !form.gross_amount || parseFloat(form.gross_amount) <= 0 || (hasCommission && !form.account_id)}
+              onClick={() => {
+                setError(null)
+                if (!form.gross_amount || parseFloat(form.gross_amount) <= 0) {
+                  setError('Введіть суму виплати')
+                  return
+                }
+                if (!form.account_id) {
+                  setError('Оберіть рахунок списання')
+                  return
+                }
+                addMutation.mutate()
+              }}
+              disabled={addMutation.isPending}
               className="flex-1 py-2 bg-green-700 text-white text-sm rounded-lg hover:bg-green-800 disabled:opacity-50"
             >
               {addMutation.isPending ? '...' : 'Виплатити'}

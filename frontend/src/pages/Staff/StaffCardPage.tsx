@@ -1195,20 +1195,32 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
       linked_expense_id: (matchedExpense && linkExpense) ? matchedExpense.id : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['salary', staffId] }); qc.invalidateQueries({ queryKey: ['salary-total', staffId] }); onDone() },
-    onError: () => setError('Помилка збереження'),
+    onError: (e: { response?: { data?: { message?: string } } }) => setError(e.response?.data?.message ?? 'Помилка збереження'),
   })
 
-  const canSubmit = !!form.gross_amount && (!hasCommission || !!form.account_id)
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (!form.gross_amount || parseFloat(form.gross_amount) <= 0) {
+      setError('Введіть суму виплати')
+      return
+    }
+    if (!form.account_id) {
+      setError('Оберіть рахунок списання')
+      return
+    }
+    mutation.mutate()
+  }
 
   return (
-    <form onSubmit={e => { e.preventDefault(); setError(null); mutation.mutate() }}
+    <form onSubmit={handleSubmit}
       className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
       <h3 className="text-sm font-semibold text-gray-800">Виплата ЗП</h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Сума *</label>
           <input type="number" min="0.01" step="0.01" placeholder="0.00" value={form.gross_amount}
-            onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+            onChange={e => { setForm(f => ({ ...f, gross_amount: e.target.value })); setError(null) }}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
         </div>
         <div>
@@ -1218,8 +1230,8 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500" />
         </div>
         <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок списання</label>
-          <select value={form.account_id} onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
+          <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок списання *</label>
+          <select value={form.account_id} onChange={e => { setForm(f => ({ ...f, account_id: e.target.value })); setError(null) }}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
             <option value="">— не вказано —</option>
             {accounts.filter(a => a.is_active).map(a => (
@@ -1269,7 +1281,7 @@ export function PayForm({ staffId, onDone, initialDate }: { staffId: string; onD
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" disabled={mutation.isPending || !canSubmit}
+        <button type="submit" disabled={mutation.isPending}
           className="px-4 py-2 bg-green-700 text-white text-sm rounded-lg hover:bg-green-800 disabled:opacity-50">
           {mutation.isPending ? '...' : 'Виплатити'}
         </button>

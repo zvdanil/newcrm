@@ -438,13 +438,13 @@ export async function salaryRoutes(app: FastifyInstance) {
       if (!gross_amount || gross_amount <= 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
       }
+      if (!account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Оберіть рахунок списання' })
+      }
 
       const commissionAmt = Number(commission ?? 0)
       if (!Number.isFinite(commissionAmt) || commissionAmt < 0) {
         return reply.status(400).send({ error: 'BadRequest', message: 'Комісія не може бути від\'ємною' })
-      }
-      if (commissionAmt > 0 && !account_id) {
-        return reply.status(400).send({ error: 'BadRequest', message: 'Для запису комісії необхідно вказати рахунок' })
       }
 
       const today   = new Date().toISOString().slice(0, 10)

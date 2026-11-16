@@ -510,7 +510,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
       qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
       onSave(form.account_id)
     },
-    onError: () => setError('Помилка збереження'),
+    onError: (e: { response?: { data?: { message?: string } } }) => setError(e.response?.data?.message ?? 'Помилка збереження'),
   })
 
   const updateMutation = useMutation({
@@ -521,7 +521,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
       qc.invalidateQueries({ queryKey: ['advance-pools-all'] })
       onSave(form.account_id)
     },
-    onError: () => setError('Помилка збереження'),
+    onError: (e: { response?: { data?: { message?: string } } }) => setError(e.response?.data?.message ?? 'Помилка збереження'),
   })
 
   function handleSubmit(e: React.FormEvent) {
@@ -570,7 +570,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок *</label>
           <select value={form.account_id}
-            onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
+            onChange={e => { setForm(f => ({ ...f, account_id: e.target.value })); setError(null) }}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500">
             <option value="">— оберіть —</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -579,7 +579,7 @@ function ExpenseForm({ categories, accounts, initial, defaultAccountId = '', onS
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Сума *</label>
           <input type="number" min="0.01" step="0.01" placeholder="0.00" value={form.amount}
-            onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+            onChange={e => { setForm(f => ({ ...f, amount: e.target.value })); setError(null) }}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-iris-500" />
         </div>
       </div>

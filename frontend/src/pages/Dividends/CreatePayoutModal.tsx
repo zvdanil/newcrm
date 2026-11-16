@@ -90,6 +90,7 @@ export function CreatePayoutModal({
   const [newAccountId, setNewAccountId] = useState('')
   const [newAmount, setNewAmount] = useState('')
   const [selectedExpenseId, setSelectedExpenseId] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
   // Prefill logic
   useEffect(() => {
@@ -114,8 +115,16 @@ export function CreatePayoutModal({
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleAddSource = () => {
+    setError(null)
     if (sourceMode === 'new') {
-      if (!newAccountId || !newAmount) return
+      if (!newAccountId) {
+        setError('Оберіть рахунок списання')
+        return
+      }
+      if (!newAmount || Number(newAmount) <= 0) {
+        setError('Введіть суму списання')
+        return
+      }
       setSources([...sources, {
         id: Math.random().toString(),
         type: 'new',
@@ -123,7 +132,10 @@ export function CreatePayoutModal({
         amount: Number(newAmount)
       }])
     } else if (sourceMode === 'existing') {
-      if (!selectedExpenseId) return
+      if (!selectedExpenseId) {
+        setError('Оберіть витрату чи зарплату')
+        return
+      }
       const src = availableSources.find(x => x.id === selectedExpenseId)
       if (!src) return
       // prevent duplicates
@@ -157,12 +169,29 @@ export function CreatePayoutModal({
       queryClient.invalidateQueries({ queryKey: ['dividends'] })
       queryClient.invalidateQueries({ queryKey: ['expenses'] }) // existing expenses got bound
       onClose()
-    }
+    },
+    onError: (e: { response?: { data?: { message?: string } } }) => setError(e.response?.data?.message ?? 'Помилка збереження'),
   })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!participantId || sources.length === 0) return
+    setError(null)
+    if (!participantId) {
+      setError('Оберіть партнера')
+      return
+    }
+    if (sourceMode === 'new' && !newAccountId) {
+      setError('Оберіть рахунок списання')
+      return
+    }
+    if (sourceMode !== 'none') {
+      setError('Натисніть «Додати», щоб підтвердити обраний рахунок або витрату')
+      return
+    }
+    if (sources.length === 0) {
+      setError('Оберіть рахунок списання або додайте джерело фінансування')
+      return
+    }
     createMut.mutate({
       participant_id: participantId,
       date,
@@ -317,21 +346,21 @@ export function CreatePayoutModal({
                 {sourceMode === 'new' ? (
                   <>
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок</label>
-                      <select value={newAccountId} onChange={e => setNewAccountId(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Рахунок *</label>
+                      <select value={newAccountId} onChange={e => { setNewAccountId(e.target.value); setError(null) }} className="w-full px-2 py-1.5 border rounded text-sm">
                         <option value="">Оберіть рахунок...</option>
                         {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.currency})</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Сума</label>
-                      <input type="number" min="0" value={newAmount} onChange={e => setNewAmount(e.target.value)} className="w-32 px-2 py-1.5 border rounded text-sm" placeholder="Сума" />
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Сума *</label>
+                      <input type="number" min="0" value={newAmount} onChange={e => { setNewAmount(e.target.value); setError(null) }} className="w-32 px-2 py-1.5 border rounded text-sm" placeholder="Сума" />
                     </div>
                   </>
                 ) : (
                   <div className="flex-1">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Оберіть витрату чи зарплату (з міткою дивіденд)</label>
-                    <select value={selectedExpenseId} onChange={e => setSelectedExpenseId(e.target.value)} className="w-full px-2 py-1.5 border rounded text-sm">
+                    <select value={selectedExpenseId} onChange={e => { setSelectedExpenseId(e.target.value); setError(null) }} className="w-full px-2 py-1.5 border rounded text-sm">
                       <option value="">Оберіть...</option>
                       {availableSources.map(s => (
                         <option key={s.id} value={s.id}>
@@ -343,7 +372,7 @@ export function CreatePayoutModal({
                 )}
                 <div className="flex gap-2">
                   <button type="button" onClick={handleAddSource} className="px-3 py-1.5 bg-gray-900 text-white rounded text-sm font-medium">Додати</button>
-                  <button type="button" onClick={() => setSourceMode('none')} className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded text-sm font-medium">Скасувати</button>
+                  <button type="button" onClick={() => { setSourceMode('none'); setError(null) }} className="px-3 py-1.5 bg-gray-200 text-gray-800 rounded text-sm font-medium">Скасувати</button>
                 </div>
               </div>
             )}
@@ -374,6 +403,8 @@ export function CreatePayoutModal({
             </div>
           )}
 
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
         </form>
 
         <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 sticky bottom-0">
@@ -386,7 +417,7 @@ export function CreatePayoutModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!participantId || sources.length === 0 || createMut.isPending}
+            disabled={createMut.isPending}
             className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium transition-colors disabled:opacity-50"
           >
             {createMut.isPending ? 'Збереження...' : 'Зафіксувати виплату'}

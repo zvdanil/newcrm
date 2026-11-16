@@ -303,6 +303,9 @@ export async function dividendsRoutes(app: FastifyInstance) {
       
       for (const src of sources) {
         if (src.type === 'new') {
+          if (!src.account_id) {
+            return reply.status(400).send({ error: 'BadRequest', message: 'Оберіть рахунок списання' })
+          }
           grossAmount += src.amount
         } else if (src.type === 'existing') {
           const expense = await db.selectFrom('expenses')

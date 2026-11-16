@@ -516,7 +516,7 @@ export async function expensesRoutes(app: FastifyInstance) {
         utilized_advance_id, utilized_advance_amount,
         advance_staff_id,
       } = req.body
-      if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'account_id є обовʼязковим' })
+      if (!account_id) return reply.status(400).send({ error: 'BadRequest', message: 'Оберіть рахунок' })
       if (!amount || amount <= 0) return reply.status(400).send({ error: 'BadRequest', message: 'Сума повинна бути більше 0' })
 
       const today = new Date().toISOString().slice(0, 10)
@@ -637,6 +637,9 @@ export async function expensesRoutes(app: FastifyInstance) {
       if (!expense) return reply.status(404).send({ error: 'NotFound' })
 
       const { edit_note, ...fields } = req.body
+      if ('account_id' in fields && !fields.account_id) {
+        return reply.status(400).send({ error: 'BadRequest', message: 'Оберіть рахунок' })
+      }
       const editedBy = (req.user as { sub: string }).sub
 
       if (fields.is_dividend === false) {
