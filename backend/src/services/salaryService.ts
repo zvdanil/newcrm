@@ -438,7 +438,10 @@ async function computeGross(
   orCount: number = 0
 ): Promise<{ gross: number; meta: Record<string, unknown> }> {
   const rv = Number(rate.rate_value)
-  const specMeta = specialCount > 0 ? { special_count: specialCount, special_children: specialChildren } : {}
+  const specMeta = {
+    ...(specialCount > 0 ? { special_count: specialCount } : {}),
+    special_children: specialChildren,
+  }
   const orMeta = orCount > 0 ? { or_count: orCount } : {}
 
   if (rate.value_mode === 'percent_of_revenue') {

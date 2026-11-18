@@ -91,41 +91,67 @@ export async function salaryRoutes(app: FastifyInstance) {
         .orderBy('st.created_at', 'asc')
         .execute()
 
-      // Dynamically enrich transactions metadata_json with OR children attendance info
-      const specialLogs = await db
-        .selectFrom('attendance_logs as al')
-        .innerJoin('children as c', 'c.id', 'al.child_id')
-        .select(['al.activity_id', 'al.date', 'c.full_name'])
-        .where('al.date', '>=', castAsDate(billingStart))
-        .where('al.date', '<', castAsDate(billingEnd))
-        .where('al.is_individual_class', '=', true)
-        .execute()
-
-      const specialMap = new Map<string, string[]>()
-      for (const log of specialLogs) {
-        const dStr = toDbDateStr(log.date)
-        const key = `${log.activity_id}::${dStr}`
-        if (!specialMap.has(key)) specialMap.set(key, [])
-        specialMap.get(key)!.push(log.full_name)
+      // Fallback enrichment of OR children attendance info ONLY for legacy auto-accruals
+      // that are strictly linked to an activity journal and do not yet have special_children in metadata_json.
+      const isJournalAutoTx = (tx: typeof txs[0]): boolean => {
+        if (tx.type !== 'ACCRUAL' || !tx.activity_id) return false
+        const meta = tx.metadata_json as Record<string, unknown> | null
+        const src = typeof meta?.source === 'string' ? meta.source : ''
+        if (src) {
+          return src.startsWith('auto_') && src !== 'auto_fixed_monthly' && src !== 'auto_smart'
+        }
+        return tx.rate_category === 'auto' && ['per_lesson', 'per_child', 'individual_per_child', 'group_lesson'].includes(tx.rate_type ?? '')
       }
 
-      for (const tx of txs) {
-        if (tx.type !== 'ACCRUAL') continue
-        const actId = tx.activity_id
-        const dStr = toDbDateStr(tx.transaction_date)
-        const key = `${actId}::${dStr}`
-        let specNames = specialMap.get(key)
-        if (!specNames && !actId) {
-          specNames = Array.from(specialMap.entries())
-            .filter(([k]) => k.endsWith(`::${dStr}`))
-            .flatMap(([, v]) => v)
+      const txsNeedingFallback = txs.filter(tx => {
+        if (!isJournalAutoTx(tx)) return false
+        const meta = tx.metadata_json as Record<string, unknown> | null
+        return !Array.isArray(meta?.special_children)
+      })
+
+      if (txsNeedingFallback.length > 0) {
+        const actIds = Array.from(new Set(txsNeedingFallback.map(tx => tx.activity_id!)))
+        const specialLogs = await db
+          .selectFrom('attendance_logs as al')
+          .innerJoin('children as c', 'c.id', 'al.child_id')
+          .select(['al.activity_id', 'al.date', 'c.full_name'])
+          .where('al.activity_id', 'in', actIds)
+          .where('al.date', '>=', castAsDate(billingStart))
+          .where('al.date', '<', castAsDate(billingEnd))
+          .where((eb) => eb.or([
+            eb('al.status', '=', 'present'),
+            eb('al.status', '=', 'separate_billing'),
+            eb.and([
+              eb('al.status', '=', 'special'),
+              sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
+            ]),
+          ]))
+          .where('al.is_individual_class', '=', true)
+          .where((eb) => eb.or([
+            eb('al.is_no_teacher_payroll', 'is', null),
+            eb('al.is_no_teacher_payroll', '=', false),
+          ]))
+          .execute()
+
+        const specialMap = new Map<string, string[]>()
+        for (const log of specialLogs) {
+          const dStr = toDbDateStr(log.date)
+          const key = `${log.activity_id}::${dStr}`
+          if (!specialMap.has(key)) specialMap.set(key, [])
+          specialMap.get(key)!.push(log.full_name)
         }
-        if (specNames && specNames.length > 0) {
-          const meta = (tx.metadata_json as Record<string, unknown> | null) ?? {}
-          tx.metadata_json = {
-            ...meta,
-            special_count: specNames.length,
-            special_children: specNames,
+
+        for (const tx of txsNeedingFallback) {
+          const dStr = toDbDateStr(tx.transaction_date)
+          const key = `${tx.activity_id}::${dStr}`
+          const specNames = specialMap.get(key)
+          if (specNames && specNames.length > 0) {
+            const meta = (tx.metadata_json as Record<string, unknown> | null) ?? {}
+            tx.metadata_json = {
+              ...meta,
+              special_count: specNames.length,
+              special_children: specNames,
+            }
           }
         }
       }
@@ -184,20 +210,29 @@ export async function salaryRoutes(app: FastifyInstance) {
     { preHandler: requireRole('owner', 'admin', 'accountant') },
     async (req) => {
       const { activity_id, date } = req.query
-      if (!date) return { children: [] }
+      if (!date || !activity_id) return { children: [] }
 
-      let q = db
+      const specialLogs = await db
         .selectFrom('attendance_logs as al')
         .innerJoin('children as c', 'c.id', 'al.child_id')
         .select(['c.full_name'])
+        .where('al.activity_id', '=', activity_id)
         .where('al.date', '=', castAsDate(date))
+        .where((eb) => eb.or([
+          eb('al.status', '=', 'present'),
+          eb('al.status', '=', 'separate_billing'),
+          eb.and([
+            eb('al.status', '=', 'special'),
+            sql<boolean>`(${eb.ref('al.custom_amount')} IS NULL OR ${eb.ref('al.custom_amount')}::numeric >= 0)`,
+          ]),
+        ]))
         .where('al.is_individual_class', '=', true)
+        .where((eb) => eb.or([
+          eb('al.is_no_teacher_payroll', 'is', null),
+          eb('al.is_no_teacher_payroll', '=', false),
+        ]))
+        .execute()
 
-      if (activity_id) {
-        q = q.where('al.activity_id', '=', activity_id)
-      }
-
-      const specialLogs = await q.execute()
       return { children: specialLogs.map(l => l.full_name) }
     }
   )
@@ -619,7 +654,8 @@ export async function salaryRoutes(app: FastifyInstance) {
           'st.transaction_date', 'st.billing_month', 'st.note', 'st.edit_note',
           'st.metadata_json', 'st.created_at',
           'st.rate_id', 'r.rate_type', 'r.rate_category',
-          'st.activity_id', 'a.name as activity_name',
+          sql<string | null>`COALESCE(st.activity_id, r.activity_id)`.as('activity_id'),
+          'a.name as activity_name',
           'st.account_id', 'ac.name as account_name',
         ])
         .orderBy('st.transaction_date', 'asc')

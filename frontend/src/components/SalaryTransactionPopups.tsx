@@ -317,17 +317,28 @@ export function TxPopup({ tx, staffId, onClose, invalidateKeys, autoEdit = false
 
   const txDate = String(tx.transaction_date).slice(0, 10)
   const meta = tx.metadata_json as Record<string, unknown> | null
-  const metaChildren = Array.isArray(meta?.special_children) && meta!.special_children.length > 0
+  const metaSource = typeof meta?.source === 'string' ? meta.source : ''
+  const isJournalAutoAccrual =
+    tx.type === 'ACCRUAL' &&
+    Boolean(tx.activity_id) &&
+    (metaSource
+      ? metaSource.startsWith('auto_') && metaSource !== 'auto_fixed_monthly' && metaSource !== 'auto_smart'
+      : ['per_lesson', 'per_child', 'individual_per_child', 'group_lesson'].includes(tx.rate_type ?? ''))
+
+  const hasMetaSpecialChildren = Array.isArray(meta?.special_children)
+  const metaChildren = isJournalAutoAccrual && hasMetaSpecialChildren
     ? (meta!.special_children as string[])
     : null
 
   const { data: fetchedSpecialChildren } = useQuery({
     queryKey: ['special-children', tx.activity_id, txDate],
-    queryFn: () => staffApi.getSpecialChildren(tx.activity_id ?? undefined, txDate),
-    enabled: !metaChildren && !!txDate && tx.type === 'ACCRUAL',
+    queryFn: () => staffApi.getSpecialChildren(tx.activity_id!, txDate),
+    enabled: isJournalAutoAccrual && !hasMetaSpecialChildren && Boolean(txDate),
   })
 
-  const specialChildrenList = metaChildren ?? fetchedSpecialChildren ?? []
+  const specialChildrenList = isJournalAutoAccrual
+    ? (metaChildren ?? fetchedSpecialChildren ?? [])
+    : []
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
